@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Bell, Search, Upload, Menu } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ModeBadge } from "@/components/brand/ModeBadge";
 import { useMobileNav } from "./MobileNavContext";
 
 interface HeaderProps {
@@ -26,9 +27,12 @@ export function Header({ title, subtitle }: HeaderProps) {
               <Menu className="h-5 w-5" />
             </button>
             <div className="min-w-0 flex-1 pt-0.5">
-              <h1 className="text-xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl">
-                {title}
-              </h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl">
+                  {title}
+                </h1>
+                <ModeBadge />
+              </div>
               {subtitle && (
                 <p className="mt-1.5 text-sm leading-relaxed text-slate-500 line-clamp-2 sm:line-clamp-none">
                   {subtitle}

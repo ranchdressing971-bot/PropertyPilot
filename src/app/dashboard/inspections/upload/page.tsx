@@ -1,15 +1,24 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
-import { Upload, Film, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { useAppMode } from "@/components/providers/AppModeProvider";
+import { Upload, Film, CheckCircle2, Loader2, Sparkles, FlaskConical } from "lucide-react";
 
-const UI_STEPS = [
+const DEMO_STEPS = [
+  "Uploading...",
+  "Analyzing...",
+  "Detecting Houses...",
+  "Running Compliance Checks...",
+  "Generating Report...",
+];
+
+const LIVE_STEPS = [
   "Uploading...",
   "Analyzing with AI...",
   "Detecting Houses...",
@@ -19,12 +28,15 @@ const UI_STEPS = [
 
 export default function UploadPage() {
   const router = useRouter();
+  const { mode, isDemo, ready } = useAppMode();
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [fileName, setFileName] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const steps = isDemo ? DEMO_STEPS : LIVE_STEPS;
 
   const startProcessing = useCallback(
     async (name: string) => {
@@ -41,34 +53,45 @@ export default function UploadPage() {
         });
 
       try {
-        await advance(0, 1200);
+        if (isDemo) {
+          for (let i = 0; i < DEMO_STEPS.length; i++) {
+            await advance(i, i === 0 ? 800 : 1200);
+          }
+          setIsComplete(true);
+          setTimeout(() => router.push("/dashboard/inspections/insp-1"), 1000);
+          return;
+        }
 
+        await advance(0, 1200);
         setCurrentStep(1);
+
         const res = await fetch("/api/analyze-inspection", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ videoName: name }),
+          body: JSON.stringify({ videoName: name, mode: "live" }),
         });
 
+        const data = await res.json();
+
         if (!res.ok) {
-          const data = await res.json();
           throw new Error(data.error ?? "Analysis failed");
         }
-
-        const { id } = await res.json();
 
         await advance(2, 800);
         await advance(3, 1000);
         await advance(4, 800);
 
         setIsComplete(true);
-        setTimeout(() => router.push(`/dashboard/inspections/${id}`), 1200);
+        setTimeout(
+          () => router.push(`/dashboard/inspections/${data.id}`),
+          1200
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
         setIsProcessing(false);
       }
     },
-    [router]
+    [router, isDemo]
   );
 
   const handleDrop = useCallback(
@@ -88,14 +111,26 @@ export default function UploadPage() {
     if (file) startProcessing(file.name);
   };
 
+  if (!ready) return null;
+
   return (
     <DashboardLayout>
-      <Header title="Upload Inspection" subtitle="AI-powered drive-through analysis" />
+      <Header
+        title="Upload Inspection"
+        subtitle={
+          isDemo
+            ? "Demo mode — simulated analysis with sample data"
+            : "Live mode — GPT-4o Vision analysis"
+        }
+      />
       <PageContent className="flex min-h-[calc(100vh-12rem)] items-center">
         <div className="w-full max-w-2xl">
           {error && (
-            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
+            <div className="mb-4 space-y-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <p>{error}</p>
+              <p className="text-xs text-red-600/80">
+                Tip: Add OPENAI_API_KEY in Vercel env vars, or switch to Demo mode in Settings.
+              </p>
             </div>
           )}
 
@@ -130,9 +165,24 @@ export default function UploadPage() {
                     <p className="mt-2 text-center text-sm text-slate-500">
                       or tap to browse · .mp4 & .mov
                     </p>
-                    <div className="mt-4 flex items-center gap-1.5 rounded-full bg-accent-50 px-3 py-1 text-xs font-medium text-accent-700">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      GPT-4o Vision powered
+                    <div
+                      className={`mt-4 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                        isDemo
+                          ? "bg-violet-50 text-violet-700"
+                          : "bg-accent-50 text-accent-700"
+                      }`}
+                    >
+                      {isDemo ? (
+                        <>
+                          <FlaskConical className="h-3.5 w-3.5" />
+                          Demo — sample results
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3.5 w-3.5" />
+                          Live — GPT-4o Vision
+                        </>
+                      )}
                     </div>
                     <label className="mt-6 cursor-pointer">
                       <span className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-accent-600 to-accent-500 px-6 py-3 text-sm font-medium text-white shadow-lg shadow-accent-600/30 transition-all hover:brightness-105 active:scale-[0.98]">
@@ -167,7 +217,7 @@ export default function UploadPage() {
                           <CheckCircle2 className="h-8 w-8 text-emerald-600" />
                         </div>
                         <h3 className="mt-4 text-lg font-semibold text-slate-900">
-                          AI Analysis Complete
+                          {isDemo ? "Demo Analysis Complete" : "AI Analysis Complete"}
                         </h3>
                         <p className="mt-2 text-sm text-slate-500">
                           Redirecting to results...
@@ -192,7 +242,7 @@ export default function UploadPage() {
 
                   {!isComplete && (
                     <div className="mt-8 space-y-3 sm:space-y-4">
-                      {UI_STEPS.map((label, i) => (
+                      {steps.map((label, i) => (
                         <motion.div
                           key={label}
                           initial={{ opacity: 0, x: -10 }}
@@ -224,7 +274,7 @@ export default function UploadPage() {
                           className="h-full rounded-full bg-gradient-to-r from-accent-600 to-accent-400"
                           initial={{ width: "0%" }}
                           animate={{
-                            width: `${((currentStep + 1) / UI_STEPS.length) * 100}%`,
+                            width: `${((currentStep + 1) / steps.length) * 100}%`,
                           }}
                           transition={{ duration: 0.5 }}
                         />

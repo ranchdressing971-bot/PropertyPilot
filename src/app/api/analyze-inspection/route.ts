@@ -9,7 +9,8 @@ import {
   normalizeAIResults,
 } from "@/lib/ai-analyze";
 import { saveAIInspection } from "@/lib/inspection-store";
-import { properties } from "@/lib/mock-data";
+import { properties, inspections } from "@/lib/mock-data";
+import { isOpenAIConfigured } from "@/lib/app-mode";
 
 const BATCH_SIZE = 4;
 
@@ -46,10 +47,37 @@ async function analyzeBatch(
   return normalizeAIResults(raw, batch);
 }
 
+function demoResponse(videoName: string) {
+  const demo = inspections[0];
+  return NextResponse.json({
+    id: demo.id,
+    mode: "demo",
+    violationsFound: demo.violationsFound,
+    propertiesScanned: demo.propertiesScanned,
+    videoName,
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const videoName = (body.videoName as string) || "inspection.mp4";
+    const mode = (body.mode as string) || "live";
+
+    if (mode === "demo") {
+      return demoResponse(videoName);
+    }
+
+    if (!isOpenAIConfigured()) {
+      return NextResponse.json(
+        {
+          error:
+            "Live mode requires OPENAI_API_KEY. Add it in Vercel → Settings → Environment Variables, then redeploy. Or switch to Demo mode.",
+          code: "MISSING_API_KEY",
+        },
+        { status: 503 }
+      );
+    }
 
     const id = `ai-${Date.now()}`;
     const date = new Date().toISOString().split("T")[0];
@@ -86,14 +114,28 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       id,
+      mode: "live",
       violationsFound: violations.length,
       propertiesScanned: properties.length,
     });
   } catch (error) {
     console.error("AI analysis failed:", error);
-    return NextResponse.json(
-      { error: "Analysis failed. Check API key and try again." },
-      { status: 500 }
-    );
+    const msg = error instanceof Error ? error.message : "Analysis failed";
+    let userMessage = "Analysis failed. Check your OpenAI API key and billing.";
+    let code = "ANALYSIS_FAILED";
+
+    if (msg.includes("401") || msg.includes("Incorrect API key")) {
+      userMessage =
+        "Invalid OpenAI API key. Generate a new key at platform.openai.com/api-keys";
+      code = "INVALID_API_KEY";
+    } else if (msg.includes("429")) {
+      userMessage = "OpenAI rate limit or no billing credits. Check platform.openai.com/account/billing";
+      code = "RATE_LIMIT";
+    } else if (msg.includes("insufficient_quota")) {
+      userMessage = "OpenAI account has no credits. Add billing at platform.openai.com";
+      code = "NO_CREDITS";
+    }
+
+    return NextResponse.json({ error: userMessage, code, detail: msg }, { status: 500 });
   }
 }

@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/brand/Logo";
+import { useAppMode } from "@/components/providers/AppModeProvider";
 import {
   Upload,
   Play,
@@ -13,23 +15,35 @@ import {
   BarChart3,
   ArrowRight,
   Sparkles,
+  LogIn,
 } from "lucide-react";
 
 export default function HomePage() {
+  const router = useRouter();
+  const { setMode } = useAppMode();
+
+  function startDemo() {
+    setMode("demo");
+    router.push("/dashboard/inspections/insp-1");
+  }
+
+  function startLive() {
+    setMode("live");
+    router.push("/login");
+  }
   return (
     <div className="min-h-screen mesh-bg bg-white">
       <nav className="fixed top-0 z-50 w-full border-b border-slate-200/50 bg-white/70 backdrop-blur-2xl">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6">
           <Logo size="sm" href="/" />
           <div className="flex items-center gap-2">
-            <Link href="/dashboard" className="hidden xs:block">
-              <Button variant="ghost" size="sm">
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/dashboard">
-              <Button size="sm">Get Started</Button>
-            </Link>
+            <Button variant="ghost" size="sm" onClick={startLive}>
+              <LogIn className="h-4 w-4" />
+              Sign In
+            </Button>
+            <Button size="sm" onClick={startDemo}>
+              View Demo
+            </Button>
           </div>
         </div>
       </nav>
@@ -87,18 +101,19 @@ export default function HomePage() {
             </p>
 
             <div className="mt-8 flex flex-col items-stretch gap-3 sm:mt-10 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
-              <Link href="/dashboard/inspections/upload" className="w-full sm:w-auto">
-                <Button size="lg" className="w-full sm:w-auto">
-                  <Upload className="h-5 w-5" />
-                  Upload Video
-                </Button>
-              </Link>
-              <Link href="/dashboard/inspections/insp-1" className="w-full sm:w-auto">
-                <Button variant="secondary" size="lg" className="w-full sm:w-auto">
-                  <Play className="h-5 w-5" />
-                  View Demo
-                </Button>
-              </Link>
+              <Button size="lg" className="w-full sm:w-auto" onClick={startDemo}>
+                <Play className="h-5 w-5" />
+                View Demo
+              </Button>
+              <Button
+                variant="secondary"
+                size="lg"
+                className="w-full sm:w-auto"
+                onClick={startLive}
+              >
+                <LogIn className="h-5 w-5" />
+                Sign In (Live Mode)
+              </Button>
             </div>
           </motion.div>
         </div>
