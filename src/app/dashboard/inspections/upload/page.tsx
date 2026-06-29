@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
+import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { Upload, Film, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 
@@ -90,7 +91,7 @@ export default function UploadPage() {
   return (
     <DashboardLayout>
       <Header title="Upload Inspection" subtitle="AI-powered drive-through analysis" />
-      <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-4 sm:p-8">
+      <PageContent className="flex min-h-[calc(100vh-12rem)] items-center">
         <div className="w-full max-w-2xl">
           {error && (
             <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -235,7 +236,7 @@ export default function UploadPage() {
             )}
           </AnimatePresence>
         </div>
-      </div>
+      </PageContent>
     </DashboardLayout>
   );
 }

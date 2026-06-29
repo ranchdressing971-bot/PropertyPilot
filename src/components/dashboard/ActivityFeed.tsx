@@ -32,8 +32,8 @@ interface ActivityFeedProps {
 export function ActivityFeed({ items }: ActivityFeedProps) {
   return (
     <Card>
-      <h3 className="text-sm font-semibold text-slate-900">Recent Activity</h3>
-      <div className="mt-4 space-y-4">
+      <h3 className="text-base font-semibold text-slate-900">Recent Activity</h3>
+      <div className="mt-5 space-y-5">
         {items.map((item, i) => {
           const Icon = iconMap[item.type];
           return (
@@ -42,19 +42,19 @@ export function ActivityFeed({ items }: ActivityFeedProps) {
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="flex items-start gap-3"
+              className="flex items-start gap-4"
             >
               <div
                 className={clsx(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
                   colorMap[item.type]
                 )}
               >
                 <Icon className="h-4 w-4" />
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-slate-700">{item.message}</p>
-                <p className="mt-0.5 text-xs text-slate-400">{item.time}</p>
+              <div className="min-w-0 flex-1 pt-0.5">
+                <p className="text-sm leading-relaxed text-slate-700">{item.message}</p>
+                <p className="mt-1 text-xs text-slate-400">{item.time}</p>
               </div>
             </motion.div>
           );

@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
+import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -42,12 +43,11 @@ export default async function PropertyDetailPage({ params }: PageProps) {
   return (
     <DashboardLayout>
       <Header title={property.address} subtitle={property.neighborhood} />
-      <div className="p-4 sm:p-6 lg:p-8">
-        <div className="grid gap-8 lg:grid-cols-3">
-          {/* Main content */}
+      <PageContent>
+        <div className="grid gap-6 lg:grid-cols-3 lg:gap-8">
           <div className="space-y-6 lg:col-span-2">
             <Card className="overflow-hidden p-0">
-              <div className="relative h-64 w-full">
+              <div className="relative h-52 w-full sm:h-64">
                 <Image
                   src={property.image}
                   alt={property.address}
@@ -182,7 +182,7 @@ export default async function PropertyDetailPage({ params }: PageProps) {
             )}
           </div>
         </div>
-      </div>
+      </PageContent>
     </DashboardLayout>
   );
 }

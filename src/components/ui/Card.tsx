@@ -25,7 +25,7 @@ export function Card({
         {
           "hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-200/60 transition-all duration-300":
             hover,
-          "p-4": padding === "sm",
+          "p-5": padding === "sm",
           "p-5 sm:p-6": padding === "md",
           "p-6 sm:p-8": padding === "lg",
           "p-0": padding === "none",

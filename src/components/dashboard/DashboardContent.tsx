@@ -3,13 +3,14 @@
 import { StatCard } from "@/components/dashboard/StatCard";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { AIInsights } from "@/components/dashboard/AIInsights";
+import { PageContent } from "@/components/layout/PageContent";
 import { dashboardStats, activityFeed } from "@/lib/mock-data";
 import { MapPin, Video, AlertTriangle, Clock } from "lucide-react";
 
 export function DashboardContent() {
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+    <PageContent>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6">
         <StatCard
           title="Neighborhoods Inspected"
           value={dashboardStats.neighborhoodsInspected}
@@ -34,12 +35,12 @@ export function DashboardContent() {
           title="Time Saved"
           value={`${dashboardStats.timeSavedHours}h`}
           icon={Clock}
-          trend="vs manual inspections"
+          trend="vs manual"
           index={3}
         />
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-5">
+      <div className="grid gap-6 lg:grid-cols-5 lg:gap-8">
         <div className="lg:col-span-3">
           <ActivityFeed items={activityFeed} />
         </div>
@@ -47,6 +48,6 @@ export function DashboardContent() {
           <AIInsights />
         </div>
       </div>
-    </div>
+    </PageContent>
   );
 }

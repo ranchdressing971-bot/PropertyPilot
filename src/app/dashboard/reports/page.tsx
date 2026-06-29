@@ -1,5 +1,6 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
+import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { aiInsights, inspections, properties } from "@/lib/mock-data";
@@ -11,8 +12,8 @@ export default function ReportsPage() {
   return (
     <DashboardLayout>
       <Header title="Reports" subtitle="Compliance reports and exports" />
-      <div className="p-4 sm:p-6 lg:p-8">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <PageContent>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           <Card hover>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-50">
               <BarChart3 className="h-5 w-5 text-accent-600" />
@@ -64,7 +65,7 @@ export default function ReportsPage() {
             </Button>
           </Card>
         </div>
-      </div>
+      </PageContent>
     </DashboardLayout>
   );
 }

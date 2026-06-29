@@ -12,7 +12,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={clsx(
-          "inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]",
+          "inline-flex min-h-[44px] items-center justify-center gap-2 font-medium transition-all duration-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]",
           {
             "bg-gradient-to-r from-accent-600 to-accent-500 text-white shadow-lg shadow-accent-600/25 hover:shadow-accent-600/40 hover:brightness-105":
               variant === "primary",
@@ -22,9 +22,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
               variant === "ghost",
             "bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-600/25 hover:brightness-105":
               variant === "danger",
-            "px-3 py-2 text-sm": size === "sm",
-            "px-4 py-2.5 text-sm": size === "md",
-            "px-6 py-3.5 text-base": size === "lg",
+            "px-4 py-2 text-sm min-h-[40px]": size === "sm",
+            "px-5 py-2.5 text-sm": size === "md",
+            "px-6 py-3.5 text-base w-full sm:w-auto": size === "lg",
           },
           className
         )}

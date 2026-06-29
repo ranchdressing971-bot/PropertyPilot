@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
+import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { InspectionResultCard } from "@/components/inspections/InspectionResultCard";
 import { Property, Violation } from "@/lib/mock-data";
@@ -54,12 +55,12 @@ export function InspectionResultsView({ id }: { id: string }) {
     return (
       <DashboardLayout>
         <Header title="Inspection Not Found" />
-        <div className="p-8 text-center text-slate-500">
-          {error ?? "Not found"}
-          <Link href="/dashboard/inspections" className="mt-4 block text-accent-600">
+        <PageContent className="text-center text-slate-500">
+          <p>{error ?? "Not found"}</p>
+          <Link href="/dashboard/inspections" className="mt-4 inline-block text-accent-600">
             Back to inspections
           </Link>
-        </div>
+        </PageContent>
       </DashboardLayout>
     );
   }
@@ -71,40 +72,38 @@ export function InspectionResultsView({ id }: { id: string }) {
     <DashboardLayout>
       <Header
         title={data.name}
-        subtitle={`${data.date} · ${data.propertiesScanned} properties · ${withViolations.length} violations`}
+        subtitle={`${data.date} · ${withViolations.length} violations · ${clean.length} clean`}
       />
-      <div className="p-4 sm:p-6 lg:p-8">
+      <PageContent>
         {data.aiPowered && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-6 flex items-center gap-2 rounded-xl border border-accent-200/60 bg-gradient-to-r from-accent-50 to-blue-50 px-4 py-3 text-sm text-accent-800"
+            className="flex items-start gap-3 rounded-xl border border-accent-200/60 bg-gradient-to-r from-accent-50 to-blue-50 p-4 text-sm leading-relaxed text-accent-800"
           >
-            <Sparkles className="h-4 w-4 shrink-0" />
-            <span>
-              Live AI analysis powered by GPT-4o Vision
-            </span>
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Live AI analysis powered by GPT-4o Vision</span>
           </motion.div>
         )}
 
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:flex sm:flex-wrap sm:gap-4">
-          <Card padding="sm" className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+        <div className="grid grid-cols-2 gap-4 sm:max-w-md">
+          <Card padding="sm" className="flex items-center gap-4">
+            <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-500" />
             <div>
-              <p className="text-xs text-slate-500">Clean</p>
-              <p className="text-lg font-semibold">{clean.length}</p>
+              <p className="text-xs font-medium text-slate-500">Clean</p>
+              <p className="text-xl font-semibold">{clean.length}</p>
             </div>
           </Card>
-          <Card padding="sm" className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
+          <Card padding="sm" className="flex items-center gap-4">
+            <AlertTriangle className="h-6 w-6 shrink-0 text-amber-500" />
             <div>
-              <p className="text-xs text-slate-500">Violations</p>
-              <p className="text-lg font-semibold">{withViolations.length}</p>
+              <p className="text-xs font-medium text-slate-500">Violations</p>
+              <p className="text-xl font-semibold">{withViolations.length}</p>
             </div>
           </Card>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {data.results.map((result, i) => {
             if (!result.property) return null;
             return (
@@ -117,7 +116,7 @@ export function InspectionResultsView({ id }: { id: string }) {
             );
           })}
         </div>
-      </div>
+      </PageContent>
     </DashboardLayout>
   );
 }

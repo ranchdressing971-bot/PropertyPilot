@@ -1,5 +1,6 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
+import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Bell, Shield, User, Building2 } from "lucide-react";
@@ -8,8 +9,8 @@ export default function SettingsPage() {
   return (
     <DashboardLayout>
       <Header title="Settings" subtitle="Manage your HOA portal preferences" />
-      <div className="mx-auto max-w-2xl p-4 sm:p-6 lg:p-8">
-        <div className="space-y-6">
+      <PageContent className="max-w-2xl">
+        <div className="space-y-5">
           <Card>
             <div className="flex items-center gap-3">
               <Building2 className="h-5 w-5 text-slate-400" />
@@ -91,7 +92,7 @@ export default function SettingsPage() {
             </div>
           </Card>
         </div>
-      </div>
+      </PageContent>
     </DashboardLayout>
   );
 }

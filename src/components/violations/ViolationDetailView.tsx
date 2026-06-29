@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
+import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -67,24 +68,24 @@ export function ViolationDetailView({ id }: { id: string }) {
         title={violation.type ?? "Violation"}
         subtitle={property?.address}
       />
-      <div className="p-4 sm:p-6 lg:p-8">
+      <PageContent>
         <Link
           href="/dashboard/violations"
-          className="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900 sm:mb-6"
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back
+          Back to violations
         </Link>
 
         {aiPowered && (
-          <div className="mb-6 flex items-center gap-2 rounded-xl border border-accent-200/60 bg-accent-50/80 px-4 py-2.5 text-sm text-accent-800">
-            <Sparkles className="h-4 w-4" />
+          <div className="flex items-start gap-3 rounded-xl border border-accent-200/60 bg-accent-50/80 p-4 text-sm text-accent-800">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
             AI-generated analysis
           </div>
         )}
 
         <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
-          <div className="space-y-5 sm:space-y-6">
+          <div className="space-y-6">
             <Card>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
@@ -153,30 +154,30 @@ export function ViolationDetailView({ id }: { id: string }) {
               </p>
             </Card>
 
-            <div className="flex flex-wrap gap-2 sm:gap-3">
-              <Button className="flex-1 sm:flex-none">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Button className="w-full">
                 <CheckCircle2 className="h-4 w-4" />
                 Approve
               </Button>
-              <Button variant="secondary" className="flex-1 sm:flex-none">
+              <Button variant="secondary" className="w-full">
                 <XCircle className="h-4 w-4" />
                 Dismiss
               </Button>
-              <Button variant="secondary" className="flex-1 sm:flex-none">
+              <Button variant="secondary" className="w-full">
                 <Edit3 className="h-4 w-4" />
                 Edit Notice
               </Button>
             </div>
           </div>
 
-          <div>
-            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">
+          <div className="space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Notice Preview
             </h3>
             <NoticePreview violation={violation} />
           </div>
         </div>
-      </div>
+      </PageContent>
     </DashboardLayout>
   );
 }
