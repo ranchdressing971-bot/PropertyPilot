@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ChatCompletionContentPart } from "openai/resources/chat/completions";
-import { openai } from "@/lib/openai";
+import { getOpenAI } from "@/lib/openai";
 import {
   AIInspectionData,
   AIPropertyResult,
@@ -8,7 +8,7 @@ import {
   buildViolationsFromAI,
   normalizeAIResults,
 } from "@/lib/ai-analyze";
-import { saveAIInspection, getAIInspection } from "@/lib/inspection-store";
+import { saveAIInspection } from "@/lib/inspection-store";
 import { properties } from "@/lib/mock-data";
 
 const BATCH_SIZE = 4;
@@ -27,7 +27,7 @@ async function analyzeBatch(
     ]),
   ];
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     messages: [{ role: "user", content }],
     response_format: { type: "json_object" },

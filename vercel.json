@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "src/app/api/analyze-inspection/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}

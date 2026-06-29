@@ -27,6 +27,8 @@ Open [http://localhost:3000](http://localhost:3000)
 - Tailwind CSS
 - Framer Motion
 
-## Note
+## Deploy to Vercel
 
-This is a prototype with mock data. No real AI or video processing is integrated.
+1. Import the repo at [vercel.com/new](https://vercel.com/new)
+2. Add environment variable: `OPENAI_API_KEY` = your OpenAI key
+3. Deploy — the build no longer requires the key at build time, but AI uploads need it at runtime
