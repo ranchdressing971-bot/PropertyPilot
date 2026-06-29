@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 const tabs = [
-  { href: "/dashboard", label: "Home", icon: LayoutDashboard, match: "/dashboard" },
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: "/dashboard" },
   { href: "/dashboard/inspections", label: "Scans", icon: Video, match: "/dashboard/inspections" },
   { href: "/dashboard/inspections/upload", label: "Upload", icon: Plus, primary: true },
   { href: "/dashboard/properties", label: "Homes", icon: Home, match: "/dashboard/properties" },
@@ -24,10 +24,10 @@ export function MobileBottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200/70 bg-white/95 shadow-[0_-4px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl lg:hidden"
-      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+      className="fixed bottom-0 left-0 right-0 z-40 border-t border-ink-200 bg-white lg:hidden"
+      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
     >
-      <div className="mx-auto flex max-w-lg items-end justify-between px-3 pt-2">
+      <div className="mx-auto flex max-w-lg items-end justify-between px-2 pt-1.5">
         {tabs.map((tab) => {
           const isActive =
             tab.primary
@@ -42,12 +42,12 @@ export function MobileBottomNav() {
               <Link
                 key={tab.href}
                 href={tab.href}
-                className="relative -mt-6 flex flex-1 flex-col items-center"
+                className="relative -mt-5 flex flex-1 flex-col items-center"
               >
-                <div className="flex h-[3.25rem] w-[3.25rem] items-center justify-center rounded-2xl bg-gradient-to-br from-accent-500 to-accent-700 text-white shadow-lg shadow-accent-600/35 ring-[3px] ring-white">
-                  <Icon className="h-6 w-6" strokeWidth={2.5} />
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-900 text-white shadow-md">
+                  <Icon className="h-5 w-5" strokeWidth={2.25} />
                 </div>
-                <span className="mt-1.5 text-[11px] font-semibold text-accent-600">
+                <span className="mt-1 text-[10px] font-medium text-ink-600">
                   {tab.label}
                 </span>
               </Link>
@@ -59,12 +59,12 @@ export function MobileBottomNav() {
               key={tab.href}
               href={tab.href}
               className={clsx(
-                "flex min-h-[3.25rem] flex-1 flex-col items-center justify-end gap-1 rounded-xl px-1 pb-0.5 transition-colors active:bg-slate-50",
-                isActive ? "text-accent-600" : "text-slate-400"
+                "flex min-h-[3rem] flex-1 flex-col items-center justify-end gap-0.5 px-1 pb-0.5",
+                isActive ? "text-ink-900" : "text-ink-400"
               )}
             >
-              <Icon className={clsx("h-[1.375rem] w-[1.375rem]", isActive && "stroke-[2.5]")} />
-              <span className="text-[11px] font-medium leading-none">{tab.label}</span>
+              <Icon className={clsx("h-5 w-5", isActive && "stroke-[2.25]")} />
+              <span className="text-[10px] font-medium leading-none">{tab.label}</span>
             </Link>
           );
         })}

@@ -11,14 +11,14 @@ export function ModeBadge({ className }: { className?: string }) {
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
+        "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
         mode === "demo"
-          ? "bg-violet-100 text-violet-700"
-          : "bg-emerald-100 text-emerald-700",
+          ? "bg-copper-100 text-copper-800"
+          : "bg-ink-900 text-white",
         className
       )}
     >
-      {mode === "demo" ? "Demo Mode" : "Live Mode"}
+      {mode === "demo" ? "Demo" : "Live"}
     </span>
   );
 }

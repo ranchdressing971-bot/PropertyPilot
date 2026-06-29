@@ -7,6 +7,7 @@ interface LogoProps {
   showText?: boolean;
   href?: string;
   className?: string;
+  variant?: "dark" | "light";
 }
 
 const sizes = {
@@ -21,6 +22,7 @@ export function Logo({
   showText = true,
   href = "/",
   className,
+  variant = "dark",
 }: LogoProps) {
   const { icon, text } = sizes[size];
 
@@ -37,7 +39,8 @@ export function Logo({
       {showText && (
         <span
           className={clsx(
-            "font-semibold tracking-tight text-slate-900",
+            "font-display font-semibold tracking-tight",
+            variant === "light" ? "text-white" : "text-ink-900",
             text
           )}
         >

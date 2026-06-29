@@ -142,7 +142,7 @@ export default function UploadPage() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.98 }}
               >
-                <Card padding="lg" glass>
+                <Card padding="lg">
                   <div
                     onDragOver={(e) => {
                       e.preventDefault();
@@ -150,44 +150,44 @@ export default function UploadPage() {
                     }}
                     onDragLeave={() => setIsDragging(false)}
                     onDrop={handleDrop}
-                    className={`relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-10 sm:p-16 transition-all duration-300 ${
+                    className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 sm:p-16 transition-colors ${
                       isDragging
-                        ? "border-accent-400 bg-accent-50/60 scale-[1.01]"
-                        : "border-slate-200/80 bg-gradient-to-b from-slate-50/80 to-white hover:border-accent-300/60"
+                        ? "border-copper-400 bg-copper-50/50"
+                        : "border-ink-200 bg-ink-50/30 hover:border-ink-300"
                     }`}
                   >
-                    <div className="shine flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-500 to-accent-700 shadow-xl shadow-accent-600/30">
-                      <Upload className="h-8 w-8 text-white" />
+                    <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-ink-900">
+                      <Upload className="h-7 w-7 text-white" />
                     </div>
-                    <h3 className="mt-6 text-center text-lg font-semibold text-slate-900 sm:text-xl">
+                    <h3 className="mt-6 text-center font-display text-lg font-semibold text-ink-900 sm:text-xl">
                       Drop your inspection video
                     </h3>
-                    <p className="mt-2 text-center text-sm text-slate-500">
+                    <p className="mt-2 text-center text-sm text-ink-500">
                       or tap to browse · .mp4 & .mov
                     </p>
                     <div
-                      className={`mt-4 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                      className={`mt-4 flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
                         isDemo
-                          ? "bg-violet-50 text-violet-700"
-                          : "bg-accent-50 text-accent-700"
+                          ? "bg-copper-100 text-copper-800"
+                          : "bg-ink-900 text-white"
                       }`}
                     >
                       {isDemo ? (
                         <>
                           <FlaskConical className="h-3.5 w-3.5" />
-                          Demo — sample results
+                          Demo scan
                         </>
                       ) : (
                         <>
                           <Sparkles className="h-3.5 w-3.5" />
-                          Live — GPT-4o Vision
+                          Live AI
                         </>
                       )}
                     </div>
                     <label className="mt-6 cursor-pointer">
-                      <span className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-accent-600 to-accent-500 px-6 py-3 text-sm font-medium text-white shadow-lg shadow-accent-600/30 transition-all hover:brightness-105 active:scale-[0.98]">
+                      <span className="inline-flex items-center gap-2 rounded-lg bg-ink-900 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-ink-800">
                         <Film className="h-4 w-4" />
-                        Select Video
+                        Select video
                       </span>
                       <input
                         type="file"
@@ -205,7 +205,7 @@ export default function UploadPage() {
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
               >
-                <Card padding="lg" glass>
+                <Card padding="lg">
                   <div className="text-center">
                     {isComplete ? (
                       <motion.div
@@ -213,26 +213,26 @@ export default function UploadPage() {
                         animate={{ scale: 1 }}
                         className="flex flex-col items-center"
                       >
-                        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 ring-4 ring-emerald-100">
-                          <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 ring-4 ring-emerald-100">
+                          <CheckCircle2 className="h-7 w-7 text-emerald-600" />
                         </div>
-                        <h3 className="mt-4 text-lg font-semibold text-slate-900">
-                          {isDemo ? "Demo Analysis Complete" : "AI Analysis Complete"}
+                        <h3 className="mt-4 font-display text-lg font-semibold text-ink-900">
+                          {isDemo ? "Demo complete" : "Analysis complete"}
                         </h3>
-                        <p className="mt-2 text-sm text-slate-500">
+                        <p className="mt-2 text-sm text-ink-500">
                           Redirecting to results...
                         </p>
                       </motion.div>
                     ) : (
                       <>
-                        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-500 to-accent-700 shadow-lg shadow-accent-600/30">
-                          <Loader2 className="h-8 w-8 animate-spin text-white" />
+                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-ink-900">
+                          <Loader2 className="h-7 w-7 animate-spin text-white" />
                         </div>
-                        <h3 className="mt-6 text-lg font-semibold text-slate-900">
-                          Processing Video
+                        <h3 className="mt-6 font-display text-lg font-semibold text-ink-900">
+                          Processing video
                         </h3>
                         {fileName && (
-                          <p className="mt-1 truncate px-4 text-sm text-slate-500">
+                          <p className="mt-1 truncate px-4 text-sm text-ink-500">
                             {fileName}
                           </p>
                         )}
@@ -253,15 +253,15 @@ export default function UploadPage() {
                           {i < currentStep ? (
                             <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
                           ) : i === currentStep ? (
-                            <Loader2 className="h-5 w-5 shrink-0 animate-spin text-accent-600" />
+                            <Loader2 className="h-5 w-5 shrink-0 animate-spin text-copper-600" />
                           ) : (
-                            <div className="h-5 w-5 shrink-0 rounded-full border-2 border-slate-200" />
+                            <div className="h-5 w-5 shrink-0 rounded-full border-2 border-ink-200" />
                           )}
                           <span
                             className={`text-sm ${
                               i <= currentStep
-                                ? "font-medium text-slate-900"
-                                : "text-slate-400"
+                                ? "font-medium text-ink-900"
+                                : "text-ink-400"
                             }`}
                           >
                             {label}
@@ -269,9 +269,9 @@ export default function UploadPage() {
                         </motion.div>
                       ))}
 
-                      <div className="mt-6 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div className="mt-6 h-1.5 overflow-hidden rounded-full bg-ink-100">
                         <motion.div
-                          className="h-full rounded-full bg-gradient-to-r from-accent-600 to-accent-400"
+                          className="h-full rounded-full bg-copper-500"
                           initial={{ width: "0%" }}
                           animate={{
                             width: `${((currentStep + 1) / steps.length) * 100}%`,

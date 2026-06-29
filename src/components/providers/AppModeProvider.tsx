@@ -32,6 +32,7 @@ export function AppModeProvider({ children }: { children: React.ReactNode }) {
     const stored = localStorage.getItem(MODE_STORAGE_KEY) as AppMode | null;
     if (stored === "demo" || stored === "live") {
       setModeState(stored);
+      persistMode(stored);
     }
     setReady(true);
   }, []);

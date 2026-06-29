@@ -7,6 +7,7 @@ import { Logo } from "@/components/brand/Logo";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { createClient, isSupabaseClientConfigured } from "@/lib/supabase/client";
+import { formatSupabaseAuthError } from "@/lib/supabase/config";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { Loader2 } from "lucide-react";
 
@@ -49,7 +50,8 @@ function SignupForm() {
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Signup failed");
+      const message = err instanceof Error ? err.message : "Signup failed";
+      setError(formatSupabaseAuthError(message));
     } finally {
       setLoading(false);
     }

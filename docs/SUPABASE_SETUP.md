@@ -159,6 +159,7 @@ Middleware (src/middleware.ts)
 | Email confirmation required | Check spam, or disable confirm email in Supabase |
 | Dashboard redirects to login in demo | Click **Demo** on login page or Settings → Demo mode |
 | CORS / invalid redirect | Site URL must match your deployed domain exactly |
+| **"Invalid path specified in request URL"** | `NEXT_PUBLIC_SUPABASE_URL` in Vercel is wrong. Use **Project URL** from Supabase → Settings → API (`https://xxxx.supabase.co`). Do **not** put your Vercel URL here, and do **not** add `/rest/v1`. Redeploy after fixing. |
 
 ---
 

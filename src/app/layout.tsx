@@ -1,9 +1,19 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Syne, DM_Sans } from "next/font/google";
 import { AppModeProvider } from "@/components/providers/AppModeProvider";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const display = Syne({
+  subsets: ["latin"],
+  variable: "--font-display",
+  weight: ["500", "600", "700"],
+});
+
+const body = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-body",
+  weight: ["400", "500", "600"],
+});
 
 export const metadata: Metadata = {
   title: "Property Pilot — AI-Powered HOA Inspections",
@@ -27,8 +37,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" className={`${display.variable} ${body.variable}`}>
+      <body className="font-sans">
         <AppModeProvider>{children}</AppModeProvider>
       </body>
     </html>

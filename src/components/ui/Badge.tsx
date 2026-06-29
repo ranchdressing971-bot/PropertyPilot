@@ -1,13 +1,13 @@
 import clsx from "clsx";
 
 const statusStyles: Record<string, string> = {
-  "Good Standing": "bg-emerald-50 text-emerald-700 border-emerald-200",
-  "Needs Review": "bg-amber-50 text-amber-700 border-amber-200",
-  "Violation Sent": "bg-red-50 text-red-700 border-red-200",
-  Resolved: "bg-blue-50 text-blue-700 border-blue-200",
-  pending: "bg-amber-50 text-amber-700 border-amber-200",
-  approved: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  dismissed: "bg-slate-100 text-slate-600 border-slate-200",
+  "Good Standing": "bg-emerald-50 text-emerald-800 ring-emerald-200/80",
+  "Needs Review": "bg-amber-50 text-amber-800 ring-amber-200/80",
+  "Violation Sent": "bg-red-50 text-red-800 ring-red-200/80",
+  Resolved: "bg-ink-100 text-ink-700 ring-ink-200/80",
+  pending: "bg-amber-50 text-amber-800 ring-amber-200/80",
+  approved: "bg-emerald-50 text-emerald-800 ring-emerald-200/80",
+  dismissed: "bg-ink-50 text-ink-500 ring-ink-200/80",
 };
 
 interface BadgeProps {
@@ -19,8 +19,8 @@ export function Badge({ status, className }: BadgeProps) {
   return (
     <span
       className={clsx(
-        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border",
-        statusStyles[status] ?? "bg-slate-100 text-slate-600 border-slate-200",
+        "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset",
+        statusStyles[status] ?? "bg-ink-50 text-ink-600 ring-ink-200/80",
         className
       )}
     >

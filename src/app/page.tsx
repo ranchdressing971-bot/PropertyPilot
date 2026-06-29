@@ -3,20 +3,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 import { Logo } from "@/components/brand/Logo";
 import { useAppMode } from "@/components/providers/AppModeProvider";
-import {
-  Upload,
-  Play,
-  Shield,
-  Zap,
-  BarChart3,
-  ArrowRight,
-  Sparkles,
-  LogIn,
-} from "lucide-react";
+import { Upload, Play, Shield, BarChart3, ArrowRight, LogIn } from "lucide-react";
 
 export default function HomePage() {
   const router = useRouter();
@@ -31,164 +21,133 @@ export default function HomePage() {
     setMode("live");
     router.push("/login");
   }
+
   return (
-    <div className="min-h-screen mesh-bg bg-white">
-      <nav className="fixed top-0 z-50 w-full border-b border-slate-200/50 bg-white/70 backdrop-blur-2xl">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6">
+    <div className="min-h-screen bg-canvas">
+      <nav className="border-b border-ink-200/80 bg-canvas">
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5 sm:px-8">
           <Logo size="sm" href="/" />
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={startLive}>
               <LogIn className="h-4 w-4" />
-              Sign In
+              Sign in
             </Button>
             <Button size="sm" onClick={startDemo}>
-              View Demo
+              View demo
             </Button>
           </div>
         </div>
       </nav>
 
-      <section className="relative overflow-hidden px-4 pb-16 pt-28 sm:px-6 sm:pb-24 sm:pt-36">
-        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-          <motion.div
-            animate={{ scale: [1, 1.1, 1], opacity: [0.4, 0.6, 0.4] }}
-            transition={{ duration: 8, repeat: Infinity }}
-            className="absolute -left-20 top-20 h-64 w-64 rounded-full bg-accent-400/20 blur-3xl"
-          />
-          <motion.div
-            animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.5, 0.3] }}
-            transition={{ duration: 10, repeat: Infinity, delay: 1 }}
-            className="absolute -right-10 top-40 h-72 w-72 rounded-full bg-blue-400/15 blur-3xl"
-          />
-        </div>
-
-        <div className="mx-auto max-w-4xl text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7 }}
-          >
-            <div className="mb-6 flex justify-center">
-              <Image
-                src="/logo.png"
-                alt="Property Pilot"
-                width={96}
-                height={96}
-                className="h-20 w-20 object-contain sm:h-24 sm:w-24"
-                priority
-              />
-            </div>
-
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-accent-200/60 bg-white/80 px-3 py-1.5 text-xs font-medium text-accent-700 shadow-sm sm:text-sm">
-              <Sparkles className="h-3.5 w-3.5" />
-              GPT-4o Vision · Real AI Inspections
-            </div>
-
-            <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-6xl lg:text-7xl">
-              Property{" "}
-              <span className="gradient-text">Pilot</span>
-            </h1>
-
-            <p className="mt-4 text-xl font-medium tracking-tight text-slate-400 sm:text-3xl">
-              Drive Once.
+      <section className="mx-auto max-w-5xl px-5 pb-20 pt-16 sm:px-8 sm:pb-28 sm:pt-24">
+        <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-600">
+              HOA inspection software
+            </p>
+            <h1 className="mt-4 font-display text-4xl font-semibold leading-[1.08] tracking-tight text-ink-900 sm:text-5xl lg:text-6xl">
+              Drive once.
               <br />
-              <span className="text-slate-900">Inspect Every Property.</span>
+              Review every home.
+            </h1>
+            <p className="mt-5 max-w-lg text-base leading-relaxed text-ink-500 sm:text-lg">
+              Upload a neighborhood drive-through. AI scans each property and
+              prepares violation reports for your review — no clip-by-clip work.
             </p>
-
-            <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-slate-500 sm:text-lg">
-              Upload a neighborhood drive-through video. AI analyzes every home
-              and prepares violation reports for your review.
-            </p>
-
-            <div className="mt-8 flex flex-col items-stretch gap-3 sm:mt-10 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
-              <Button size="lg" className="w-full sm:w-auto" onClick={startDemo}>
-                <Play className="h-5 w-5" />
-                View Demo
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Button size="lg" onClick={startDemo}>
+                <Play className="h-4 w-4" />
+                Explore demo
               </Button>
-              <Button
-                variant="secondary"
-                size="lg"
-                className="w-full sm:w-auto"
-                onClick={startLive}
-              >
-                <LogIn className="h-5 w-5" />
-                Sign In (Live Mode)
+              <Button variant="secondary" size="lg" onClick={startLive}>
+                Start live
               </Button>
             </div>
-          </motion.div>
-        </div>
-      </section>
+          </div>
 
-      <section className="border-t border-slate-200/50 bg-slate-50/80 py-16 sm:py-24">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="grid gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
-            {[
-              {
-                icon: Upload,
-                title: "Upload & Record",
-                desc: "Drag-and-drop from your phone or desktop. Works on any device.",
-              },
-              {
-                icon: Shield,
-                title: "AI Compliance Checks",
-                desc: "GPT-4o Vision detects trash bins, tall grass, debris, and dead landscaping.",
-              },
-              {
-                icon: BarChart3,
-                title: "Manager Dashboard",
-                desc: "Review violations, approve notices, and track compliance scores.",
-              },
-            ].map((feature, i) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className="glass-card rounded-2xl p-6 sm:p-8"
-              >
-                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-accent-600 shadow-lg shadow-accent-500/25">
-                  <feature.icon className="h-5 w-5 text-white" />
+          <div className="relative">
+            <div className="surface overflow-hidden p-2">
+              <div className="rounded-lg bg-ink-950 p-6 text-white">
+                <div className="flex items-center gap-3">
+                  <Image
+                    src="/logo.png"
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="rounded-lg"
+                  />
+                  <div>
+                    <p className="text-sm font-medium">Willow Creek scan</p>
+                    <p className="text-xs text-ink-400">20 properties · 3 flags</p>
+                  </div>
                 </div>
-                <h3 className="text-lg font-semibold text-slate-900">
-                  {feature.title}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                  {feature.desc}
-                </p>
-              </motion.div>
-            ))}
+                <div className="mt-6 space-y-2">
+                  {["123 Main St — trash bin", "789 Pine Ln — tall grass", "456 Oak Dr — clear"].map(
+                    (row) => (
+                      <div
+                        key={row}
+                        className="rounded-md border border-ink-800 bg-ink-900/80 px-3 py-2 text-xs text-ink-300"
+                      >
+                        {row}
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="px-4 py-16 sm:py-24">
-        <div className="mx-auto max-w-4xl rounded-3xl bg-gradient-to-br from-accent-600 to-accent-500 px-6 py-12 text-center text-white shadow-2xl shadow-accent-600/30 sm:px-12 sm:py-16">
-          <Zap className="mx-auto h-8 w-8 opacity-90" />
-          <h2 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
-            Ready to streamline inspections?
-          </h2>
-          <p className="mx-auto mt-3 max-w-md text-sm text-accent-100 sm:text-base">
-            HOA managers save hours every week with AI-powered property reviews.
-          </p>
-          <Link href="/dashboard" className="mt-8 inline-block">
-            <Button
-              size="lg"
-              className="bg-white text-accent-700 shadow-xl hover:bg-accent-50"
-            >
-              Open Dashboard
-              <ArrowRight className="h-5 w-5" />
+      <section className="border-y border-ink-200/80 bg-white py-16 sm:py-20">
+        <div className="mx-auto grid max-w-5xl gap-10 px-5 sm:grid-cols-3 sm:px-8">
+          {[
+            {
+              icon: Upload,
+              title: "Upload once",
+              desc: "Phone or desktop. Drop a drive-through and go.",
+            },
+            {
+              icon: Shield,
+              title: "AI compliance",
+              desc: "Vision models flag bins, grass, debris, and landscaping.",
+            },
+            {
+              icon: BarChart3,
+              title: "Manager review",
+              desc: "Approve notices, track compliance, export reports.",
+            },
+          ].map((f) => (
+            <div key={f.title}>
+              <f.icon className="h-5 w-5 text-ink-400" strokeWidth={1.5} />
+              <h3 className="mt-3 font-display font-semibold text-ink-900">{f.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-ink-500">{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-5xl px-5 py-16 sm:px-8 sm:py-20">
+        <div className="flex flex-col items-start justify-between gap-6 rounded-xl bg-ink-950 px-6 py-10 text-white sm:flex-row sm:items-center sm:px-10">
+          <div>
+            <h2 className="font-display text-2xl font-semibold">Ready to pilot?</h2>
+            <p className="mt-2 max-w-md text-sm text-ink-400">
+              Demo with sample data, or sign in for live AI scans.
+            </p>
+          </div>
+          <Link href="/dashboard">
+            <Button className="bg-white text-ink-900 hover:bg-ink-100">
+              Open dashboard
+              <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
         </div>
       </section>
 
-      <footer className="border-t border-slate-200/50 py-6 sm:py-8">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 sm:flex-row sm:px-6">
-          <Logo size="sm" href="/" className="[&_span]:text-slate-500" />
-          <p className="text-xs text-slate-400 sm:text-sm">
-            &copy; 2026 Property Pilot
-          </p>
+      <footer className="border-t border-ink-200/80 py-6">
+        <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-2 px-5 sm:flex-row sm:px-8">
+          <Logo size="sm" href="/" />
+          <p className="text-xs text-ink-400">&copy; 2026 Property Pilot</p>
         </div>
       </footer>
     </div>

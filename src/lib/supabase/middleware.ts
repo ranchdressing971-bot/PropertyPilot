@@ -1,13 +1,18 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  getSupabaseAnonKey,
+  getSupabaseProjectUrl,
+  validateSupabaseProjectUrl,
+} from "./config";
 
 export async function updateSession(request: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = getSupabaseProjectUrl();
+  const key = getSupabaseAnonKey();
 
   let supabaseResponse = NextResponse.next({ request });
 
-  if (!url || !key) {
+  if (!url || !key || validateSupabaseProjectUrl(url)) {
     return supabaseResponse;
   }
 

@@ -1,11 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import {
+  getSupabaseAnonKey,
+  getSupabaseProjectUrl,
+  validateSupabaseProjectUrl,
+} from "./config";
 
 export async function createClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = getSupabaseProjectUrl();
+  const key = getSupabaseAnonKey();
 
-  if (!url || !key) {
+  if (!url || !key || validateSupabaseProjectUrl(url)) {
     return null;
   }
 

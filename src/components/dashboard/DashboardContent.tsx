@@ -1,51 +1,107 @@
 "use client";
 
+import Link from "next/link";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { AIInsights } from "@/components/dashboard/AIInsights";
 import { PageContent } from "@/components/layout/PageContent";
-import { dashboardStats, activityFeed } from "@/lib/mock-data";
-import { MapPin, Video, AlertTriangle, Clock } from "lucide-react";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Button } from "@/components/ui/Button";
+import { useLiveDashboard } from "@/hooks/useLiveDashboard";
+import { useAppMode } from "@/components/providers/AppModeProvider";
+import {
+  activityFeed,
+  aiInsights,
+  dashboardStats,
+} from "@/lib/mock-data";
+import { MapPin, Video, AlertTriangle, Clock, Upload, Loader2 } from "lucide-react";
 
 export function DashboardContent() {
+  const { isDemo, isLive } = useAppMode();
+  const { data: live, loading } = useLiveDashboard(isLive);
+
+  const stats = isDemo ? dashboardStats : (live?.stats ?? dashboardStats);
+  const activity = isDemo ? activityFeed : (live?.activity ?? []);
+  const insights = isDemo ? aiInsights : live?.insights;
+  const hasLiveData = isLive && (live?.inspections.length ?? 0) > 0;
+
+  if (isLive && loading && !live) {
+    return (
+      <PageContent>
+        <div className="flex justify-center py-24">
+          <Loader2 className="h-6 w-6 animate-spin text-ink-400" />
+        </div>
+      </PageContent>
+    );
+  }
+
+  if (isLive && !hasLiveData) {
+    return (
+      <PageContent>
+        <EmptyState
+          icon={Video}
+          title="No inspections yet"
+          description="Upload a neighborhood drive-through video to run your first AI-powered scan."
+          actionLabel="Upload video"
+        />
+      </PageContent>
+    );
+  }
+
   return (
     <PageContent>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6">
+      {isLive && (
+        <div className="flex justify-end">
+          <Link href="/dashboard/inspections/upload">
+            <Button size="sm">
+              <Upload className="h-4 w-4" />
+              New scan
+            </Button>
+          </Link>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <StatCard
-          title="Neighborhoods Inspected"
-          value={dashboardStats.neighborhoodsInspected}
+          title="Neighborhoods"
+          value={stats.neighborhoodsInspected}
           icon={MapPin}
-          trend="+1 this month"
-          index={0}
         />
         <StatCard
-          title="Videos Processed"
-          value={dashboardStats.videosProcessed}
+          title="Videos"
+          value={stats.videosProcessed}
           icon={Video}
-          trend="+4 this month"
-          index={1}
         />
         <StatCard
-          title="Potential Violations"
-          value={dashboardStats.potentialViolations}
+          title="Pending flags"
+          value={stats.potentialViolations}
           icon={AlertTriangle}
-          index={2}
         />
         <StatCard
-          title="Time Saved"
-          value={`${dashboardStats.timeSavedHours}h`}
+          title="Hours saved"
+          value={`${stats.timeSavedHours}h`}
           icon={Clock}
-          trend="vs manual"
-          index={3}
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-5 lg:gap-8">
+      <div className="grid gap-5 lg:grid-cols-5 lg:gap-6">
         <div className="lg:col-span-3">
-          <ActivityFeed items={activityFeed} />
+          <ActivityFeed items={activity} />
         </div>
         <div className="lg:col-span-2">
-          <AIInsights />
+          {insights ? (
+            <AIInsights insights={insights} />
+          ) : (
+            <AIInsights
+              insights={{
+                mostCommonViolation: "—",
+                avgInspectionTime: "—",
+                complianceScore: 0,
+                repeatOffenders: [],
+              }}
+              empty
+            />
+          )}
         </div>
       </div>
     </PageContent>
