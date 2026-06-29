@@ -8,6 +8,10 @@ export const metadata: Metadata = {
   title: "Property Pilot — AI-Powered HOA Inspections",
   description:
     "Upload a neighborhood inspection video and let AI prepare every property review automatically.",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export const viewport: Viewport = {

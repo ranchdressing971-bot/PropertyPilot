@@ -11,9 +11,9 @@ import {
   AlertTriangle,
   FileText,
   Settings,
-  Plane,
   X,
 } from "lucide-react";
+import { Logo } from "@/components/brand/Logo";
 import { useMobileNav } from "./MobileNavContext";
 
 const navItems = [
@@ -67,12 +67,10 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Desktop sidebar */}
       <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col border-r border-slate-200/60 bg-white/90 backdrop-blur-xl lg:flex">
         <SidebarContent />
       </aside>
 
-      {/* Mobile drawer */}
       <AnimatePresence>
         {isOpen && (
           <>
@@ -91,17 +89,11 @@ export function Sidebar() {
               className="fixed left-0 top-0 z-50 flex h-screen w-[min(85vw,280px)] flex-col bg-white shadow-2xl lg:hidden"
             >
               <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-accent-700 shadow-lg shadow-accent-500/30">
-                    <Plane className="h-4 w-4 text-white" />
-                  </div>
-                  <span className="text-lg font-semibold tracking-tight">
-                    Property Pilot
-                  </span>
-                </div>
+                <Logo size="md" href="/dashboard" />
                 <button
                   onClick={close}
                   className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+                  aria-label="Close menu"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -120,13 +112,8 @@ export function Sidebar() {
 function SidebarContent() {
   return (
     <>
-      <div className="flex h-16 items-center gap-2.5 border-b border-slate-200/60 px-6">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-accent-700 shadow-lg shadow-accent-500/25">
-          <Plane className="h-4 w-4 text-white" />
-        </div>
-        <span className="text-lg font-semibold tracking-tight text-slate-900">
-          Property Pilot
-        </span>
+      <div className="flex h-16 items-center border-b border-slate-200/60 px-5">
+        <Logo size="md" href="/dashboard" />
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
