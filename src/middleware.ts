@@ -10,5 +10,7 @@ export const config = {
     "/dashboard/:path*",
     "/login",
     "/signup",
+    "/api/inspection/:path*",
+    "/api/analyze-inspection",
   ],
 };

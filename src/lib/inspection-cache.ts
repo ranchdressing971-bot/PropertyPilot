@@ -1,22 +1,47 @@
 import type { AIInspectionData } from "./ai-analyze";
+import {
+  formatInspectionForDisplay,
+  type InspectionDisplayData,
+} from "./inspection-display";
+import { stripInspectionForStorage } from "./inspection-sanitize";
 
 const PREFIX = "pp-inspection-";
 
-export function cacheInspectionClient(data: AIInspectionData): void {
-  if (typeof window === "undefined") return;
+/** Survives client-side navigation (upload → results) in the same tab. */
+const memoryDisplay = new Map<string, InspectionDisplayData>();
+
+function toDisplay(data: AIInspectionData): InspectionDisplayData {
+  return formatInspectionForDisplay(stripInspectionForStorage(data));
+}
+
+export function cacheInspectionClient(data: AIInspectionData): boolean {
+  const display = toDisplay(data);
+  memoryDisplay.set(display.id, display);
+
+  if (typeof window === "undefined") return true;
+
   try {
-    sessionStorage.setItem(`${PREFIX}${data.id}`, JSON.stringify(data));
+    sessionStorage.setItem(`${PREFIX}${display.id}`, JSON.stringify(display));
+    return true;
   } catch {
-    // Quota exceeded on large frame payloads — ignore
+    return true;
   }
 }
 
-export function getCachedInspectionClient(id: string): AIInspectionData | null {
+export function getCachedInspectionClient(id: string): InspectionDisplayData | null {
+  const mem = memoryDisplay.get(id);
+  if (mem) return mem;
+
   if (typeof window === "undefined") return null;
+
   try {
     const raw = sessionStorage.getItem(`${PREFIX}${id}`);
     if (!raw) return null;
-    return JSON.parse(raw) as AIInspectionData;
+    const parsed = JSON.parse(raw) as InspectionDisplayData | AIInspectionData;
+    if (parsed.results?.[0] && "property" in parsed.results[0]) {
+      return parsed as InspectionDisplayData;
+    }
+    return formatInspectionForDisplay(parsed as AIInspectionData);
   } catch {
     return null;
   }

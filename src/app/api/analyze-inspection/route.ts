@@ -8,6 +8,7 @@ import {
   buildViolationsFromAI,
   normalizeAIResults,
 } from "@/lib/ai-analyze";
+import { stripInspectionForStorage } from "@/lib/inspection-sanitize";
 import { saveAIInspection } from "@/lib/inspection-store";
 import { properties as demoProperties } from "@/lib/mock-data";
 import { isOpenAIConfigured } from "@/lib/app-mode";
@@ -220,7 +221,8 @@ export async function POST(request: NextRequest) {
       usedVideoFrames: Boolean(frames?.length),
     };
 
-    await saveAIInspection(inspection);
+    const lean = stripInspectionForStorage(inspection);
+    const saved = await saveAIInspection(lean);
 
     if (userId) {
       await logAudit(userId, "inspection_complete", "inspection", id, {
@@ -229,6 +231,7 @@ export async function POST(request: NextRequest) {
         frameCount,
         addressMatches,
         usedVideoFrames: Boolean(frames?.length),
+        persisted: saved,
       });
     }
 
@@ -240,7 +243,8 @@ export async function POST(request: NextRequest) {
       frameCount,
       addressMatches,
       usedVideoFrames: Boolean(frames?.length),
-      inspection,
+      saved,
+      inspection: lean,
     });
   } catch (error) {
     console.error("AI analysis failed:", error);

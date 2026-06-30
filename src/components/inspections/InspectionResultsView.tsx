@@ -8,7 +8,7 @@ import { Header } from "@/components/layout/Header";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { InspectionResultCard } from "@/components/inspections/InspectionResultCard";
-import { formatInspectionForDisplay, type InspectionDisplayData } from "@/lib/inspection-display";
+import type { InspectionDisplayData } from "@/lib/inspection-display";
 import { getCachedInspectionClient } from "@/lib/inspection-cache";
 import { CheckCircle2, AlertTriangle, Sparkles, Loader2 } from "lucide-react";
 
@@ -20,27 +20,36 @@ export function InspectionResultsView({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const cached = getCachedInspectionClient(id);
-    if (cached) {
-      setData(formatInspectionForDisplay(cached));
-      setLoading(false);
-    }
+    let cancelled = false;
 
-    fetch(`/api/inspection/${id}`)
-      .then((r) => {
+    async function load() {
+      const cached = getCachedInspectionClient(id);
+      if (cached) {
+        setData(cached);
+        setLoading(false);
+      }
+
+      try {
+        const r = await fetch(`/api/inspection/${id}`, { credentials: "include" });
         if (!r.ok) {
-          if (cached) return null;
+          if (cached) return;
           throw new Error("Inspection not found");
         }
-        return r.json();
-      })
-      .then((json) => {
-        if (json) setData(json);
-      })
-      .catch((e) => {
-        if (!cached) setError(e.message);
-      })
-      .finally(() => setLoading(false));
+        const json = await r.json();
+        if (!cancelled) setData(json);
+      } catch (e) {
+        if (!cached && !cancelled) {
+          setError(e instanceof Error ? e.message : "Inspection not found");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (loading) {

@@ -105,6 +105,7 @@ export default function UploadPage() {
 
         const res = await fetch("/api/analyze-inspection", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             videoName: file.name,
@@ -139,8 +140,18 @@ export default function UploadPage() {
             : null
         );
 
-        if (data.inspection) {
-          cacheInspectionClient(data.inspection as AIInspectionData);
+        if (!data.inspection) {
+          throw new Error(
+            "Analysis finished but results were not returned. Please try again."
+          );
+        }
+
+        cacheInspectionClient(data.inspection as AIInspectionData);
+
+        if (!data.saved) {
+          console.warn(
+            "Inspection cached locally; database save failed — add SUPABASE_SERVICE_ROLE_KEY on Render."
+          );
         }
 
         setIsComplete(true);

@@ -1,4 +1,5 @@
 import type { AIInspectionData } from "./ai-analyze";
+import { stripInspectionForStorage } from "./inspection-sanitize";
 import type { ViolationStatus } from "./mock-data";
 import {
   getAuthenticatedUserId,
@@ -28,12 +29,14 @@ export async function ensureStoreHydrated(): Promise<void> {
   hydrated = true;
 }
 
-export async function saveAIInspection(data: AIInspectionData): Promise<void> {
-  store.set(data.id, data);
+export async function saveAIInspection(data: AIInspectionData): Promise<boolean> {
+  const lean = stripInspectionForStorage(data);
+  store.set(lean.id, lean);
   const userId = await getAuthenticatedUserId();
   if (userId) {
-    await persistInspection(userId, data);
+    return persistInspection(userId, lean);
   }
+  return false;
 }
 
 export async function getAIInspection(id: string): Promise<AIInspectionData | undefined> {

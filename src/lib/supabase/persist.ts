@@ -1,5 +1,7 @@
 import type { AIInspectionData } from "../ai-analyze";
 import type { Property } from "../mock-data";
+import { stripInspectionForStorage } from "../inspection-sanitize";
+import { createAdminClient } from "./admin";
 import { createClient } from "./server";
 
 export async function getAuthenticatedUserId(): Promise<string | null> {
@@ -12,28 +14,48 @@ export async function getAuthenticatedUserId(): Promise<string | null> {
 export async function persistInspection(
   userId: string,
   inspection: AIInspectionData
-): Promise<void> {
-  const supabase = await createClient();
-  if (!supabase) return;
+): Promise<boolean> {
+  const lean = stripInspectionForStorage(inspection);
 
-  const { error } = await supabase.from("inspections").upsert({
-    id: inspection.id,
+  const baseRow = {
+    id: lean.id,
     user_id: userId,
-    name: inspection.name,
-    video_name: inspection.videoName,
-    neighborhood: inspection.neighborhood,
-    results: inspection.results,
-    violations: inspection.violations,
-    metadata: {
-      frameCount: inspection.frameCount,
-      addressMatches: inspection.addressMatches,
-      usedVideoFrames: inspection.usedVideoFrames,
-    },
-  });
+    name: lean.name,
+    video_name: lean.videoName,
+    neighborhood: lean.neighborhood,
+    results: lean.results,
+    violations: lean.violations,
+  };
 
-  if (error) {
+  const withMeta = {
+    ...baseRow,
+    metadata: {
+      frameCount: lean.frameCount,
+      addressMatches: lean.addressMatches,
+      usedVideoFrames: lean.usedVideoFrames,
+    },
+  };
+
+  async function tryUpsert(
+    client: NonNullable<Awaited<ReturnType<typeof createClient>>> | ReturnType<typeof createAdminClient>
+  ): Promise<boolean> {
+    if (!client) return false;
+    let { error } = await client.from("inspections").upsert(withMeta);
+    if (error?.message?.includes("metadata")) {
+      ({ error } = await client.from("inspections").upsert(baseRow));
+    }
+    if (!error) return true;
     console.error("persistInspection failed:", error.message);
+    return false;
   }
+
+  const admin = createAdminClient();
+  if (admin && (await tryUpsert(admin))) return true;
+
+  const supabase = await createClient();
+  if (supabase && (await tryUpsert(supabase))) return true;
+
+  return false;
 }
 
 function mapInspectionRow(row: {
@@ -66,22 +88,40 @@ function mapInspectionRow(row: {
   };
 }
 
-export async function loadInspectionFromDbById(
+async function fetchInspectionRow(
   userId: string,
-  inspectionId: string
-): Promise<AIInspectionData | null> {
-  const supabase = await createClient();
-  if (!supabase) return null;
-
-  const { data, error } = await supabase
+  inspectionId: string,
+  client: NonNullable<Awaited<ReturnType<typeof createClient>>> | ReturnType<typeof createAdminClient>
+) {
+  if (!client) return null;
+  const { data, error } = await client
     .from("inspections")
     .select("*")
     .eq("user_id", userId)
     .eq("id", inspectionId)
     .maybeSingle();
-
   if (error || !data) return null;
-  return mapInspectionRow(data);
+  return data;
+}
+
+export async function loadInspectionFromDbById(
+  userId: string,
+  inspectionId: string
+): Promise<AIInspectionData | null> {
+  const supabase = await createClient();
+  let row = supabase
+    ? await fetchInspectionRow(userId, inspectionId, supabase)
+    : null;
+
+  if (!row) {
+    const admin = createAdminClient();
+    if (admin) {
+      row = await fetchInspectionRow(userId, inspectionId, admin);
+    }
+  }
+
+  if (!row) return null;
+  return mapInspectionRow(row);
 }
 
 export async function loadInspectionsFromDb(
