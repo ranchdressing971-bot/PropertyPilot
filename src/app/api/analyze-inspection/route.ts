@@ -24,6 +24,8 @@ import {
   propertiesFromHomeDiscovery,
   propertiesFromFrameFallback,
   supplementPropertiesFromFrames,
+  mergePropertyLists,
+  dedupeProperties,
 } from "@/lib/frame-property-map";
 
 export const maxDuration = 60;
@@ -157,37 +159,41 @@ export async function POST(request: NextRequest) {
 
       // AI reads addresses from video — roster is optional enrichment only
       const detections = await runAddressDetection(imageUrls, roster);
-      scanProperties = discoverPropertiesFromVideo(
+      const fromOcr = discoverPropertiesFromVideo(
         extractedFrames,
         detections,
         neighborhood,
         roster.length > 0 ? roster : undefined
       );
-      addressMatches = scanProperties.length;
 
-      const minHomes = Math.min(frames.length, 10);
-      if (scanProperties.length < minHomes) {
-        const homes = await runHomeDiscovery(imageUrls);
-        const fromHomes = propertiesFromHomeDiscovery(
-          extractedFrames,
-          homes,
-          neighborhood
-        );
-        if (fromHomes.length > scanProperties.length) {
-          scanProperties = fromHomes;
-          addressMatches = fromHomes.length;
-        }
-      }
+      const homes = await runHomeDiscovery(imageUrls);
+      const fromHomes = propertiesFromHomeDiscovery(
+        extractedFrames,
+        homes,
+        neighborhood
+      );
 
-      if (scanProperties.length < minHomes) {
+      scanProperties = mergePropertyLists(
+        neighborhood,
+        extractedFrames,
+        fromOcr,
+        fromHomes
+      );
+      addressMatches = scanProperties.filter(
+        (p) => !/^Home at /i.test(p.address)
+      ).length;
+
+      // Only pad with time-slot placeholders when we found very few homes
+      if (scanProperties.length < 3) {
         scanProperties = supplementPropertiesFromFrames(
           scanProperties,
           extractedFrames,
           neighborhood,
-          minHomes
+          Math.min(6, Math.ceil(frames.length / 3))
         );
-        addressMatches = scanProperties.length;
       }
+
+      scanProperties = dedupeProperties(scanProperties, extractedFrames, neighborhood);
 
       if (scanProperties.length === 0) {
         scanProperties = propertiesFromFrameFallback(extractedFrames, neighborhood);

@@ -12,41 +12,48 @@ export interface AddressDetection {
 export function buildAddressDetectionPrompt(): string {
   return `You are an expert at reading addresses from HOA drive-through inspection footage.
 
-For EACH frame image, carefully look for:
+For EACH frame image, look for:
 - House numbers on mailboxes, curbs, driveways, or front doors
-- Street name signs at intersections or on corner posts
-- Address numbers on walls, gates, or packages
-- Neighborhood entry signs showing street names
+- Street name signs at intersections
+- Address numbers on gates or garage trim
 
-Infer the FULL street address when possible (e.g. "123 Oak Lane"). If you only see a house number, include it and note the street if visible in the same frame or from context.
-
-Be thorough — drive-through videos usually pass many homes. Report every address you can read, even partially.
+Rules:
+- Return the FULL address when possible: "123 Oak Lane" (not just "123" unless that's all you see)
+- Use standard abbreviations: St, Dr, Ln, Ave, Ct, Blvd
+- If the SAME house appears in multiple frames you will analyze separately, still report what you see — duplicates are merged later
+- Do NOT guess street names you cannot see
+- confidence 80+ only when you clearly read the number; 50-70 for partial reads
 
 Respond with JSON only:
 {
   "detections": [
     {
       "frameIndex": 0,
-      "visibleAddress": "123 Oak Lane" or "123" or null,
+      "visibleAddress": "123 Oak Lane" or null,
       "houseNumber": "123" or null,
       "confidence": 0-100,
-      "reasoning": "brief explanation of what you read"
+      "reasoning": "mailbox shows 123 Oak Ln"
     }
   ]
 }
 
-Include one entry per frame. Use null only when no address clues are visible.`;
+One entry per frame. Use null only when no address clues are visible.`;
 }
 
 export function buildHomeDiscoveryPrompt(frameCount: number): string {
-  return `You are analyzing ${frameCount} frames from a single HOA neighborhood drive-through video.
+  return `You are analyzing ${frameCount} frames from ONE continuous HOA drive-through video.
 
-Identify every DISTINCT home or property visible across these frames. For each unique property:
-- Read the full street address from mailboxes, house numbers, signs, etc.
-- If the full address is unclear, combine house number + visible street name
-- If no text is readable, describe as "House near [visual landmark]" but prefer real addresses
+List each DISTINCT home visible across all frames — each physical house ONCE.
 
-Do NOT list the same property twice. Merge frames that show the same house.
+How to identify unique homes:
+- Same mailbox/house number in nearby frames = ONE home (pick the clearest frame)
+- Different house numbers = different homes
+- A house usually takes 2-4 seconds in a slow drive-through — do not list it twice
+
+For each unique home:
+- Prefer full address: "456 Maple Drive"
+- If only number visible: "456" plus any visible street name
+- confidence: 85+ clear mailbox, 60-75 partial
 
 Respond with JSON only:
 {
@@ -55,7 +62,7 @@ Respond with JSON only:
       "frameIndex": 0,
       "address": "456 Maple Drive",
       "confidence": 0-100,
-      "reasoning": "mailbox shows 456, street sign visible"
+      "reasoning": "mailbox 456, street sign Maple Dr"
     }
   ]
 }`;

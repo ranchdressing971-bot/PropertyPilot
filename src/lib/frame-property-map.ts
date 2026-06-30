@@ -1,6 +1,14 @@
 import type { Property } from "./mock-data";
 import type { AddressDetection } from "./address-detect";
 import type { ExtractedFrame } from "./video-frames";
+import {
+  addressDedupeKey,
+  addressesLikelySame,
+  extractHouseNumber,
+  formatAddressTitle,
+  isPlaceholderAddress,
+  pickBetterAddress,
+} from "./address-normalize";
 
 export interface DiscoveredHome {
   frameIndex: number;
@@ -9,9 +17,8 @@ export interface DiscoveredHome {
   reasoning: string;
 }
 
-function normalizeKey(addr: string): string {
-  return addr.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
+/** Min seconds between distinct homes in a slow drive-through. */
+const TEMPORAL_GAP_SEC = 4;
 
 function formatVideoTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -26,6 +33,105 @@ function pickAddress(det: AddressDetection): string | null {
   return null;
 }
 
+function frameForImage(frames: ExtractedFrame[], image: string): ExtractedFrame | undefined {
+  return frames.find((f) => f.dataUrl === image);
+}
+
+interface PropertyCandidate {
+  address: string;
+  confidence: number;
+  frame: ExtractedFrame;
+}
+
+function candidateToProperty(
+  candidate: PropertyCandidate,
+  neighborhood: string,
+  id: string
+): Property {
+  return {
+    id,
+    address: formatAddressTitle(candidate.address),
+    image: candidate.frame.dataUrl,
+    status: "Good Standing",
+    lastInspection: "—",
+    neighborhood,
+  };
+}
+
+/** Merge duplicate addresses; keep best label + highest-confidence frame. */
+export function dedupeProperties(
+  properties: Property[],
+  frames: ExtractedFrame[] = [],
+  neighborhood = ""
+): Property[] {
+  const hood = neighborhood || properties[0]?.neighborhood || "";
+  const groups: {
+    address: string;
+    confidence: number;
+    frame: ExtractedFrame;
+  }[] = [];
+
+  for (const prop of properties) {
+    const frame =
+      frameForImage(frames, prop.image) ??
+      ({ index: 0, timestamp: 0, dataUrl: prop.image } as ExtractedFrame);
+
+    const existingIdx = groups.findIndex((g) =>
+      addressesLikelySame(g.address, prop.address)
+    );
+
+    if (existingIdx === -1) {
+      groups.push({ address: prop.address, confidence: 70, frame });
+      continue;
+    }
+
+    const existing = groups[existingIdx];
+    existing.address = pickBetterAddress(existing.address, prop.address);
+    if (!isPlaceholderAddress(prop.address) && isPlaceholderAddress(existing.address)) {
+      existing.frame = frame;
+    }
+  }
+
+  // Temporal dedupe: placeholders / weak reads within TEMPORAL_GAP_SEC = same house
+  const sorted = [...groups].sort((a, b) => a.frame.timestamp - b.frame.timestamp);
+  const merged: typeof groups = [];
+
+  for (const item of sorted) {
+    const prev = merged[merged.length - 1];
+    if (
+      prev &&
+      Math.abs(item.frame.timestamp - prev.frame.timestamp) < TEMPORAL_GAP_SEC &&
+      (isPlaceholderAddress(item.address) ||
+        isPlaceholderAddress(prev.address) ||
+        addressesLikelySame(item.address, prev.address) ||
+        (extractHouseNumber(item.address) &&
+          extractHouseNumber(item.address) === extractHouseNumber(prev.address)))
+    ) {
+      prev.address = pickBetterAddress(prev.address, item.address);
+      if (
+        !isPlaceholderAddress(item.address) &&
+        (isPlaceholderAddress(prev.address) || item.confidence > prev.confidence)
+      ) {
+        prev.frame = item.frame;
+        prev.confidence = Math.max(prev.confidence, item.confidence);
+      }
+      continue;
+    }
+    merged.push({ ...item });
+  }
+
+  return merged.map((g, i) => candidateToProperty(g, hood, `found-${i + 1}`));
+}
+
+/** Combine multiple property lists into one deduped list. */
+export function mergePropertyLists(
+  neighborhood: string,
+  frames: ExtractedFrame[],
+  ...lists: Property[][]
+): Property[] {
+  return dedupeProperties(lists.flat(), frames, neighborhood);
+}
+
 /** Merge detections across frames into unique properties with best frame image. */
 export function discoverPropertiesFromVideo(
   frames: ExtractedFrame[],
@@ -33,14 +139,11 @@ export function discoverPropertiesFromVideo(
   neighborhood: string,
   optionalRoster?: Property[]
 ): Property[] {
-  const groups = new Map<
-    string,
-    { address: string; confidence: number; frame: ExtractedFrame }
-  >();
+  const groups = new Map<string, PropertyCandidate>();
 
   for (const det of detections) {
     let address = pickAddress(det);
-    if (!address || det.confidence < 25) continue;
+    if (!address || det.confidence < 30) continue;
 
     const frame =
       frames.find((f) => f.index === det.frameIndex) ?? frames[det.frameIndex];
@@ -51,50 +154,20 @@ export function discoverPropertiesFromVideo(
       if (match) address = match.address;
     }
 
-    const numOnly = /^\d+[a-z]?$/i.test(address);
-    const key = numOnly ? `num-${address}` : normalizeKey(address);
-
+    const key = addressDedupeKey(address);
     const existing = groups.get(key);
     if (!existing || det.confidence > existing.confidence) {
       groups.set(key, { address, confidence: det.confidence, frame });
     }
   }
 
-  mergeHouseNumberWithStreet(groups, detections, frames);
+  // Merge entries that share a house number but different keys (e.g. "123" vs "123 Oak")
+  const candidates = Array.from(groups.values());
+  const props = candidates.map((c, i) =>
+    candidateToProperty(c, neighborhood, `found-${i + 1}`)
+  );
 
-  return Array.from(groups.values()).map((g, i) => ({
-    id: `found-${i + 1}`,
-    address: g.address,
-    image: g.frame.dataUrl,
-    status: "Good Standing" as const,
-    lastInspection: "—",
-    neighborhood,
-  }));
-}
-
-/** e.g. merge "123" with "123 Main St" when house numbers match */
-function mergeHouseNumberWithStreet(
-  groups: Map<string, { address: string; confidence: number; frame: ExtractedFrame }>,
-  detections: AddressDetection[],
-  frames: ExtractedFrame[]
-): void {
-  for (const det of detections) {
-    const full = det.visibleAddress?.trim();
-    if (!full || det.confidence < 25) continue;
-    const num = full.match(/^(\d+[a-z]?)/i)?.[1];
-    if (!num) continue;
-
-    const numKey = `num-${num}`;
-    const partial = groups.get(numKey);
-    if (partial && full.length > partial.address.length) {
-      groups.delete(numKey);
-      groups.set(normalizeKey(full), {
-        address: full,
-        confidence: Math.max(partial.confidence, det.confidence),
-        frame: frames[det.frameIndex] ?? partial.frame,
-      });
-    }
-  }
+  return dedupeProperties(props, frames);
 }
 
 export function propertiesFromHomeDiscovery(
@@ -102,20 +175,16 @@ export function propertiesFromHomeDiscovery(
   homes: DiscoveredHome[],
   neighborhood: string
 ): Property[] {
-  const seen = new Set<string>();
   const props: Property[] = [];
 
   for (const home of homes) {
     const addr = home.address?.trim();
-    if (!addr || home.confidence < 30) continue;
-    const key = normalizeKey(addr);
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (!addr || home.confidence < 35) continue;
 
     const frame = frames[home.frameIndex] ?? frames[0];
     props.push({
       id: `found-${props.length + 1}`,
-      address: addr,
+      address: formatAddressTitle(addr),
       image: frame?.dataUrl ?? "",
       status: "Good Standing",
       lastInspection: "—",
@@ -123,15 +192,18 @@ export function propertiesFromHomeDiscovery(
     });
   }
 
-  return props;
+  return dedupeProperties(props, frames);
 }
 
-/** Last resort: one entry per frame so compliance scan still runs */
+/** One entry per frame — only when OCR finds nothing. */
 export function propertiesFromFrameFallback(
   frames: ExtractedFrame[],
   neighborhood: string
 ): Property[] {
-  return frames.map((frame, i) => ({
+  const step = Math.max(1, Math.ceil(frames.length / 6));
+  const picked = frames.filter((_, i) => i % step === 0).slice(0, 6);
+
+  const props = picked.map((frame, i) => ({
     id: `found-${i + 1}`,
     address: `Home at ${formatVideoTime(frame.timestamp)}`,
     image: frame.dataUrl,
@@ -139,9 +211,14 @@ export function propertiesFromFrameFallback(
     lastInspection: "—",
     neighborhood,
   }));
+
+  return dedupeProperties(props, frames);
 }
 
-/** Pad scan results with per-frame entries when address OCR finds too few homes. */
+/**
+ * Add frame slots only for time ranges with no matched home yet.
+ * Avoids duplicating houses already found by address OCR.
+ */
 export function supplementPropertiesFromFrames(
   existing: Property[],
   frames: ExtractedFrame[],
@@ -150,20 +227,27 @@ export function supplementPropertiesFromFrames(
 ): Property[] {
   if (existing.length >= targetMin || frames.length === 0) return existing;
 
-  const merged = [...existing];
-  const seenAddresses = new Set(existing.map((p) => normalizeKey(p.address)));
+  const covered = new Set<number>();
+  for (const prop of existing) {
+    const frame = frameForImage(frames, prop.image);
+    if (!frame) continue;
+    const slot = Math.floor(frame.timestamp / TEMPORAL_GAP_SEC);
+    covered.add(slot);
+    covered.add(slot - 1);
+    covered.add(slot + 1);
+  }
 
+  const extras: Property[] = [];
   for (const frame of frames) {
-    if (merged.length >= targetMin) break;
+    if (existing.length + extras.length >= targetMin) break;
 
-    const address = `Home at ${formatVideoTime(frame.timestamp)}`;
-    const key = normalizeKey(address);
-    if (seenAddresses.has(key)) continue;
+    const slot = Math.floor(frame.timestamp / TEMPORAL_GAP_SEC);
+    if (covered.has(slot)) continue;
 
-    seenAddresses.add(key);
-    merged.push({
-      id: `found-${merged.length + 1}`,
-      address,
+    covered.add(slot);
+    extras.push({
+      id: `found-${existing.length + extras.length + 1}`,
+      address: `Home at ${formatVideoTime(frame.timestamp)}`,
       image: frame.dataUrl,
       status: "Good Standing",
       lastInspection: "—",
@@ -171,10 +255,10 @@ export function supplementPropertiesFromFrames(
     });
   }
 
-  return merged;
+  return dedupeProperties([...existing, ...extras], frames);
 }
 
-// Legacy exports kept for optional roster matching
+// Legacy exports
 export interface PropertyFrameAssignment {
   propertyId: string;
   address: string;
@@ -229,7 +313,6 @@ export function buildPropertiesWithFrames(
     });
 }
 
-/** @deprecated Use discoverPropertiesFromVideo */
 export function propertiesFromDetections(
   frames: ExtractedFrame[],
   detections: AddressDetection[],
