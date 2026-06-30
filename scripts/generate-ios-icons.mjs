@@ -110,8 +110,11 @@ async function prepareLogoPng({ brightenDark = false, adaptive = false } = {}) {
     .toBuffer();
 }
 
-async function compositeOnCanvas(size, logoPng, background, outPath) {
-  const logoSize = Math.round(size * 0.96);
+const ADAPTIVE_FILL = 0.85; // home screen — iOS adds its own margin
+const SOLID_FILL = 0.88;
+
+async function compositeOnCanvas(size, logoPng, background, outPath, fill = SOLID_FILL) {
+  const logoSize = Math.round(size * fill);
   const logo = await sharp(logoPng)
     .resize(logoSize, logoSize, { fit: "contain", background: TRANSPARENT })
     .png()
@@ -143,25 +146,26 @@ for (const size of sizes) {
     size,
     logoAdaptive,
     TRANSPARENT,
-    path.join(iosDir, `apple-touch-icon-${size}-transparent.png`)
+    path.join(iosDir, `apple-touch-icon-${size}-transparent.png`),
+    ADAPTIVE_FILL
   );
 }
 
 await compositeOnCanvas(512, logoStandard, LIGHT_BG, path.join(iosDir, "icon-512.png"));
 await compositeOnCanvas(512, logoStandard, DARK_BG, path.join(iosDir, "icon-512-dark.png"));
-await compositeOnCanvas(512, logoAdaptive, TRANSPARENT, path.join(iosDir, "icon-512-transparent.png"));
+await compositeOnCanvas(512, logoAdaptive, TRANSPARENT, path.join(iosDir, "icon-512-transparent.png"), ADAPTIVE_FILL);
 
-await compositeOnCanvas(180, logoAdaptive, TRANSPARENT, path.join(root, "public/apple-touch-icon.png"));
+await compositeOnCanvas(180, logoAdaptive, TRANSPARENT, path.join(root, "public/apple-touch-icon.png"), ADAPTIVE_FILL);
 await compositeOnCanvas(180, logoStandard, DARK_BG, path.join(root, "public/apple-touch-icon-dark.png"));
 await compositeOnCanvas(180, logoStandard, LIGHT_BG, path.join(root, "public/apple-touch-icon-light.png"));
 await compositeOnCanvas(32, logoStandard, LIGHT_BG, path.join(root, "public/favicon-32.png"));
 await compositeOnCanvas(512, logoStandard, DARK_BG, path.join(root, "public/logo-dark.png"));
 
 const appDir = path.join(root, "src/app");
-await compositeOnCanvas(180, logoAdaptive, TRANSPARENT, path.join(appDir, "apple-icon.png"));
+await compositeOnCanvas(180, logoAdaptive, TRANSPARENT, path.join(appDir, "apple-icon.png"), ADAPTIVE_FILL);
 await compositeOnCanvas(32, logoStandard, LIGHT_BG, path.join(appDir, "icon.png"));
 
 const trimmedMeta = await sharp(logoStandard).metadata();
 console.log(
-  `iOS icons generated — trimmed ${trimmedMeta.width}x${trimmedMeta.height}, 96% canvas fill.`
+  `iOS icons generated — adaptive ${ADAPTIVE_FILL * 100}%, solid ${SOLID_FILL * 100}% fill.`
 );
