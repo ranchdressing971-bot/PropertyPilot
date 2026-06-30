@@ -110,8 +110,25 @@ async function prepareLogoPng({ brightenDark = false, adaptive = false } = {}) {
     .toBuffer();
 }
 
-const ADAPTIVE_FILL = 0.85; // home screen — iOS adds its own margin
-const SOLID_FILL = 0.88;
+/** Extra transparent margin so iOS squircle mask does not clip the mark. */
+async function addSafePadding(pngBuffer, paddingRatio = 0.22) {
+  const meta = await sharp(pngBuffer).metadata();
+  const padX = Math.round(meta.width * paddingRatio);
+  const padY = Math.round(meta.height * paddingRatio);
+  return sharp(pngBuffer)
+    .extend({
+      top: padY,
+      bottom: padY,
+      left: padX,
+      right: padX,
+      background: TRANSPARENT,
+    })
+    .png()
+    .toBuffer();
+}
+
+const ADAPTIVE_FILL = 0.72; // iOS 18 masks corners — keep mark inside safe zone
+const SOLID_FILL = 0.78;
 
 async function compositeOnCanvas(size, logoPng, background, outPath, fill = SOLID_FILL) {
   const logoSize = Math.round(size * fill);
@@ -132,7 +149,9 @@ async function compositeOnCanvas(size, logoPng, background, outPath, fill = SOLI
 }
 
 const logoStandard = await prepareLogoPng({ brightenDark: false, adaptive: false });
-const logoAdaptive = await prepareLogoPng({ brightenDark: true, adaptive: true });
+const logoAdaptive = await addSafePadding(
+  await prepareLogoPng({ brightenDark: true, adaptive: true })
+);
 
 const iosDir = path.join(root, "public/icons/ios");
 await mkdir(iosDir, { recursive: true });
