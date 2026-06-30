@@ -4,47 +4,36 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { CreditCard, Loader2, ExternalLink } from "lucide-react";
-import { createClient, isSupabaseClientConfigured } from "@/lib/supabase/client";
+
+interface SubStatus {
+  subscribed: boolean;
+  status: string;
+  trialScansUsed: number;
+  trialScansRemaining: number;
+  trialScansLimit: number;
+  price: string;
+}
 
 export function BillingCard() {
   const [loading, setLoading] = useState<"checkout" | "portal" | "init" | null>("init");
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [plan, setPlan] = useState<string | null>(null);
+  const [sub, setSub] = useState<SubStatus | null>(null);
 
   useEffect(() => {
-    if (!isSupabaseClientConfigured()) {
-      setLoading(null);
-      return;
-    }
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) {
+    fetch("/api/subscription/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setSub(data);
         setLoading(null);
-        return;
-      }
-      supabase
-        .from("profiles")
-        .select("subscription_status, plan")
-        .eq("id", user.id)
-        .maybeSingle()
-        .then(({ data }) => {
-          setStatus(data?.subscription_status ?? "trialing");
-          setPlan(data?.plan ?? "starter");
-          setLoading(null);
-        });
-    });
+      })
+      .catch(() => setLoading(null));
   }, []);
 
-  async function startCheckout(plan: "starter" | "professional") {
+  async function startCheckout() {
     setLoading("checkout");
     setError(null);
     try {
-      const res = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
-      });
+      const res = await fetch("/api/stripe/checkout", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Checkout failed");
       if (data.url) window.location.href = data.url;
@@ -70,8 +59,6 @@ export function BillingCard() {
     }
   }
 
-  const active = status === "active" || status === "trialing";
-
   if (loading === "init") {
     return (
       <Card>
@@ -80,6 +67,8 @@ export function BillingCard() {
     );
   }
 
+  const subscribed = sub?.subscribed;
+
   return (
     <Card>
       <div className="flex items-center gap-3">
@@ -87,9 +76,11 @@ export function BillingCard() {
         <div className="flex-1">
           <h3 className="font-semibold text-ink-900">Billing</h3>
           <p className="text-sm text-ink-500">
-            {active
-              ? `${plan ?? "Starter"} plan · ${status}`
-              : "Start a 14-day free trial for live AI inspections"}
+            {subscribed
+              ? `${sub?.price ?? "$149/mo"} · ${sub?.status}`
+              : sub
+                ? `${sub.trialScansRemaining} of ${sub.trialScansLimit} free scans left · then ${sub.price}`
+                : "$149/mo after 3 free scans"}
           </p>
         </div>
       </div>
@@ -97,26 +88,20 @@ export function BillingCard() {
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {active ? (
+        {subscribed ? (
           <Button variant="secondary" size="sm" onClick={openPortal} disabled={!!loading}>
-            {loading === "portal" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+            {loading === "portal" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ExternalLink className="h-4 w-4" />
+            )}
             Manage billing
           </Button>
         ) : (
-          <>
-            <Button size="sm" onClick={() => startCheckout("starter")} disabled={!!loading}>
-              {loading === "checkout" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Start trial — Starter
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => startCheckout("professional")}
-              disabled={!!loading}
-            >
-              Professional
-            </Button>
-          </>
+          <Button size="sm" onClick={startCheckout} disabled={!!loading}>
+            {loading === "checkout" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Subscribe — $149/mo
+          </Button>
         )}
       </div>
     </Card>

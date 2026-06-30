@@ -6,13 +6,11 @@ import { Button } from "@/components/ui/Button";
 import { Loader2 } from "lucide-react";
 
 interface PricingCheckoutButtonProps {
-  plan: "starter" | "professional";
   variant?: "primary" | "secondary";
   label: string;
 }
 
 export function PricingCheckoutButton({
-  plan,
   variant = "primary",
   label,
 }: PricingCheckoutButtonProps) {
@@ -22,20 +20,16 @@ export function PricingCheckoutButton({
   async function handleClick() {
     setLoading(true);
     try {
-      const res = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
-      });
+      const res = await fetch("/api/stripe/checkout", { method: "POST" });
       const data = await res.json();
       if (res.status === 401) {
-        router.push(`/signup?plan=${plan}`);
+        router.push("/signup");
         return;
       }
       if (!res.ok) throw new Error(data.error ?? "Checkout unavailable");
       if (data.url) window.location.href = data.url;
     } catch {
-      router.push(`/signup?plan=${plan}`);
+      router.push("/signup");
     } finally {
       setLoading(false);
     }

@@ -3,7 +3,7 @@ import { getStripe, getStripePriceId, getAppUrl, isStripeConfigured } from "@/li
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export async function POST(req: NextRequest) {
+export async function POST(_req: NextRequest) {
   if (!isStripeConfigured()) {
     return NextResponse.json(
       { error: "Stripe is not configured. Add STRIPE_SECRET_KEY to environment." },
@@ -23,12 +23,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   }
 
-  const body = await req.json().catch(() => ({}));
-  const plan = body.plan === "professional" ? "professional" : "starter";
-  const priceId = getStripePriceId(plan);
+  const priceId = getStripePriceId();
   if (!priceId) {
     return NextResponse.json(
-      { error: `Price ID missing for ${plan}. Set STRIPE_PRICE_STARTER / STRIPE_PRICE_PRO.` },
+      {
+        error:
+          "STRIPE_PRICE_ID missing. In Stripe, open your product → copy the Price ID (price_...), not the Product ID (prod_...).",
+      },
       { status: 503 }
     );
   }
@@ -66,10 +67,9 @@ export async function POST(req: NextRequest) {
     customer_email: customerId ? undefined : user.email ?? undefined,
     line_items: [{ price: priceId, quantity: 1 }],
     subscription_data: {
-      trial_period_days: 14,
-      metadata: { supabase_user_id: user.id, plan },
+      metadata: { supabase_user_id: user.id, plan: "standard" },
     },
-    metadata: { supabase_user_id: user.id, plan },
+    metadata: { supabase_user_id: user.id, plan: "standard" },
     success_url: `${appUrl}/dashboard/settings?billing=success`,
     cancel_url: `${appUrl}/pricing?billing=canceled`,
   });

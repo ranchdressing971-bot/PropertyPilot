@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
       const userId = session.metadata?.supabase_user_id;
-      const plan = session.metadata?.plan ?? "starter";
+      const plan = session.metadata?.plan ?? "standard";
       const customerId =
         typeof session.customer === "string" ? session.customer : session.customer?.id;
 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     case "customer.subscription.deleted": {
       const sub = event.data.object as Stripe.Subscription;
       const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-      const plan = sub.metadata?.plan ?? "starter";
+      const plan = sub.metadata?.plan ?? "standard";
       const status =
         event.type === "customer.subscription.deleted"
           ? "canceled"

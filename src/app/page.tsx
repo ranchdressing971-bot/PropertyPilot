@@ -44,7 +44,7 @@ export default function HomePage() {
                 Explore demo
               </Button>
               <Button variant="secondary" size="lg" onClick={startLive}>
-                Start free trial
+                3 free scans
               </Button>
             </div>
           </div>
@@ -112,7 +112,7 @@ export default function HomePage() {
           <div>
             <h2 className="font-display text-2xl font-semibold text-ink-900">Ready to pilot?</h2>
             <p className="mt-2 max-w-md text-sm text-ink-500">
-              Demo with sample data, or start a 14-day trial for live AI scans.
+              Demo with sample data, or start with 3 free live scans.
             </p>
           </div>
           <Link href="/signup">

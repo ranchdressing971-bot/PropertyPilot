@@ -1,49 +1,16 @@
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { PricingCheckoutButton } from "@/components/pricing/PricingCheckoutButton";
 import { Check } from "lucide-react";
+import { FREE_TRIAL_SCANS } from "@/lib/stripe";
 
-const plans = [
-  {
-    name: "Starter",
-    plan: "starter" as const,
-    price: "$49",
-    period: "/month",
-    desc: "Small communities up to 50 homes",
-    features: [
-      "5 AI inspections / month",
-      "Property roster import",
-      "Violation notice PDFs",
-      "Email support",
-    ],
-  },
-  {
-    name: "Professional",
-    plan: "professional" as const,
-    price: "$129",
-    period: "/month",
-    desc: "Growing HOAs up to 200 homes",
-    featured: true,
-    features: [
-      "Unlimited inspections",
-      "Address recognition",
-      "CC&R rule configuration",
-      "Audit log & reports",
-      "Priority support",
-    ],
-  },
-  {
-    name: "Enterprise",
-    plan: null,
-    price: "Custom",
-    period: "",
-    desc: "Management companies & large communities",
-    features: [
-      "Multi-community dashboard",
-      "SSO & custom branding",
-      "Dedicated onboarding",
-      "SLA & phone support",
-    ],
-  },
+const features = [
+  "Unlimited AI drive-through inspections",
+  "Automatic address discovery from video",
+  "Violation review, approve & dismiss",
+  "PDF violation notices",
+  "CC&R rule configuration",
+  "Audit log & compliance reports",
+  "Email support",
 ];
 
 export const metadata = {
@@ -53,66 +20,50 @@ export const metadata = {
 export default function PricingPage() {
   return (
     <PublicLayout>
-      <section className="mx-auto max-w-5xl px-5 py-16 text-center sm:py-24">
+      <section className="mx-auto max-w-3xl px-5 py-16 text-center sm:py-24">
         <h1 className="font-display text-4xl font-semibold text-ink-900">
-          Simple pricing for every community
+          One plan. Everything included.
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-ink-500">
-          Demo is always free. Live AI scans include a 14-day trial — no card required until
-          checkout.
+          Demo mode is always free. Live AI scans start with {FREE_TRIAL_SCANS} free
+          inspections — then $149/month.
         </p>
 
-        <div className="mt-14 grid gap-6 md:grid-cols-3">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={`surface p-6 text-left ${
-                plan.featured ? "ring-2 ring-copper-400 ring-offset-2 ring-offset-canvas" : ""
-              }`}
-            >
-              {plan.featured && (
-                <span className="rounded-md bg-copper-100 px-2 py-0.5 text-xs font-semibold text-copper-800">
-                  Most popular
-                </span>
-              )}
-              <h2 className="mt-2 font-display text-xl font-semibold text-ink-900">
-                {plan.name}
-              </h2>
-              <p className="mt-1 text-sm text-ink-500">{plan.desc}</p>
-              <p className="mt-4 font-display text-3xl font-bold text-ink-900">
-                {plan.price}
-                <span className="text-base font-normal text-ink-400">{plan.period}</span>
-              </p>
-              <ul className="mt-6 space-y-2">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-sm text-ink-600">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-6">
-                {plan.plan ? (
-                  <PricingCheckoutButton
-                    plan={plan.plan}
-                    variant={plan.featured ? "primary" : "secondary"}
-                    label="Start free trial"
-                  />
-                ) : (
-                  <a
-                    href="mailto:support@propertypilot.app?subject=Enterprise%20inquiry"
-                    className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-ink-200 bg-white px-4 py-2.5 text-sm font-medium text-ink-700 hover:bg-ink-50"
-                  >
-                    Contact sales
-                  </a>
-                )}
-              </div>
-            </div>
-          ))}
+        <div className="surface mx-auto mt-14 max-w-md p-8 text-left ring-2 ring-copper-400 ring-offset-2 ring-offset-canvas">
+          <span className="rounded-md bg-copper-100 px-2 py-0.5 text-xs font-semibold text-copper-800">
+            {FREE_TRIAL_SCANS} free scans to start
+          </span>
+          <h2 className="mt-3 font-display text-2xl font-semibold text-ink-900">
+            Property Pilot
+          </h2>
+          <p className="mt-1 text-sm text-ink-500">
+            For HOA managers and community associations
+          </p>
+          <p className="mt-6 font-display text-4xl font-bold text-ink-900">
+            $149
+            <span className="text-base font-normal text-ink-400">/month</span>
+          </p>
+          <ul className="mt-8 space-y-3">
+            {features.map((f) => (
+              <li key={f} className="flex items-start gap-2 text-sm text-ink-600">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                {f}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-8">
+            <PricingCheckoutButton label={`Subscribe — ${FREE_TRIAL_SCANS} scans free first`} />
+          </div>
+          <p className="mt-4 text-center text-xs text-ink-400">
+            No card required until you subscribe. Cancel anytime in Settings.
+          </p>
         </div>
 
         <p className="mt-10 text-xs text-ink-400">
-          Secure billing via Stripe. Cancel anytime from Settings.
+          Secure billing via Stripe. Questions?{" "}
+          <a href="mailto:support@propertypilot.app" className="underline">
+            support@propertypilot.app
+          </a>
         </p>
       </section>
     </PublicLayout>

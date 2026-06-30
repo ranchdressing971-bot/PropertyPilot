@@ -12,7 +12,7 @@ create table if not exists public.profiles (
   onboarding_complete boolean default false,
   stripe_customer_id text,
   subscription_status text default 'trialing',
-  plan text default 'starter',
+  plan text default 'standard',
   terms_accepted_at timestamptz,
   owner_email text,
   created_at timestamptz default now()
@@ -84,7 +84,7 @@ create or replace function public.handle_new_user()
 returns trigger as $$
 begin
   insert into public.profiles (id, email, subscription_status, plan)
-  values (new.id, new.email, 'trialing', 'starter')
+  values (new.id, new.email, 'trialing', 'standard')
   on conflict (id) do nothing;
   return new;
 end;
@@ -93,7 +93,7 @@ $$ language plpgsql security definer;
 -- Run if profiles table already exists (safe to re-run)
 alter table public.profiles add column if not exists stripe_customer_id text;
 alter table public.profiles add column if not exists subscription_status text default 'trialing';
-alter table public.profiles add column if not exists plan text default 'starter';
+alter table public.profiles add column if not exists plan text default 'standard';
 alter table public.profiles add column if not exists terms_accepted_at timestamptz;
 alter table public.profiles add column if not exists owner_email text;
 
