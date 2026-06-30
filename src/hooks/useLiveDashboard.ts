@@ -28,7 +28,7 @@ export function useLiveDashboard(enabled = true) {
   function refresh() {
     if (!enabled) return Promise.resolve();
     setLoading(true);
-    return fetch("/api/live/dashboard")
+    return fetch("/api/live/dashboard", { credentials: "include" })
       .then((r) => r.json())
       .then(setData)
       .finally(() => setLoading(false));

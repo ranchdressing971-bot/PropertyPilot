@@ -10,23 +10,26 @@ import {
 } from "./supabase/persist";
 
 const store = new Map<string, AIInspectionData>();
-let hydrated = false;
+let hydratedForUserId: string | null = null;
 
 function rowToInspection(row: AIInspectionData): AIInspectionData {
   return row;
 }
 
-/** Load this user's inspections from Supabase (required on Render/serverless). */
+/** Load this user's inspections from Supabase (required on Vercel/serverless). */
 export async function ensureStoreHydrated(): Promise<void> {
-  if (hydrated) return;
   const userId = await getAuthenticatedUserId();
-  if (userId) {
-    const rows = await loadInspectionsFromDb(userId);
-    for (const row of rows) {
-      store.set(row.id, rowToInspection(row));
-    }
+  if (!userId) return;
+
+  if (hydratedForUserId === userId) return;
+
+  store.clear();
+  hydratedForUserId = userId;
+
+  const rows = await loadInspectionsFromDb(userId);
+  for (const row of rows) {
+    store.set(row.id, rowToInspection(row));
   }
-  hydrated = true;
 }
 
 export async function saveAIInspection(data: AIInspectionData): Promise<boolean> {
@@ -34,7 +37,9 @@ export async function saveAIInspection(data: AIInspectionData): Promise<boolean>
   store.set(lean.id, lean);
   const userId = await getAuthenticatedUserId();
   if (userId) {
-    return persistInspection(userId, lean);
+    const ok = await persistInspection(userId, lean);
+    if (ok) hydratedForUserId = userId;
+    return ok;
   }
   return false;
 }

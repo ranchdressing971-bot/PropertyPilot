@@ -12,5 +12,6 @@ export const config = {
     "/signup",
     "/api/inspection/:path*",
     "/api/analyze-inspection",
+    "/api/live/dashboard",
   ],
 };

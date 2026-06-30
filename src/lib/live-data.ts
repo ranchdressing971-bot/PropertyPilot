@@ -41,7 +41,10 @@ export function getLiveProperties(): Property[] {
       byId.set(r.propertyId, {
         id: r.propertyId,
         address: r.address,
-        image: "",
+        image:
+          viol?.evidenceImages[0] ??
+          insp.propertyImages?.[r.propertyId] ??
+          "",
         status: propertyStatus(Boolean(viol)),
         lastInspection: insp.date,
         neighborhood: insp.neighborhood,

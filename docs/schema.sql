@@ -121,3 +121,19 @@ create policy "Users read own videos"
     bucket_id = 'inspection-videos'
     and auth.uid()::text = (storage.foldername(name))[1]
   );
+
+-- Evidence frame thumbnails (public read for result cards)
+insert into storage.buckets (id, name, public)
+values ('inspection-evidence', 'inspection-evidence', true)
+on conflict (id) do nothing;
+
+create policy "Users upload own evidence"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'inspection-evidence'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+create policy "Public read inspection evidence"
+  on storage.objects for select
+  using (bucket_id = 'inspection-evidence');

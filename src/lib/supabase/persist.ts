@@ -33,6 +33,7 @@ export async function persistInspection(
       frameCount: lean.frameCount,
       addressMatches: lean.addressMatches,
       usedVideoFrames: lean.usedVideoFrames,
+      propertyImages: lean.propertyImages ?? {},
     },
   };
 
@@ -70,6 +71,7 @@ function mapInspectionRow(row: {
     frameCount?: number;
     addressMatches?: number;
     usedVideoFrames?: boolean;
+    propertyImages?: Record<string, string>;
   } | null;
 }): AIInspectionData {
   const meta = row.metadata ?? {};
@@ -85,6 +87,7 @@ function mapInspectionRow(row: {
     frameCount: meta.frameCount,
     addressMatches: meta.addressMatches,
     usedVideoFrames: meta.usedVideoFrames,
+    propertyImages: meta.propertyImages,
   };
 }
 
@@ -124,21 +127,37 @@ export async function loadInspectionFromDbById(
   return mapInspectionRow(row);
 }
 
-export async function loadInspectionsFromDb(
-  userId: string
-): Promise<AIInspectionData[]> {
-  const supabase = await createClient();
-  if (!supabase) return [];
-
-  const { data } = await supabase
+async function fetchInspectionRows(
+  userId: string,
+  client: NonNullable<Awaited<ReturnType<typeof createClient>>> | ReturnType<typeof createAdminClient>
+) {
+  if (!client) return [];
+  const { data, error } = await client
     .from("inspections")
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
+  if (error) {
+    console.error("loadInspectionsFromDb failed:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
 
-  if (!data) return [];
+export async function loadInspectionsFromDb(
+  userId: string
+): Promise<AIInspectionData[]> {
+  const supabase = await createClient();
+  let rows = supabase ? await fetchInspectionRows(userId, supabase) : [];
 
-  return data.map((row) => mapInspectionRow(row));
+  if (rows.length === 0) {
+    const admin = createAdminClient();
+    if (admin) {
+      rows = await fetchInspectionRows(userId, admin);
+    }
+  }
+
+  return rows.map((row) => mapInspectionRow(row));
 }
 
 export async function persistProperties(

@@ -24,6 +24,8 @@ export interface AIInspectionData {
   /** Properties matched to frames via address OCR */
   addressMatches?: number;
   usedVideoFrames?: boolean;
+  /** HTTPS URLs for property frame thumbnails (keyed by propertyId) */
+  propertyImages?: Record<string, string>;
 }
 
 const VIOLATION_RULES: Record<string, string> = {

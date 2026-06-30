@@ -14,6 +14,7 @@ import { properties as demoProperties } from "@/lib/mock-data";
 import { isOpenAIConfigured } from "@/lib/app-mode";
 import type { Property } from "@/lib/mock-data";
 import { getAuthenticatedUserId, logAudit } from "@/lib/supabase/persist";
+import { persistEvidenceImages, persistPropertyThumbnails } from "@/lib/supabase/evidence-storage";
 import { canRunLiveInspection } from "@/lib/subscription";
 import { getServerRoster, setServerRoster } from "@/lib/roster-server";
 import { rulesToMap, DEFAULT_CCR_RULES } from "@/lib/ccr-rules";
@@ -207,6 +208,14 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    let propertyImages: Record<string, string> = {};
+    let storedViolations = violations;
+
+    if (userId) {
+      propertyImages = await persistPropertyThumbnails(userId, id, scanProperties);
+      storedViolations = await persistEvidenceImages(userId, id, violations);
+    }
+
     const inspection: AIInspectionData = {
       id,
       name: `AI Inspection — ${date}`,
@@ -215,10 +224,11 @@ export async function POST(request: NextRequest) {
       neighborhood,
       aiPowered: true,
       results,
-      violations,
+      violations: storedViolations,
       frameCount,
       addressMatches,
       usedVideoFrames: Boolean(frames?.length),
+      propertyImages,
     };
 
     const lean = stripInspectionForStorage(inspection);

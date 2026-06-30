@@ -34,8 +34,7 @@ export function formatInspectionForDisplay(
         aiInspection.violations.find((v) => v.propertyId === r.propertyId) ?? null;
       const evidence =
         violation?.evidenceImages[0] ??
-        aiInspection.violations.find((v) => v.propertyId === r.propertyId)
-          ?.evidenceImages[0] ??
+        aiInspection.propertyImages?.[r.propertyId] ??
         "";
 
       return {

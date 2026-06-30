@@ -7,12 +7,35 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Property, Violation } from "@/lib/mock-data";
-import { CheckCircle2, ArrowRight, FileText } from "lucide-react";
+import { CheckCircle2, ArrowRight, FileText, Home } from "lucide-react";
 
 interface InspectionResultCardProps {
   property: Property;
   violation: Violation | null;
   index: number;
+}
+
+function isSupabaseStorageUrl(src: string): boolean {
+  return src.includes("supabase.co/storage/");
+}
+
+function PropertyPhoto({ src, alt }: { src: string; alt: string }) {
+  if (!src) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-slate-100">
+        <Home className="h-10 w-10 text-slate-300" />
+      </div>
+    );
+  }
+
+  if (src.startsWith("data:") || isSupabaseStorageUrl(src)) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={src} alt={alt} className="h-full w-full object-cover" />
+    );
+  }
+
+  return <Image src={src} alt={alt} fill className="object-cover" unoptimized />;
 }
 
 export function InspectionResultCard({
@@ -28,12 +51,7 @@ export function InspectionResultCard({
     >
       <Card hover className="overflow-hidden">
         <div className="relative h-44 w-full overflow-hidden rounded-xl sm:h-40">
-          <Image
-            src={property.image}
-            alt={property.address}
-            fill
-            className="object-cover"
-          />
+          <PropertyPhoto src={property.image} alt={property.address} />
         </div>
 
         <div className="mt-5 space-y-4">

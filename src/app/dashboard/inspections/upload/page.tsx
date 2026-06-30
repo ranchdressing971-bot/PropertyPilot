@@ -150,7 +150,7 @@ export default function UploadPage() {
 
         if (!data.saved) {
           console.warn(
-            "Inspection cached locally; database save failed — add SUPABASE_SERVICE_ROLE_KEY on Render."
+            "Inspection cached locally; database save failed — add SUPABASE_SERVICE_ROLE_KEY in Vercel env vars and redeploy."
           );
         }
 

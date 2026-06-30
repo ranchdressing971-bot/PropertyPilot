@@ -3,7 +3,6 @@ import {
   formatInspectionForDisplay,
   type InspectionDisplayData,
 } from "./inspection-display";
-import { stripInspectionForStorage } from "./inspection-sanitize";
 
 const PREFIX = "pp-inspection-";
 
@@ -11,7 +10,7 @@ const PREFIX = "pp-inspection-";
 const memoryDisplay = new Map<string, InspectionDisplayData>();
 
 function toDisplay(data: AIInspectionData): InspectionDisplayData {
-  return formatInspectionForDisplay(stripInspectionForStorage(data));
+  return formatInspectionForDisplay(data);
 }
 
 export function cacheInspectionClient(data: AIInspectionData): boolean {
