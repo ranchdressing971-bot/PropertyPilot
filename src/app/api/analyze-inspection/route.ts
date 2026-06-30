@@ -23,6 +23,7 @@ import {
   discoverPropertiesFromVideo,
   propertiesFromHomeDiscovery,
   propertiesFromFrameFallback,
+  supplementPropertiesFromFrames,
 } from "@/lib/frame-property-map";
 
 export const maxDuration = 60;
@@ -164,7 +165,8 @@ export async function POST(request: NextRequest) {
       );
       addressMatches = scanProperties.length;
 
-      if (scanProperties.length < 2) {
+      const minHomes = Math.min(frames.length, 10);
+      if (scanProperties.length < minHomes) {
         const homes = await runHomeDiscovery(imageUrls);
         const fromHomes = propertiesFromHomeDiscovery(
           extractedFrames,
@@ -175,6 +177,16 @@ export async function POST(request: NextRequest) {
           scanProperties = fromHomes;
           addressMatches = fromHomes.length;
         }
+      }
+
+      if (scanProperties.length < minHomes) {
+        scanProperties = supplementPropertiesFromFrames(
+          scanProperties,
+          extractedFrames,
+          neighborhood,
+          minHomes
+        );
+        addressMatches = scanProperties.length;
       }
 
       if (scanProperties.length === 0) {

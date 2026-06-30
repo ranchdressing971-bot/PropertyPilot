@@ -88,8 +88,8 @@ export default function UploadPage() {
         setCurrentStep(1);
         setStatusDetail("Capturing frames from drive-through footage...");
         const frames = await extractVideoFrames(file, {
-          intervalSec: 2,
-          maxFrames: 14,
+          intervalSec: 1.5,
+          maxFrames: 20,
           maxWidth: 960,
           quality: 0.62,
         });

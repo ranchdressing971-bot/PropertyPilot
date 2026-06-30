@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { formatInspectionForDisplay } from "@/lib/inspection-display";
-import { getAIInspection } from "@/lib/inspection-store";
+import { getAIInspection, reloadStoreFromDb } from "@/lib/inspection-store";
 import { isLiveModeFromCookie } from "@/lib/get-mode";
 import { getInspection, getProperty, properties } from "@/lib/mock-data";
 
@@ -12,6 +12,7 @@ export async function GET(request: Request, { params }: RouteParams) {
   const { id } = await params;
   const isLive = isLiveModeFromCookie(request.headers.get("cookie"));
 
+  await reloadStoreFromDb();
   const aiInspection = await getAIInspection(id);
   if (aiInspection) {
     return NextResponse.json(formatInspectionForDisplay(aiInspection));

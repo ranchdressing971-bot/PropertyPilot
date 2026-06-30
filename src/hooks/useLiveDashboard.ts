@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export interface LiveDashboardPayload {
   stats: {
@@ -25,14 +25,14 @@ export function useLiveDashboard(enabled = true) {
   const [data, setData] = useState<LiveDashboardPayload | null>(null);
   const [loading, setLoading] = useState(false);
 
-  function refresh() {
+  const refresh = useCallback(() => {
     if (!enabled) return Promise.resolve();
     setLoading(true);
     return fetch("/api/live/dashboard", { credentials: "include" })
       .then((r) => r.json())
       .then(setData)
       .finally(() => setLoading(false));
-  }
+  }, [enabled]);
 
   useEffect(() => {
     if (!enabled) {
@@ -40,8 +40,8 @@ export function useLiveDashboard(enabled = true) {
       setLoading(false);
       return;
     }
-    refresh();
-  }, [enabled]);
+    void refresh();
+  }, [enabled, refresh]);
 
   return { data, loading, refresh };
 }

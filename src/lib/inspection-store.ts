@@ -16,12 +16,14 @@ function rowToInspection(row: AIInspectionData): AIInspectionData {
   return row;
 }
 
-/** Load this user's inspections from Supabase (required on Vercel/serverless). */
-export async function ensureStoreHydrated(): Promise<void> {
+/** Always fetch fresh from Supabase (serverless-safe). */
+export async function reloadStoreFromDb(): Promise<void> {
   const userId = await getAuthenticatedUserId();
-  if (!userId) return;
-
-  if (hydratedForUserId === userId) return;
+  if (!userId) {
+    store.clear();
+    hydratedForUserId = null;
+    return;
+  }
 
   store.clear();
   hydratedForUserId = userId;
@@ -30,6 +32,16 @@ export async function ensureStoreHydrated(): Promise<void> {
   for (const row of rows) {
     store.set(row.id, rowToInspection(row));
   }
+}
+
+/** Load this user's inspections from Supabase (required on Vercel/serverless). */
+export async function ensureStoreHydrated(): Promise<void> {
+  const userId = await getAuthenticatedUserId();
+  if (!userId) return;
+
+  if (hydratedForUserId === userId) return;
+
+  await reloadStoreFromDb();
 }
 
 export async function saveAIInspection(data: AIInspectionData): Promise<boolean> {
@@ -70,7 +82,7 @@ export function listAIInspections(): AIInspectionData[] {
 }
 
 export async function listAIInspectionsAsync(): Promise<AIInspectionData[]> {
-  await ensureStoreHydrated();
+  await reloadStoreFromDb();
   return Array.from(store.values());
 }
 

@@ -12,6 +12,7 @@ import { CheckCircle2, ArrowRight, FileText, Home } from "lucide-react";
 interface InspectionResultCardProps {
   property: Property;
   violation: Violation | null;
+  inspectionId: string;
   index: number;
 }
 
@@ -41,6 +42,7 @@ function PropertyPhoto({ src, alt }: { src: string; alt: string }) {
 export function InspectionResultCard({
   property,
   violation,
+  inspectionId,
   index,
 }: InspectionResultCardProps) {
   return (
@@ -108,7 +110,9 @@ export function InspectionResultCard({
                 <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
                 <p className="text-sm font-medium text-emerald-800">No Violations</p>
               </div>
-              <Link href={`/dashboard/properties/${property.id}`}>
+              <Link
+                href={`/dashboard/properties/${property.id}?inspection=${inspectionId}`}
+              >
                 <Button variant="secondary" size="sm" className="w-full">
                   <FileText className="h-4 w-4" />
                   Good Property Report

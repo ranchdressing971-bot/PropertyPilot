@@ -147,13 +147,13 @@ async function fetchInspectionRows(
 export async function loadInspectionsFromDb(
   userId: string
 ): Promise<AIInspectionData[]> {
-  const supabase = await createClient();
-  let rows = supabase ? await fetchInspectionRows(userId, supabase) : [];
+  const admin = createAdminClient();
+  let rows = admin ? await fetchInspectionRows(userId, admin) : [];
 
   if (rows.length === 0) {
-    const admin = createAdminClient();
-    if (admin) {
-      rows = await fetchInspectionRows(userId, admin);
+    const supabase = await createClient();
+    if (supabase) {
+      rows = await fetchInspectionRows(userId, supabase);
     }
   }
 

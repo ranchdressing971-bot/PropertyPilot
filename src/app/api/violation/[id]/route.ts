@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listAIInspectionsAsync, updateViolationStatus, ensureStoreHydrated } from "@/lib/inspection-store";
+import { listAIInspectionsAsync, updateViolationStatus, reloadStoreFromDb } from "@/lib/inspection-store";
 import { isLiveModeFromCookie } from "@/lib/get-mode";
 import { getLiveViolation } from "@/lib/live-data";
 import { getViolation, getProperty } from "@/lib/mock-data";
@@ -26,7 +26,7 @@ export async function GET(request: Request, { params }: RouteParams) {
   const { id } = await params;
   const isLive = isLiveModeFromCookie(request.headers.get("cookie"));
 
-  await ensureStoreHydrated();
+  await reloadStoreFromDb();
   const inspections = await listAIInspectionsAsync();
 
   for (const inspection of inspections) {
@@ -84,7 +84,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     await logAudit(userId, `violation_${status}`, "violation", id);
   }
 
-  await ensureStoreHydrated();
+  await reloadStoreFromDb();
   const inspections = await listAIInspectionsAsync();
   for (const inspection of inspections) {
     const violation = inspection.violations.find((v: Violation) => v.id === id);

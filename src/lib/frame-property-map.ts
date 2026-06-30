@@ -40,7 +40,7 @@ export function discoverPropertiesFromVideo(
 
   for (const det of detections) {
     let address = pickAddress(det);
-    if (!address || det.confidence < 35) continue;
+    if (!address || det.confidence < 25) continue;
 
     const frame =
       frames.find((f) => f.index === det.frameIndex) ?? frames[det.frameIndex];
@@ -80,7 +80,7 @@ function mergeHouseNumberWithStreet(
 ): void {
   for (const det of detections) {
     const full = det.visibleAddress?.trim();
-    if (!full || det.confidence < 35) continue;
+    if (!full || det.confidence < 25) continue;
     const num = full.match(/^(\d+[a-z]?)/i)?.[1];
     if (!num) continue;
 
@@ -107,7 +107,7 @@ export function propertiesFromHomeDiscovery(
 
   for (const home of homes) {
     const addr = home.address?.trim();
-    if (!addr || home.confidence < 40) continue;
+    if (!addr || home.confidence < 30) continue;
     const key = normalizeKey(addr);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -131,17 +131,47 @@ export function propertiesFromFrameFallback(
   frames: ExtractedFrame[],
   neighborhood: string
 ): Property[] {
-  const step = Math.max(1, Math.floor(frames.length / 6));
-  const picked = frames.filter((_, i) => i % step === 0).slice(0, 8);
-
-  return picked.map((frame, i) => ({
+  return frames.map((frame, i) => ({
     id: `found-${i + 1}`,
-    address: `Property at ${formatVideoTime(frame.timestamp)}`,
+    address: `Home at ${formatVideoTime(frame.timestamp)}`,
     image: frame.dataUrl,
     status: "Good Standing" as const,
     lastInspection: "—",
     neighborhood,
   }));
+}
+
+/** Pad scan results with per-frame entries when address OCR finds too few homes. */
+export function supplementPropertiesFromFrames(
+  existing: Property[],
+  frames: ExtractedFrame[],
+  neighborhood: string,
+  targetMin: number
+): Property[] {
+  if (existing.length >= targetMin || frames.length === 0) return existing;
+
+  const merged = [...existing];
+  const seenAddresses = new Set(existing.map((p) => normalizeKey(p.address)));
+
+  for (const frame of frames) {
+    if (merged.length >= targetMin) break;
+
+    const address = `Home at ${formatVideoTime(frame.timestamp)}`;
+    const key = normalizeKey(address);
+    if (seenAddresses.has(key)) continue;
+
+    seenAddresses.add(key);
+    merged.push({
+      id: `found-${merged.length + 1}`,
+      address,
+      image: frame.dataUrl,
+      status: "Good Standing",
+      lastInspection: "—",
+      neighborhood,
+    });
+  }
+
+  return merged;
 }
 
 // Legacy exports kept for optional roster matching

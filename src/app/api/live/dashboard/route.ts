@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { ensureStoreHydrated } from "@/lib/inspection-store";
+import { reloadStoreFromDb } from "@/lib/inspection-store";
 import { getLiveDashboardPayload } from "@/lib/live-data";
 
 export async function GET() {
-  await ensureStoreHydrated();
+  await reloadStoreFromDb();
   return NextResponse.json(getLiveDashboardPayload());
 }

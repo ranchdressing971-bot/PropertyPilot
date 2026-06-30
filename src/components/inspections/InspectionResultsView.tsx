@@ -131,6 +131,7 @@ export function InspectionResultsView({ id }: { id: string }) {
             return (
               <InspectionResultCard
                 key={result.propertyId}
+                inspectionId={data.id}
                 property={result.property}
                 violation={result.violation}
                 index={i}

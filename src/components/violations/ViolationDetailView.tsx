@@ -28,7 +28,7 @@ export function ViolationDetailView({ id }: { id: string }) {
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/violation/${id}`)
+    fetch(`/api/violation/${id}`, { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error("Not found");
         return r.json();
