@@ -4,20 +4,33 @@
   "description": "AI-powered HOA neighborhood inspections",
   "start_url": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#f6f4f0",
-  "theme_color": "#1a1f2e",
+  "theme_color": "#f6f4f0",
   "icons": [
     {
-      "src": "/logo.png",
+      "src": "/icons/ios/apple-touch-icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/ios/apple-touch-icon-180-dark.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/ios/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/logo-dark.png",
+      "src": "/icons/ios/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "maskable"
     }
   ]
 }

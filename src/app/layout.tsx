@@ -15,35 +15,60 @@ const body = DM_Sans({
   weight: ["400", "500", "600"],
 });
 
+const iosAppleIcons: Metadata["icons"] = {
+  icon: [
+    { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+    { url: "/logo.png", sizes: "512x512", type: "image/png", media: "(prefers-color-scheme: light)" },
+    { url: "/logo-dark.png", sizes: "512x512", type: "image/png", media: "(prefers-color-scheme: dark)" },
+  ],
+  apple: [
+    { url: "/icons/ios/apple-touch-icon-180.png", sizes: "180x180", type: "image/png" },
+    { url: "/icons/ios/apple-touch-icon-180-dark.png", sizes: "180x180", type: "image/png", media: "(prefers-color-scheme: dark)" },
+    { url: "/icons/ios/apple-touch-icon-167.png", sizes: "167x167", type: "image/png" },
+    { url: "/icons/ios/apple-touch-icon-167-dark.png", sizes: "167x167", type: "image/png", media: "(prefers-color-scheme: dark)" },
+    { url: "/icons/ios/apple-touch-icon-152.png", sizes: "152x152", type: "image/png" },
+    { url: "/icons/ios/apple-touch-icon-152-dark.png", sizes: "152x152", type: "image/png", media: "(prefers-color-scheme: dark)" },
+    { url: "/icons/ios/apple-touch-icon-120.png", sizes: "120x120", type: "image/png" },
+    { url: "/icons/ios/apple-touch-icon-120-dark.png", sizes: "120x120", type: "image/png", media: "(prefers-color-scheme: dark)" },
+  ],
+  other: [
+    { rel: "apple-touch-icon-precomposed", url: "/icons/ios/apple-touch-icon-180.png" },
+  ],
+};
+
 export const metadata: Metadata = {
   title: "Property Pilot — AI-Powered HOA Inspections",
   description:
     "Upload a neighborhood inspection video and let AI prepare every property review automatically.",
   manifest: "/manifest.json",
-  icons: {
-    icon: [
-      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+  applicationName: "Property Pilot",
+  appleWebApp: {
+    capable: true,
+    title: "Property Pilot",
+    statusBarStyle: "default",
+    startupImage: [
       {
-        url: "/logo.png",
-        media: "(prefers-color-scheme: light)",
-      },
-      {
-        url: "/logo-dark.png",
-        media: "(prefers-color-scheme: dark)",
+        url: "/icons/ios/apple-touch-icon-180.png",
+        media: "(device-width: 390px) and (device-height: 844px)",
       },
     ],
-    apple: "/apple-touch-icon.png",
   },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: iosAppleIcons,
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
   viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f6f4f0" },
     { media: "(prefers-color-scheme: dark)", color: "#1a1f2e" },
   ],
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({
