@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Property, Violation } from "@/lib/mock-data";
-import { CheckCircle2, ArrowRight, FileText, Home } from "lucide-react";
+import { CheckCircle2, ArrowRight, FileText, Home, MapPin } from "lucide-react";
 
 interface InspectionResultCardProps {
   property: Property;
@@ -61,7 +61,21 @@ export function InspectionResultCard({
             <h3 className="text-base font-semibold leading-snug text-slate-900">
               {property.address}
             </h3>
-            <Badge status={property.status} />
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge status={property.status} />
+              {property.needsAddressReview && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                  <MapPin className="h-3 w-3" />
+                  Confirm address
+                  {property.addressConfidence != null
+                    ? ` · ${property.addressConfidence}%`
+                    : ""}
+                </span>
+              )}
+            </div>
+            {property.needsAddressReview && property.addressMatchReason && (
+              <p className="text-xs text-amber-800/80">{property.addressMatchReason}</p>
+            )}
           </div>
 
           {violation ? (

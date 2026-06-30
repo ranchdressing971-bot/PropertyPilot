@@ -18,9 +18,14 @@ import { persistEvidenceImages, persistPropertyThumbnails } from "@/lib/supabase
 import { canRunLiveInspection } from "@/lib/subscription";
 import { getServerRoster, setServerRoster } from "@/lib/roster-server";
 import { rulesToMap, DEFAULT_CCR_RULES } from "@/lib/ccr-rules";
+import type { AddressReviewItem } from "@/lib/ai-analyze";
+import { runAddressMatchPipeline } from "@/lib/address-match-run";
+import { buildAddressCandidates } from "@/lib/geo/nearby-addresses";
+import type { UploadGeoContext } from "@/lib/geo/types";
 import { runAddressDetection, runHomeDiscovery } from "@/lib/address-detect-run";
 import {
   discoverPropertiesFromVideo,
+  propertiesFromAddressMatches,
   propertiesFromHomeDiscovery,
   propertiesFromFrameFallback,
   supplementPropertiesFromFrames,
@@ -147,6 +152,8 @@ export async function POST(request: NextRequest) {
     let scanProperties: Property[] = [];
     let addressMatches = 0;
     let frameCount = 0;
+    let usedGpsPipeline = false;
+    let addressReviews: AddressReviewItem[] = [];
 
     if (frames?.length) {
       frameCount = frames.length;
@@ -157,33 +164,49 @@ export async function POST(request: NextRequest) {
         dataUrl: f.dataUrl,
       }));
 
-      // AI reads addresses from video — roster is optional enrichment only
-      const detections = await runAddressDetection(imageUrls, roster);
-      const fromOcr = discoverPropertiesFromVideo(
+      const geo = body.geo as UploadGeoContext | undefined;
+      const candidateCtx = await buildAddressCandidates({ roster, geo, neighborhood });
+      const addressMatchResults = await runAddressMatchPipeline(
         extractedFrames,
-        detections,
-        neighborhood,
-        roster.length > 0 ? roster : undefined
+        candidateCtx,
+        roster
       );
-
-      const homes = await runHomeDiscovery(imageUrls);
-      const fromHomes = propertiesFromHomeDiscovery(
+      const fromGps = propertiesFromAddressMatches(
+        addressMatchResults,
         extractedFrames,
-        homes,
         neighborhood
       );
+      usedGpsPipeline = true;
 
-      scanProperties = mergePropertyLists(
-        neighborhood,
-        extractedFrames,
-        fromOcr,
-        fromHomes
-      );
+      if (fromGps.length >= 2) {
+        scanProperties = fromGps;
+      } else {
+        const detections = await runAddressDetection(imageUrls, roster);
+        const fromOcr = discoverPropertiesFromVideo(
+          extractedFrames,
+          detections,
+          neighborhood,
+          roster.length > 0 ? roster : undefined
+        );
+        const homes = await runHomeDiscovery(imageUrls);
+        const fromHomes = propertiesFromHomeDiscovery(
+          extractedFrames,
+          homes,
+          neighborhood
+        );
+        scanProperties = mergePropertyLists(
+          neighborhood,
+          extractedFrames,
+          fromGps,
+          fromOcr,
+          fromHomes
+        );
+      }
+
       addressMatches = scanProperties.filter(
         (p) => !/^Home at /i.test(p.address)
       ).length;
 
-      // Only pad with time-slot placeholders when we found very few homes
       if (scanProperties.length < 3) {
         scanProperties = supplementPropertiesFromFrames(
           scanProperties,
@@ -199,6 +222,16 @@ export async function POST(request: NextRequest) {
         scanProperties = propertiesFromFrameFallback(extractedFrames, neighborhood);
         addressMatches = 0;
       }
+
+      addressReviews = scanProperties
+        .filter((p) => p.addressConfidence != null)
+        .map((p) => ({
+          propertyId: p.id,
+          address: p.address,
+          confidence: p.addressConfidence!,
+          needsReview: p.needsAddressReview ?? false,
+          reasoning: p.addressMatchReason,
+        }));
     } else if (roster.length > 0) {
       scanProperties = roster;
     }
@@ -246,6 +279,8 @@ export async function POST(request: NextRequest) {
       frameCount,
       addressMatches,
       usedVideoFrames: Boolean(frames?.length),
+      usedGpsPipeline,
+      addressReviews: addressReviews.length > 0 ? addressReviews : undefined,
       propertyImages,
     };
 
@@ -259,6 +294,8 @@ export async function POST(request: NextRequest) {
         frameCount,
         addressMatches,
         usedVideoFrames: Boolean(frames?.length),
+        usedGpsPipeline,
+        addressReviewCount: addressReviews.filter((r) => r.needsReview).length,
         persisted: saveResult.ok,
         persistError: saveResult.error,
       });
@@ -272,6 +309,8 @@ export async function POST(request: NextRequest) {
       frameCount,
       addressMatches,
       usedVideoFrames: Boolean(frames?.length),
+      usedGpsPipeline,
+      addressReviewCount: addressReviews.filter((r) => r.needsReview).length,
       saved: saveResult.ok,
       saveError: saveResult.error,
       inspection: lean,

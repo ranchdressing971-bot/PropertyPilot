@@ -33,6 +33,8 @@ export async function persistInspection(
       frameCount: lean.frameCount,
       addressMatches: lean.addressMatches,
       usedVideoFrames: lean.usedVideoFrames,
+      usedGpsPipeline: lean.usedGpsPipeline,
+      addressReviews: lean.addressReviews,
       propertyImages: lean.propertyImages ?? {},
     },
   };
@@ -97,6 +99,8 @@ function mapInspectionRow(row: {
     frameCount?: number;
     addressMatches?: number;
     usedVideoFrames?: boolean;
+    usedGpsPipeline?: boolean;
+    addressReviews?: AIInspectionData["addressReviews"];
     propertyImages?: Record<string, string>;
   } | null;
 }): AIInspectionData {
@@ -113,6 +117,8 @@ function mapInspectionRow(row: {
     frameCount: meta.frameCount,
     addressMatches: meta.addressMatches,
     usedVideoFrames: meta.usedVideoFrames,
+    usedGpsPipeline: meta.usedGpsPipeline,
+    addressReviews: meta.addressReviews,
     propertyImages: meta.propertyImages,
   };
 }

@@ -16,6 +16,7 @@ import {
 } from "@/lib/video-frames";
 import { cacheInspectionClient } from "@/lib/inspection-cache";
 import type { AIInspectionData } from "@/lib/ai-analyze";
+import { captureUploadGeo } from "@/lib/geo/capture-geo";
 import {
   Upload,
   Film,
@@ -35,8 +36,8 @@ const DEMO_STEPS = [
 
 const LIVE_STEPS = [
   "Reading your video...",
-  "Extracting frames...",
-  "Finding home addresses...",
+  "Capturing GPS & frames...",
+  "Matching mailbox numbers...",
   "Running compliance scan...",
   "Generating report...",
 ];
@@ -86,22 +87,27 @@ export default function UploadPage() {
         }).catch(() => null);
 
         setCurrentStep(1);
-        setStatusDetail("Capturing frames from drive-through footage...");
-        const frames = await extractVideoFrames(file, {
-          intervalSec: 1.5,
-          maxFrames: 20,
-          maxWidth: 960,
-          quality: 0.62,
-        });
+        setStatusDetail("Capturing GPS and video frames...");
+        const [frames, geo] = await Promise.all([
+          extractVideoFrames(file, {
+            intervalSec: 1.5,
+            maxFrames: 20,
+            maxWidth: 960,
+            quality: 0.62,
+          }),
+          captureUploadGeo(),
+        ]);
         setStatusDetail(
-          `${frames.length} frames · ~${estimateFramesPayloadKb(frames)} KB`
+          geo
+            ? `GPS locked · ${frames.length} frames · ~${estimateFramesPayloadKb(frames)} KB`
+            : `${frames.length} frames · ~${estimateFramesPayloadKb(frames)} KB`
         );
 
         setCurrentStep(2);
         const ccrRules = loadCcrRules();
 
         setCurrentStep(3);
-        setStatusDetail("AI is reading addresses from your video...");
+        setStatusDetail("AI matching addresses from mailbox & curb numbers...");
 
         const res = await fetch("/api/analyze-inspection", {
           method: "POST",
@@ -110,6 +116,7 @@ export default function UploadPage() {
           body: JSON.stringify({
             videoName: file.name,
             mode: "live",
+            geo,
             frames: frames.map((f) => ({
               index: f.index,
               timestamp: f.timestamp,
@@ -136,7 +143,11 @@ export default function UploadPage() {
         setCurrentStep(4);
         setStatusDetail(
           data.usedVideoFrames
-            ? `${data.propertiesScanned ?? 0} homes found · ${data.violationsFound} flags`
+            ? `${data.propertiesScanned ?? 0} homes · ${data.violationsFound} flags${
+                data.addressReviewCount
+                  ? ` · ${data.addressReviewCount} address${data.addressReviewCount === 1 ? "" : "es"} to confirm`
+                  : ""
+              }`
             : null
         );
 

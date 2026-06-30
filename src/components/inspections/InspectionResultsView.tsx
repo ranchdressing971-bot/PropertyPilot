@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { InspectionResultCard } from "@/components/inspections/InspectionResultCard";
 import type { InspectionDisplayData } from "@/lib/inspection-display";
 import { getCachedInspectionClient } from "@/lib/inspection-cache";
-import { CheckCircle2, AlertTriangle, Sparkles, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Sparkles, Loader2, MapPin } from "lucide-react";
 
 interface InspectionData extends InspectionDisplayData {}
 
@@ -79,6 +79,18 @@ export function InspectionResultsView({ id }: { id: string }) {
 
   const withViolations = data.results.filter((r) => r.violation);
   const clean = data.results.filter((r) => !r.violation);
+  const fromMeta = data.addressReviews?.filter((r) => r.needsReview) ?? [];
+  const addressReviewItems =
+    fromMeta.length > 0
+      ? fromMeta
+      : data.results
+          .filter((r) => r.property.needsAddressReview)
+          .map((r) => ({
+            propertyId: r.propertyId,
+            address: r.property.address,
+            confidence: r.property.addressConfidence ?? 0,
+            needsReview: true,
+          }));
 
   return (
     <DashboardLayout>
@@ -87,6 +99,28 @@ export function InspectionResultsView({ id }: { id: string }) {
         subtitle={`${data.date} · ${withViolations.length} violations · ${clean.length} clean`}
       />
       <PageContent>
+        {addressReviewItems.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          >
+            <div className="flex items-start gap-2">
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <div>
+                <p className="font-medium">
+                  {addressReviewItems.length} address
+                  {addressReviewItems.length === 1 ? "" : "es"} need confirmation
+                </p>
+                <p className="mt-1 text-xs text-amber-800/90">
+                  GPS and mailbox reads were uncertain — confirm the address before
+                  sending violation notices.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {data.aiPowered && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
@@ -102,7 +136,8 @@ export function InspectionResultsView({ id }: { id: string }) {
             {data.usedVideoFrames && (
               <span className="text-xs text-accent-700/80">
                 {data.propertiesScanned ?? data.results.length} homes found ·{" "}
-                {data.frameCount ?? 0} frames analyzed
+                {data.frameCount ?? 0} frames
+                {data.usedGpsPipeline ? " · GPS-assisted matching" : ""}
               </span>
             )}
           </motion.div>

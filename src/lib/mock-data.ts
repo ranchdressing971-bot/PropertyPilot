@@ -20,6 +20,10 @@ export interface Property {
   status: PropertyStatus;
   lastInspection: string;
   neighborhood: string;
+  /** GPS + vision address match confidence (0–100) */
+  addressConfidence?: number;
+  needsAddressReview?: boolean;
+  addressMatchReason?: string;
 }
 
 export interface Violation {

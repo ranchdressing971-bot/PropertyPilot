@@ -10,6 +10,14 @@ export interface AIPropertyResult {
   rule: string;
 }
 
+export interface AddressReviewItem {
+  propertyId: string;
+  address: string;
+  confidence: number;
+  needsReview: boolean;
+  reasoning?: string;
+}
+
 export interface AIInspectionData {
   id: string;
   name: string;
@@ -24,6 +32,10 @@ export interface AIInspectionData {
   /** Properties matched to frames via address OCR */
   addressMatches?: number;
   usedVideoFrames?: boolean;
+  /** GPS + roster assisted address pipeline was used */
+  usedGpsPipeline?: boolean;
+  /** Per-property address confidence for human review */
+  addressReviews?: AddressReviewItem[];
   /** HTTPS URLs for property frame thumbnails (keyed by propertyId) */
   propertyImages?: Record<string, string>;
 }

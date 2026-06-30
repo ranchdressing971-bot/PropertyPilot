@@ -1,4 +1,4 @@
-import type { AIInspectionData } from "./ai-analyze";
+import type { AIInspectionData, AddressReviewItem } from "./ai-analyze";
 import type { Property } from "./mock-data";
 
 export interface InspectionDisplayData {
@@ -10,6 +10,8 @@ export interface InspectionDisplayData {
   frameCount?: number;
   addressMatches?: number;
   usedVideoFrames?: boolean;
+  usedGpsPipeline?: boolean;
+  addressReviews?: AddressReviewItem[];
   results: {
     propertyId: string;
     property: Property;
@@ -20,6 +22,10 @@ export interface InspectionDisplayData {
 export function formatInspectionForDisplay(
   aiInspection: AIInspectionData
 ): InspectionDisplayData {
+  const reviewById = new Map(
+    (aiInspection.addressReviews ?? []).map((r) => [r.propertyId, r])
+  );
+
   return {
     id: aiInspection.id,
     name: aiInspection.name,
@@ -29,6 +35,8 @@ export function formatInspectionForDisplay(
     frameCount: aiInspection.frameCount,
     addressMatches: aiInspection.addressMatches,
     usedVideoFrames: aiInspection.usedVideoFrames,
+    usedGpsPipeline: aiInspection.usedGpsPipeline,
+    addressReviews: aiInspection.addressReviews,
     results: aiInspection.results.map((r) => {
       const violation =
         aiInspection.violations.find((v) => v.propertyId === r.propertyId) ?? null;
@@ -36,6 +44,7 @@ export function formatInspectionForDisplay(
         violation?.evidenceImages[0] ??
         aiInspection.propertyImages?.[r.propertyId] ??
         "";
+      const review = reviewById.get(r.propertyId);
 
       return {
         propertyId: r.propertyId,
@@ -46,6 +55,9 @@ export function formatInspectionForDisplay(
           status: violation ? "Needs Review" : "Good Standing",
           lastInspection: aiInspection.date,
           neighborhood: aiInspection.neighborhood,
+          addressConfidence: review?.confidence,
+          needsAddressReview: review?.needsReview,
+          addressMatchReason: review?.reasoning,
         },
         violation,
       };

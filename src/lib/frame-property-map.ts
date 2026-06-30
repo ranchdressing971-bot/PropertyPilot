@@ -1,3 +1,4 @@
+import type { AddressMatchResult } from "./address-match-run";
 import type { Property } from "./mock-data";
 import type { AddressDetection } from "./address-detect";
 import type { ExtractedFrame } from "./video-frames";
@@ -41,6 +42,10 @@ interface PropertyCandidate {
   address: string;
   confidence: number;
   frame: ExtractedFrame;
+  id?: string;
+  addressConfidence?: number;
+  needsAddressReview?: boolean;
+  addressMatchReason?: string;
 }
 
 function candidateToProperty(
@@ -49,12 +54,15 @@ function candidateToProperty(
   id: string
 ): Property {
   return {
-    id,
+    id: candidate.id ?? id,
     address: formatAddressTitle(candidate.address),
     image: candidate.frame.dataUrl,
     status: "Good Standing",
     lastInspection: "—",
     neighborhood,
+    addressConfidence: candidate.addressConfidence,
+    needsAddressReview: candidate.needsAddressReview,
+    addressMatchReason: candidate.addressMatchReason,
   };
 }
 
@@ -65,11 +73,7 @@ export function dedupeProperties(
   neighborhood = ""
 ): Property[] {
   const hood = neighborhood || properties[0]?.neighborhood || "";
-  const groups: {
-    address: string;
-    confidence: number;
-    frame: ExtractedFrame;
-  }[] = [];
+  const groups: PropertyCandidate[] = [];
 
   for (const prop of properties) {
     const frame =
@@ -81,7 +85,15 @@ export function dedupeProperties(
     );
 
     if (existingIdx === -1) {
-      groups.push({ address: prop.address, confidence: 70, frame });
+      groups.push({
+        address: prop.address,
+        confidence: prop.addressConfidence ?? 70,
+        frame,
+        id: prop.id,
+        addressConfidence: prop.addressConfidence,
+        needsAddressReview: prop.needsAddressReview,
+        addressMatchReason: prop.addressMatchReason,
+      });
       continue;
     }
 
@@ -90,11 +102,23 @@ export function dedupeProperties(
     if (!isPlaceholderAddress(prop.address) && isPlaceholderAddress(existing.address)) {
       existing.frame = frame;
     }
+    if (
+      (prop.addressConfidence ?? 0) > (existing.addressConfidence ?? 0) ||
+      (!isPlaceholderAddress(prop.address) && isPlaceholderAddress(existing.address))
+    ) {
+      existing.frame = frame;
+      existing.confidence = Math.max(existing.confidence, prop.addressConfidence ?? 70);
+      existing.addressConfidence = prop.addressConfidence ?? existing.addressConfidence;
+      existing.addressMatchReason = prop.addressMatchReason ?? existing.addressMatchReason;
+      existing.id = prop.id;
+    }
+    existing.needsAddressReview =
+      existing.needsAddressReview || prop.needsAddressReview || false;
   }
 
   // Temporal dedupe: placeholders / weak reads within TEMPORAL_GAP_SEC = same house
   const sorted = [...groups].sort((a, b) => a.frame.timestamp - b.frame.timestamp);
-  const merged: typeof groups = [];
+  const merged: PropertyCandidate[] = [];
 
   for (const item of sorted) {
     const prev = merged[merged.length - 1];
@@ -114,13 +138,22 @@ export function dedupeProperties(
       ) {
         prev.frame = item.frame;
         prev.confidence = Math.max(prev.confidence, item.confidence);
+        if ((item.addressConfidence ?? 0) >= (prev.addressConfidence ?? 0)) {
+          prev.addressConfidence = item.addressConfidence ?? prev.addressConfidence;
+          prev.addressMatchReason = item.addressMatchReason ?? prev.addressMatchReason;
+          prev.id = item.id ?? prev.id;
+        }
       }
+      prev.needsAddressReview =
+        prev.needsAddressReview || item.needsAddressReview || false;
       continue;
     }
     merged.push({ ...item });
   }
 
-  return merged.map((g, i) => candidateToProperty(g, hood, `found-${i + 1}`));
+  return merged.map((g, i) =>
+    candidateToProperty(g, hood, g.id ?? `found-${i + 1}`)
+  );
 }
 
 /** Combine multiple property lists into one deduped list. */
@@ -168,6 +201,71 @@ export function discoverPropertiesFromVideo(
   );
 
   return dedupeProperties(props, frames);
+}
+
+/**
+ * GPS + vision pipeline: group frame matches into unique properties with confidence.
+ */
+export function propertiesFromAddressMatches(
+  matches: AddressMatchResult[],
+  frames: ExtractedFrame[],
+  neighborhood: string
+): Property[] {
+  const groups = new Map<
+    string,
+    {
+      address: string;
+      confidence: number;
+      needsReview: boolean;
+      reasoning: string;
+      frame: ExtractedFrame;
+      propertyId: string | null;
+    }
+  >();
+
+  for (const m of matches) {
+    const addr = m.matchedAddress?.trim();
+    if (!addr || addr === "Unknown" || m.confidence < 20) continue;
+
+    const frame =
+      frames[m.frameIndex] ?? frames.find((f) => f.index === m.frameIndex);
+    if (!frame) continue;
+
+    const key = addressDedupeKey(addr);
+    const existing = groups.get(key);
+
+    if (!existing || m.confidence > existing.confidence) {
+      groups.set(key, {
+        address: addr,
+        confidence: m.confidence,
+        needsReview: m.needsReview,
+        reasoning: m.reasoning,
+        frame,
+        propertyId: m.matchedPropertyId,
+      });
+    } else {
+      existing.needsReview = existing.needsReview || m.needsReview;
+      existing.address = pickBetterAddress(existing.address, addr);
+    }
+  }
+
+  let idx = 0;
+  const props = Array.from(groups.values()).map((g) => {
+    idx += 1;
+    return {
+      id: g.propertyId ?? `found-${idx}`,
+      address: formatAddressTitle(g.address),
+      image: g.frame.dataUrl,
+      status: "Good Standing" as const,
+      lastInspection: "—",
+      neighborhood,
+      addressConfidence: g.confidence,
+      needsAddressReview: g.needsReview,
+      addressMatchReason: g.reasoning,
+    };
+  });
+
+  return dedupeProperties(props, frames, neighborhood);
 }
 
 export function propertiesFromHomeDiscovery(
