@@ -42,8 +42,8 @@ export function NotificationsCard() {
       <div className="flex items-center gap-3">
         <Bell className="h-5 w-5 text-slate-400" />
         <div className="flex-1">
-          <h3 className="font-semibold text-slate-900">Notifications</h3>
-          <p className="text-sm text-slate-500">
+          <h3 className="font-semibold text-ink-900">Notifications</h3>
+          <p className="text-sm text-ink-500">
             Email alerts when new violations are flagged
           </p>
         </div>
@@ -61,8 +61,8 @@ export function NotificationsCard() {
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         Save preference
       </Button>
-      <p className="mt-2 text-xs text-slate-400">
-        Email delivery requires SMTP integration (coming soon).
+      <p className="mt-2 text-xs text-ink-400">
+        Violation emails send via Resend when configured; otherwise use your mail app.
       </p>
     </Card>
   );

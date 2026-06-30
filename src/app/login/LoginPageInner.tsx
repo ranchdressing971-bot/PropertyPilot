@@ -3,9 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Logo } from "@/components/brand/Logo";
+import { AuthLayout } from "@/components/layout/AuthLayout";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
 import { createClient, isSupabaseClientConfigured } from "@/lib/supabase/client";
 import { formatSupabaseAuthError } from "@/lib/supabase/config";
 import { postAuthPath } from "@/lib/auth-redirect";
@@ -45,9 +46,7 @@ export default function LoginPageInner() {
       if (authError) throw authError;
 
       setMode("live");
-      const destination = authData.user
-        ? postAuthPath(authData.user, next)
-        : next;
+      const destination = authData.user ? postAuthPath(authData.user, next) : next;
       router.push(destination);
       router.refresh();
     } catch (err) {
@@ -64,19 +63,15 @@ export default function LoginPageInner() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-accent-50/40 px-5 py-12">
-      <div className="mb-8">
-        <Logo size="md" href="/" />
-      </div>
-
+    <AuthLayout>
       <Card className="w-full max-w-md" padding="lg">
-        <h1 className="text-xl font-semibold text-slate-900">Sign in</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="font-display text-xl font-semibold text-ink-900">Sign in</h1>
+        <p className="mt-1 text-sm text-ink-500">
           Live mode — real AI inspections with your account
         </p>
 
         {!supabaseReady && (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             Supabase isn&apos;t connected yet. Follow{" "}
             <code className="text-xs">docs/SUPABASE_SETUP.md</code> to enable sign-in,
             or use Demo mode below.
@@ -85,24 +80,22 @@ export default function LoginPageInner() {
 
         <form onSubmit={handleLogin} className="mt-6 space-y-4">
           <div>
-            <label className="text-sm font-medium text-slate-700">Email</label>
-            <input
+            <label className="text-sm font-medium text-ink-700">Email</label>
+            <Input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-4 text-base focus:border-accent-300 focus:outline-none focus:ring-2 focus:ring-accent-500/20"
               placeholder="manager@hoa.com"
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-700">Password</label>
-            <input
+            <label className="text-sm font-medium text-ink-700">Password</label>
+            <Input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-4 text-base focus:border-accent-300 focus:outline-none focus:ring-2 focus:ring-accent-500/20"
             />
           </div>
 
@@ -110,27 +103,27 @@ export default function LoginPageInner() {
 
           <Button type="submit" className="w-full" disabled={loading || !supabaseReady}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Sign In
+            Sign in
           </Button>
         </form>
 
         <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-slate-200" />
-          <span className="text-xs text-slate-400">or</span>
-          <div className="h-px flex-1 bg-slate-200" />
+          <div className="h-px flex-1 bg-ink-200" />
+          <span className="text-xs text-ink-400">or</span>
+          <div className="h-px flex-1 bg-ink-200" />
         </div>
 
         <Button variant="secondary" className="w-full" onClick={enterDemo}>
-          Continue in Demo Mode
+          Continue in demo mode
         </Button>
 
-        <p className="mt-4 text-center text-sm text-slate-500">
+        <p className="mt-4 text-center text-sm text-ink-500">
           No account?{" "}
-          <Link href="/signup" className="font-medium text-accent-600 hover:underline">
+          <Link href="/signup" className="font-medium text-copper-700 hover:underline">
             Create one
           </Link>
         </p>
       </Card>
-    </div>
+    </AuthLayout>
   );
 }

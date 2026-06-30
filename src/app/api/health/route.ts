@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getOpenAI } from "@/lib/openai";
 import { isOpenAIConfigured, isSupabaseConfigured } from "@/lib/app-mode";
+import { isStripeConfigured } from "@/lib/stripe";
+import { isResendConfigured } from "@/lib/resend";
 
 export async function GET() {
   const supabase = isSupabaseConfigured();
@@ -27,9 +29,17 @@ export async function GET() {
   return NextResponse.json({
     openai,
     supabase,
+    stripe: isStripeConfigured(),
+    resend: isResendConfigured(),
     openaiMessage,
     supabaseMessage: supabase
       ? "Supabase env vars detected"
       : "Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    stripeMessage: isStripeConfigured()
+      ? "Stripe configured"
+      : "Add STRIPE_SECRET_KEY for billing",
+    resendMessage: isResendConfigured()
+      ? "Resend configured"
+      : "Add RESEND_API_KEY for email delivery",
   });
 }

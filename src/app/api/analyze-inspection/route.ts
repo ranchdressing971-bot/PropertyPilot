@@ -13,6 +13,7 @@ import { properties as demoProperties } from "@/lib/mock-data";
 import { isOpenAIConfigured } from "@/lib/app-mode";
 import type { Property } from "@/lib/mock-data";
 import { getAuthenticatedUserId, logAudit } from "@/lib/supabase/persist";
+import { canRunLiveInspection } from "@/lib/subscription";
 import { getServerRoster, setServerRoster } from "@/lib/roster-server";
 import { rulesToMap, DEFAULT_CCR_RULES } from "@/lib/ccr-rules";
 import { runAddressDetection, runHomeDiscovery } from "@/lib/address-detect-run";
@@ -115,6 +116,17 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = await getAuthenticatedUserId();
+
+    const access = await canRunLiveInspection(userId);
+    if (!access.allowed) {
+      return NextResponse.json(
+        {
+          error: access.reason ?? "Subscription required for live inspections.",
+          code: "SUBSCRIPTION_REQUIRED",
+        },
+        { status: 402 }
+      );
+    }
 
     let roster: Property[] = clientRoster?.length
       ? clientRoster

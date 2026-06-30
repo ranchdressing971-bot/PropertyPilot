@@ -5,6 +5,7 @@ import { SettingsPanel } from "@/components/settings/SettingsPanel";
 import { ProfileCard } from "@/components/settings/ProfileCard";
 import { CcrRulesCard } from "@/components/settings/CcrRulesCard";
 import { NotificationsCard } from "@/components/settings/NotificationsCard";
+import { BillingCard } from "@/components/settings/BillingCard";
 
 export default function SettingsPage() {
   return (
@@ -15,6 +16,7 @@ export default function SettingsPage() {
 
         <div className="space-y-5">
           <ProfileCard />
+          <BillingCard />
           <NotificationsCard />
           <CcrRulesCard />
         </div>

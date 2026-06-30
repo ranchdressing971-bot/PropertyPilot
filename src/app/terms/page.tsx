@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { HomeLogo } from "@/components/brand/HomeLogo";
+import { PublicLayout } from "@/components/layout/PublicLayout";
 
 export const metadata = {
   title: "Terms of Service — Property Pilot",
@@ -7,11 +7,8 @@ export const metadata = {
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-canvas dark:bg-ink-950">
-      <nav className="border-b border-ink-200/80 px-5 py-4 dark:border-ink-800">
-        <HomeLogo size="sm" href="/" />
-      </nav>
-      <article className="mx-auto max-w-3xl px-5 py-12 prose prose-slate dark:prose-invert">
+    <PublicLayout showNavActions={false}>
+      <article className="mx-auto max-w-3xl px-5 py-12 prose prose-slate">
         <h1>Terms of Service</h1>
         <p className="text-sm text-ink-500">Last updated: June 29, 2026</p>
 
@@ -47,12 +44,12 @@ export default function TermsPage() {
           <a href="mailto:legal@propertypilot.app">legal@propertypilot.app</a>
         </p>
 
-        <p className="mt-8">
-          <Link href="/" className="text-accent-600 hover:underline">
+        <p className="mt-8 not-prose">
+          <Link href="/" className="text-copper-700 hover:underline">
             ← Back to home
           </Link>
         </p>
       </article>
-    </div>
+    </PublicLayout>
   );
 }

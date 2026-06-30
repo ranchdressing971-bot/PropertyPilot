@@ -122,6 +122,11 @@ export default function UploadPage() {
         const data = await res.json();
 
         if (!res.ok) {
+          if (data.code === "SUBSCRIPTION_REQUIRED") {
+            throw new Error(
+              `${data.error} Visit Pricing to start your free trial.`
+            );
+          }
           throw new Error(data.error ?? "Analysis failed");
         }
 

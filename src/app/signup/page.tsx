@@ -3,9 +3,10 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Logo } from "@/components/brand/Logo";
+import { AuthLayout } from "@/components/layout/AuthLayout";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
 import { createClient, isSupabaseClientConfigured } from "@/lib/supabase/client";
 import { formatSupabaseAuthError } from "@/lib/supabase/config";
 import { postAuthPath } from "@/lib/auth-redirect";
@@ -18,6 +19,7 @@ function SignupForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -26,6 +28,10 @@ function SignupForm() {
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
+    if (!agreed) {
+      setError("Please agree to the Terms and Privacy Policy.");
+      return;
+    }
     if (!supabaseReady) {
       setError("Supabase is not configured yet. See docs/SUPABASE_SETUP.md");
       return;
@@ -41,10 +47,19 @@ function SignupForm() {
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard/profile/setup`,
+          data: { terms_accepted_at: new Date().toISOString() },
         },
       });
 
       if (authError) throw authError;
+
+      if (authData.user) {
+        await supabase.from("profiles").upsert({
+          id: authData.user.id,
+          email: authData.user.email,
+          terms_accepted_at: new Date().toISOString(),
+        });
+      }
 
       setSuccess(true);
       setMode("live");
@@ -65,13 +80,11 @@ function SignupForm() {
 
   return (
     <Card className="w-full max-w-md" padding="lg">
-      <h1 className="text-xl font-semibold text-slate-900">Create account</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Start using Property Pilot in live mode
-      </p>
+      <h1 className="font-display text-xl font-semibold text-ink-900">Create account</h1>
+      <p className="mt-1 text-sm text-ink-500">14-day free trial · live AI inspections</p>
 
       {!supabaseReady && (
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           Configure Supabase first — see <code className="text-xs">docs/SUPABASE_SETUP.md</code>
         </div>
       )}
@@ -83,39 +96,56 @@ function SignupForm() {
       ) : (
         <form onSubmit={handleSignup} className="mt-6 space-y-4">
           <div>
-            <label className="text-sm font-medium text-slate-700">Email</label>
-            <input
+            <label className="text-sm font-medium text-ink-700">Email</label>
+            <Input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-4 text-base focus:border-accent-300 focus:outline-none focus:ring-2 focus:ring-accent-500/20"
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-700">Password</label>
-            <input
+            <label className="text-sm font-medium text-ink-700">Password</label>
+            <Input
               type="password"
               required
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-4 text-base focus:border-accent-300 focus:outline-none focus:ring-2 focus:ring-accent-500/20"
             />
           </div>
 
+          <label className="flex items-start gap-2 text-sm text-ink-600">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-ink-300"
+            />
+            <span>
+              I agree to the{" "}
+              <Link href="/terms" className="font-medium text-copper-700 hover:underline" target="_blank">
+                Terms
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="font-medium text-copper-700 hover:underline" target="_blank">
+                Privacy Policy
+              </Link>
+            </span>
+          </label>
+
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <Button type="submit" className="w-full" disabled={loading || !supabaseReady}>
+          <Button type="submit" className="w-full" disabled={loading || !supabaseReady || !agreed}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Create Account
+            Create account
           </Button>
         </form>
       )}
 
-      <p className="mt-4 text-center text-sm text-slate-500">
+      <p className="mt-4 text-center text-sm text-ink-500">
         Already have an account?{" "}
-        <Link href="/login" className="font-medium text-accent-600 hover:underline">
+        <Link href="/login" className="font-medium text-copper-700 hover:underline">
           Sign in
         </Link>
       </p>
@@ -125,13 +155,10 @@ function SignupForm() {
 
 export default function SignupPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-accent-50/40 px-5 py-12">
-      <div className="mb-8">
-        <Logo size="md" href="/" />
-      </div>
-      <Suspense fallback={<Loader2 className="h-8 w-8 animate-spin text-accent-600" />}>
+    <AuthLayout>
+      <Suspense fallback={<Loader2 className="h-8 w-8 animate-spin text-copper-600" />}>
         <SignupForm />
       </Suspense>
-    </div>
+    </AuthLayout>
   );
 }
