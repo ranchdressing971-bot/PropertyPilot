@@ -1,21 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { RosterImport } from "@/components/properties/RosterImport";
 import { useLiveDashboard } from "@/hooks/useLiveDashboard";
+import { useRoster } from "@/hooks/useRoster";
 import { useAppMode } from "@/components/providers/AppModeProvider";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { properties as demoProperties } from "@/lib/mock-data";
 import { ArrowRight, Calendar, Home, Loader2 } from "lucide-react";
 
 function PropertyThumb({ address, image }: { address: string; image: string }) {
   if (image) {
     return (
-      <div className="relative h-40 w-full overflow-hidden rounded-lg sm:h-36">
-        <Image src={image} alt={address} fill className="object-cover" />
+      <div className="relative h-40 w-full overflow-hidden rounded-lg bg-ink-100 sm:h-36">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={image} alt={address} className="h-full w-full object-cover" />
       </div>
     );
   }
@@ -37,11 +40,26 @@ function PropertyThumb({ address, image }: { address: string; image: string }) {
 
 export function PropertiesPageContent() {
   const { isDemo, isLive } = useAppMode();
-  const { data: live, loading } = useLiveDashboard(isLive);
+  const { profile } = useUserProfile();
+  const { data: live, loading: liveLoading } = useLiveDashboard(isLive);
+  const { properties: roster, loading: rosterLoading, importCsv } = useRoster();
 
-  const list = isDemo ? demoProperties : (live?.properties ?? []);
+  const scanProperties = isDemo ? demoProperties : (live?.properties ?? []);
+  const list =
+    isLive && roster.length > 0
+      ? roster.map((r) => {
+          const scanned = scanProperties.find((p) => p.id === r.id);
+          return scanned ?? r;
+        })
+      : isDemo
+        ? demoProperties
+        : scanProperties.length > 0
+          ? scanProperties
+          : roster;
 
-  if (isLive && loading && !live) {
+  const loading = isLive && (liveLoading || rosterLoading) && !live && roster.length === 0;
+
+  if (loading) {
     return (
       <PageContent>
         <div className="flex justify-center py-24">
@@ -52,12 +70,21 @@ export function PropertiesPageContent() {
   }
 
   return (
-    <PageContent>
+    <PageContent className="space-y-8">
+      {isLive && (
+        <RosterImport
+          neighborhood={profile?.hoaName || "Your Community"}
+          onImport={async (csv) => {
+            await importCsv(csv, profile?.hoaName || "Your Community");
+          }}
+        />
+      )}
+
       {list.length === 0 ? (
         <EmptyState
           icon={Home}
           title="No properties yet"
-          description="Properties from your uploaded scans will appear here automatically."
+          description="Import your community roster above, or upload an inspection to auto-populate from scans."
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -94,5 +121,5 @@ export function PropertiesPageContent() {
 
 export function getPropertiesSubtitle(isDemo: boolean, count: number) {
   if (isDemo) return `${count} homes in Willow Creek Estates`;
-  return count > 0 ? `${count} properties from your scans` : "From your inspection scans";
+  return count > 0 ? `${count} properties in your roster` : "Import roster or run a scan";
 }

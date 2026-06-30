@@ -19,6 +19,11 @@ export interface AIInspectionData {
   aiPowered: true;
   results: AIPropertyResult[];
   violations: Violation[];
+  /** Frames extracted from uploaded video */
+  frameCount?: number;
+  /** Properties matched to frames via address OCR */
+  addressMatches?: number;
+  usedVideoFrames?: boolean;
 }
 
 const VIOLATION_RULES: Record<string, string> = {
@@ -56,8 +61,10 @@ interface RawAIResult {
 
 export function buildViolationsFromAI(
   inspectionId: string,
-  results: AIPropertyResult[]
+  results: AIPropertyResult[],
+  ruleMap?: Record<string, string>
 ): Violation[] {
+  const rules = ruleMap ?? VIOLATION_RULES;
   return results
     .filter((r) => r.violationType)
     .map((r, i) => ({
@@ -66,7 +73,7 @@ export function buildViolationsFromAI(
       type: r.violationType,
       confidence: r.confidence,
       recommendation: r.recommendation,
-      rule: r.rule,
+      rule: r.rule || (r.violationType ? rules[r.violationType] ?? "" : ""),
       reasoning: r.reasoning,
       evidenceImages: [],
       status: "pending" as const,
@@ -77,8 +84,10 @@ export function buildViolationsFromAI(
 
 export function normalizeAIResults(
   raw: RawAIResult[],
-  properties: Property[]
+  properties: Property[],
+  ruleMap?: Record<string, string>
 ): AIPropertyResult[] {
+  const rules = ruleMap ?? VIOLATION_RULES;
   return properties.map((prop) => {
     const match = raw.find((r) => r.propertyId === prop.id);
     const type = VALID_TYPES.includes(match?.violationType as ViolationType)
@@ -96,12 +105,20 @@ export function normalizeAIResults(
         (type
           ? `AI detected a potential ${type.toLowerCase()} violation at this property.`
           : "No violations detected. Property appears well-maintained."),
-      rule: type ? VIOLATION_RULES[type] : "",
+      rule: type ? rules[type] ?? VIOLATION_RULES[type] ?? "" : "",
     };
   });
 }
 
-export function buildInspectionPrompt(batch: Property[]): string {
+export function buildInspectionPrompt(
+  batch: Property[],
+  ruleMap?: Record<string, string>
+): string {
+  const rules = ruleMap ?? VIOLATION_RULES;
+  const ruleLines = Object.entries(rules)
+    .map(([type, rule]) => `- "${type}" — ${rule}`)
+    .join("\n");
+
   const list = batch
     .map((p) => `- ID: ${p.id}, Address: ${p.address}`)
     .join("\n");
@@ -109,10 +126,7 @@ export function buildInspectionPrompt(batch: Property[]): string {
   return `You are an HOA compliance inspector analyzing drive-through video frames of residential properties.
 
 For EACH property below, examine its image and determine if any of these violations exist:
-- "Trash Bin Visible" — trash containers visible from street on non-collection days
-- "Tall Grass" — lawn exceeds ~4 inches
-- "Debris" — junk, construction materials, or clutter in yard
-- "Dead Landscaping" — brown/dying plants or shrubs
+${ruleLines}
 - null — property is in good standing, no violations
 
 Properties in this batch:

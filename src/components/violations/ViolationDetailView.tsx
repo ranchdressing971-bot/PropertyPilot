@@ -10,11 +10,10 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { NoticePreview } from "@/components/violations/NoticePreview";
-import { Violation, getProperty } from "@/lib/mock-data";
+import { Violation } from "@/lib/mock-data";
 import {
   CheckCircle2,
   XCircle,
-  Edit3,
   ArrowLeft,
   Brain,
   Sparkles,
@@ -23,8 +22,10 @@ import {
 
 export function ViolationDetailView({ id }: { id: string }) {
   const [violation, setViolation] = useState<Violation | null>(null);
+  const [propertyAddress, setPropertyAddress] = useState<string | null>(null);
   const [aiPowered, setAiPowered] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     fetch(`/api/violation/${id}`)
@@ -34,11 +35,27 @@ export function ViolationDetailView({ id }: { id: string }) {
       })
       .then((data) => {
         setViolation(data.violation);
+        setPropertyAddress(data.propertyAddress ?? null);
         setAiPowered(data.aiPowered ?? false);
       })
       .catch(() => setViolation(null))
       .finally(() => setLoading(false));
   }, [id]);
+
+  async function updateStatus(status: "approved" | "dismissed") {
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/violation/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (res.ok) setViolation(data.violation);
+    } finally {
+      setActionLoading(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -60,13 +77,11 @@ export function ViolationDetailView({ id }: { id: string }) {
     );
   }
 
-  const property = getProperty(violation.propertyId);
-
   return (
     <DashboardLayout>
       <Header
         title={violation.type ?? "Violation"}
-        subtitle={property?.address}
+        subtitle={propertyAddress ?? undefined}
       />
       <PageContent>
         <Link
@@ -91,7 +106,7 @@ export function ViolationDetailView({ id }: { id: string }) {
                 <div>
                   <p className="text-sm text-slate-500">Property</p>
                   <p className="text-lg font-semibold text-slate-900">
-                    {property?.address}
+                    {propertyAddress ?? "Unknown address"}
                   </p>
                 </div>
                 <Badge status={violation.status} />
@@ -121,26 +136,23 @@ export function ViolationDetailView({ id }: { id: string }) {
               </div>
             </Card>
 
-            <Card>
-              <h3 className="text-sm font-semibold text-slate-900">
-                Evidence Images
-              </h3>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                {(violation.evidenceImages.length
-                  ? violation.evidenceImages
-                  : property?.image
-                    ? [property.image]
-                    : []
-                ).map((img, i) => (
-                  <div
-                    key={i}
-                    className="relative aspect-[4/3] overflow-hidden rounded-xl border border-slate-200"
-                  >
-                    <Image src={img} alt={`Evidence ${i + 1}`} fill className="object-cover" />
-                  </div>
-                ))}
-              </div>
-            </Card>
+            {violation.evidenceImages.length > 0 && (
+              <Card>
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Evidence Images
+                </h3>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  {violation.evidenceImages.map((img, i) => (
+                    <div
+                      key={i}
+                      className="relative aspect-[4/3] overflow-hidden rounded-xl border border-slate-200"
+                    >
+                      <Image src={img} alt={`Evidence ${i + 1}`} fill className="object-cover" />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
 
             <Card>
               <div className="flex items-center gap-2">
@@ -154,18 +166,23 @@ export function ViolationDetailView({ id }: { id: string }) {
               </p>
             </Card>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Button className="w-full">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Button
+                className="w-full"
+                disabled={actionLoading || violation.status === "approved"}
+                onClick={() => updateStatus("approved")}
+              >
                 <CheckCircle2 className="h-4 w-4" />
                 Approve
               </Button>
-              <Button variant="secondary" className="w-full">
+              <Button
+                variant="secondary"
+                className="w-full"
+                disabled={actionLoading || violation.status === "dismissed"}
+                onClick={() => updateStatus("dismissed")}
+              >
                 <XCircle className="h-4 w-4" />
                 Dismiss
-              </Button>
-              <Button variant="secondary" className="w-full">
-                <Edit3 className="h-4 w-4" />
-                Edit Notice
               </Button>
             </div>
           </div>
@@ -174,7 +191,10 @@ export function ViolationDetailView({ id }: { id: string }) {
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Notice Preview
             </h3>
-            <NoticePreview violation={violation} />
+            <NoticePreview
+              violation={violation}
+              propertyAddress={propertyAddress ?? "Unknown address"}
+            />
           </div>
         </div>
       </PageContent>

@@ -5,6 +5,7 @@ import {
   getSupabaseProjectUrl,
   validateSupabaseProjectUrl,
 } from "./config";
+import { isProfileComplete, profileFromUser } from "@/lib/profile";
 
 export async function updateSession(request: NextRequest) {
   const url = getSupabaseProjectUrl();
@@ -53,7 +54,10 @@ export async function updateSession(request: NextRequest) {
 
   if (user && isAuthPage) {
     const dashboardUrl = request.nextUrl.clone();
-    dashboardUrl.pathname = "/dashboard";
+    const profile = profileFromUser(user);
+    dashboardUrl.pathname = isProfileComplete(profile)
+      ? "/dashboard"
+      : "/dashboard/profile/setup";
     dashboardUrl.search = "";
     return NextResponse.redirect(dashboardUrl);
   }

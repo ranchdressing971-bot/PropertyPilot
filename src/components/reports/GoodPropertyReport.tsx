@@ -4,12 +4,17 @@ import { Property } from "@/lib/mock-data";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Award, Download } from "lucide-react";
+import { downloadComplianceReportPdf } from "@/lib/pdf-notice";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { displayHoaName } from "@/lib/profile";
 
 interface GoodPropertyReportProps {
   property: Property;
 }
 
 export function GoodPropertyReport({ property }: GoodPropertyReportProps) {
+  const { profile, isDemo } = useUserProfile();
+
   return (
     <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
       <div className="flex items-center gap-2">
@@ -25,7 +30,20 @@ export function GoodPropertyReport({ property }: GoodPropertyReportProps) {
       <p className="mt-2 text-xs text-emerald-600">
         {property.address} · {property.neighborhood}
       </p>
-      <Button variant="secondary" size="sm" className="mt-4 w-full">
+      <Button
+        variant="secondary"
+        size="sm"
+        className="mt-4 w-full"
+        onClick={() =>
+          downloadComplianceReportPdf({
+            hoaName: displayHoaName(profile, isDemo),
+            complianceScore: 100,
+            inspectionCount: 1,
+            violationCount: 0,
+            topViolation: `Good standing — ${property.address}`,
+          })
+        }
+      >
         <Download className="h-4 w-4" />
         Download Report
       </Button>

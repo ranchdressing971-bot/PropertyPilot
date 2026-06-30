@@ -24,7 +24,9 @@ export async function GET(request: Request, { params }: RouteParams) {
           resolveProperty(r.propertyId) ?? {
             id: r.propertyId,
             address: r.address,
-            image: "",
+            image:
+              aiInspection.violations.find((v) => v.propertyId === r.propertyId)
+                ?.evidenceImages[0] ?? "",
             status: aiInspection.violations.some((v) => v.propertyId === r.propertyId)
               ? "Needs Review"
               : "Good Standing",

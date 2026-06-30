@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { createClient, isSupabaseClientConfigured } from "@/lib/supabase/client";
 import { formatSupabaseAuthError } from "@/lib/supabase/config";
+import { postAuthPath } from "@/lib/auth-redirect";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { Loader2 } from "lucide-react";
 
@@ -35,11 +36,11 @@ function SignupForm() {
 
     try {
       const supabase = createClient();
-      const { error: authError } = await supabase.auth.signUp({
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard/profile/setup`,
         },
       });
 
@@ -47,7 +48,12 @@ function SignupForm() {
 
       setSuccess(true);
       setMode("live");
-      router.push("/dashboard");
+
+      if (authData.user && authData.session) {
+        router.push(postAuthPath(authData.user, "/dashboard/profile/setup"));
+      } else {
+        router.push("/login?message=confirm-email");
+      }
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Signup failed";

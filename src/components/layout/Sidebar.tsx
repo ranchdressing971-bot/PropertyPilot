@@ -16,6 +16,8 @@ import {
 import { Logo } from "@/components/brand/Logo";
 import { useMobileNav } from "./MobileNavContext";
 import { useAppMode } from "@/components/providers/AppModeProvider";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { displayHoaName } from "@/lib/profile";
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -107,6 +109,8 @@ export function Sidebar() {
 }
 
 function SidebarContent({ isDemo }: { isDemo: boolean }) {
+  const { profile } = useUserProfile();
+
   return (
     <>
       <div className="flex h-16 items-center border-b border-ink-800 px-5">
@@ -123,7 +127,7 @@ function SidebarContent({ isDemo }: { isDemo: boolean }) {
             {isDemo ? "Sample data" : "Your workspace"}
           </p>
           <p className="mt-1 text-sm font-medium text-ink-200">
-            {isDemo ? "Willow Creek Estates" : "Live inspections"}
+            {displayHoaName(profile, isDemo)}
           </p>
         </div>
       </div>

@@ -17,6 +17,9 @@ interface InspectionData {
   date: string;
   aiPowered?: boolean;
   propertiesScanned: number;
+  frameCount?: number;
+  addressMatches?: number;
+  usedVideoFrames?: boolean;
   results: {
     propertyId: string;
     property: Property;
@@ -79,10 +82,20 @@ export function InspectionResultsView({ id }: { id: string }) {
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-start gap-3 rounded-xl border border-accent-200/60 bg-gradient-to-r from-accent-50 to-blue-50 p-4 text-sm leading-relaxed text-accent-800"
+            className="mb-6 flex flex-col gap-1 rounded-xl border border-accent-200/60 bg-accent-50/80 px-4 py-3 text-sm text-accent-800 sm:flex-row sm:items-center sm:justify-between"
           >
-            <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>Live AI analysis powered by GPT-4o Vision</span>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 shrink-0" />
+              {data.usedVideoFrames
+                ? "Analyzed from your uploaded video"
+                : "AI-generated analysis"}
+            </div>
+            {data.usedVideoFrames && (
+              <span className="text-xs text-accent-700/80">
+                {data.frameCount ?? 0} frames · {data.addressMatches ?? 0} addresses
+                matched
+              </span>
+            )}
           </motion.div>
         )}
 

@@ -77,9 +77,9 @@ OPENAI_API_KEY=sk-proj-your-key-here
 
 ---
 
-## Step 6 (optional): Database schema for saved inspections
+## Step 6 (optional): Database schema
 
-Run this in Supabase → **SQL Editor** to store inspections per user later:
+Run the full schema in **`docs/schema.sql`** (or the snippet below) in Supabase → **SQL Editor** to enable property rosters, persisted inspections, and audit logging.
 
 ```sql
 -- Profiles (extends auth.users)
@@ -100,6 +100,10 @@ create policy "Users can read own profile"
 create policy "Users can update own profile"
   on public.profiles for update
   using (auth.uid() = id);
+
+create policy "Users can insert own profile"
+  on public.profiles for insert
+  with check (auth.uid() = id);
 
 -- Auto-create profile on signup
 create or replace function public.handle_new_user()

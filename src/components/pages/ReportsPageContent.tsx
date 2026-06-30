@@ -8,10 +8,14 @@ import { useLiveDashboard } from "@/hooks/useLiveDashboard";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { aiInsights, inspections, properties } from "@/lib/mock-data";
 import { Download, FileText, BarChart3, Award, Loader2 } from "lucide-react";
+import { downloadComplianceReportPdf } from "@/lib/pdf-notice";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { displayHoaName } from "@/lib/profile";
 
 export function ReportsPageContent() {
   const { isDemo, isLive } = useAppMode();
   const { data: live, loading } = useLiveDashboard(isLive);
+  const { profile, isDemo: demoProfile } = useUserProfile();
 
   const hasData = isDemo
     ? true
@@ -62,16 +66,45 @@ export function ReportsPageContent() {
           icon={BarChart3}
           title="Compliance report"
           description={`Neighborhood score: ${compliance}%. ${inspectionCount} inspection${inspectionCount === 1 ? "" : "s"} on record.`}
+          onExport={() =>
+            downloadComplianceReportPdf({
+              hoaName: displayHoaName(profile, demoProfile),
+              complianceScore: compliance,
+              inspectionCount,
+              violationCount: isDemo
+                ? 3
+                : (live?.violations.filter((v) => v.status === "pending").length ?? 0),
+              topViolation,
+            })
+          }
         />
         <ReportCard
           icon={Award}
           title="Good standing"
           description={`${cleanCount} properties compliant. Generate recognition reports for homeowners.`}
+          onExport={() =>
+            downloadComplianceReportPdf({
+              hoaName: displayHoaName(profile, demoProfile),
+              complianceScore: compliance,
+              inspectionCount,
+              violationCount: 0,
+              topViolation: "Good standing report",
+            })
+          }
         />
         <ReportCard
           icon={FileText}
           title="Violation summary"
           description={`Most common: ${topViolation}. ${repeatCount} repeat address${repeatCount === 1 ? "" : "es"}.`}
+          onExport={() =>
+            downloadComplianceReportPdf({
+              hoaName: displayHoaName(profile, demoProfile),
+              complianceScore: compliance,
+              inspectionCount,
+              violationCount: repeatCount,
+              topViolation,
+            })
+          }
         />
       </div>
     </PageContent>
@@ -82,17 +115,19 @@ function ReportCard({
   icon: Icon,
   title,
   description,
+  onExport,
 }: {
   icon: typeof BarChart3;
   title: string;
   description: string;
+  onExport?: () => void;
 }) {
   return (
     <Card hover>
       <Icon className="h-5 w-5 text-ink-400" strokeWidth={1.5} />
       <h3 className="mt-4 font-display font-semibold text-ink-900">{title}</h3>
       <p className="mt-2 text-sm leading-relaxed text-ink-500">{description}</p>
-      <Button variant="secondary" size="sm" className="mt-4" disabled>
+      <Button variant="secondary" size="sm" className="mt-4" onClick={onExport}>
         <Download className="h-4 w-4" />
         Export PDF
       </Button>

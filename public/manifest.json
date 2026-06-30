@@ -1,0 +1,23 @@
+{
+  "name": "Property Pilot",
+  "short_name": "Property Pilot",
+  "description": "AI-powered HOA neighborhood inspections",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f4f0",
+  "theme_color": "#1a1f2e",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-dark.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

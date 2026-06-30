@@ -1,9 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
 import clsx from "clsx";
 
 interface LogoProps {
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg";
   showText?: boolean;
   href?: string;
   className?: string;
@@ -11,12 +10,15 @@ interface LogoProps {
 }
 
 const sizes = {
-  sm: { icon: 32, text: "text-base" },
-  md: { icon: 36, text: "text-lg" },
-  lg: { icon: 48, text: "text-xl sm:text-2xl" },
-  xl: { icon: 80, text: "text-2xl" },
+  sm: { text: "text-base" },
+  md: { text: "text-lg" },
+  lg: { text: "text-xl" },
 };
 
+/**
+ * Text-only brand mark for in-app surfaces (dashboard, auth).
+ * The image logo is reserved for the marketing homepage / device homescreen.
+ */
 export function Logo({
   size = "md",
   showText = true,
@@ -24,18 +26,21 @@ export function Logo({
   className,
   variant = "dark",
 }: LogoProps) {
-  const { icon, text } = sizes[size];
+  const { text } = sizes[size];
 
   const content = (
-    <div className={clsx("flex items-center gap-2.5", className)}>
-      <Image
-        src="/logo.png"
-        alt="Property Pilot"
-        width={icon}
-        height={icon}
-        className="shrink-0 object-contain"
-        priority
-      />
+    <div className={clsx("flex items-center gap-2", className)}>
+      <span
+        className={clsx(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-display text-sm font-bold",
+          variant === "light"
+            ? "bg-white/10 text-copper-400"
+            : "bg-ink-900 text-white"
+        )}
+        aria-hidden
+      >
+        P
+      </span>
       {showText && (
         <span
           className={clsx(

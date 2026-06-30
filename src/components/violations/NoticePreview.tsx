@@ -1,21 +1,51 @@
 "use client";
 
 import Image from "next/image";
-import { Violation, getProperty } from "@/lib/mock-data";
+import { Violation } from "@/lib/mock-data";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Download, Mail, CheckCircle2 } from "lucide-react";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { displayHoaName, displayManagerName } from "@/lib/profile";
+import { downloadViolationNoticePdf } from "@/lib/pdf-notice";
 
 interface NoticePreviewProps {
   violation: Violation;
+  propertyAddress: string;
+  onApprove?: () => void;
 }
 
-export function NoticePreview({ violation }: NoticePreviewProps) {
-  const property = getProperty(violation.propertyId);
-  if (!property) return null;
+export function NoticePreview({
+  violation,
+  propertyAddress,
+  onApprove,
+}: NoticePreviewProps) {
+  const { profile, isDemo } = useUserProfile();
+
+  const hoaLabel = displayHoaName(profile, isDemo);
+  const managerName = displayManagerName(profile, isDemo);
 
   const dueDate = new Date(violation.detectedAt);
   dueDate.setDate(dueDate.getDate() + 14);
+
+  function handleDownloadPdf() {
+    downloadViolationNoticePdf({
+      hoaName: hoaLabel,
+      managerName,
+      propertyAddress,
+      violation,
+    });
+  }
+
+  function handleEmailOwner() {
+    const subject = encodeURIComponent(
+      `${hoaLabel} HOA — Violation Notice (${propertyAddress})`
+    );
+    const body = encodeURIComponent(
+      `Dear Homeowner,\n\nPlease review the attached violation notice for ${propertyAddress}.\n\nViolation: ${violation.type}\n${violation.rule}\n\nPlease remedy within 14 days.\n\n${managerName}\n${hoaLabel} HOA`
+    );
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  }
 
   return (
     <Card className="border-slate-300">
@@ -23,7 +53,7 @@ export function NoticePreview({ violation }: NoticePreviewProps) {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-              Willow Creek Estates HOA
+              {hoaLabel} HOA
             </p>
             <h3 className="mt-1 text-lg font-bold text-slate-900">
               Violation Notice
@@ -41,7 +71,7 @@ export function NoticePreview({ violation }: NoticePreviewProps) {
           <p className="text-xs font-medium uppercase text-slate-400">
             Property Address
           </p>
-          <p className="mt-1 font-semibold text-slate-900">{property.address}</p>
+          <p className="mt-1 font-semibold text-slate-900">{propertyAddress}</p>
         </div>
 
         <div>
@@ -66,21 +96,23 @@ export function NoticePreview({ violation }: NoticePreviewProps) {
           <p className="mt-1 text-slate-600">{violation.rule}</p>
         </div>
 
-        <div>
-          <p className="text-xs font-medium uppercase text-slate-400">
-            Evidence
-          </p>
-          <div className="mt-2 flex gap-2">
-            {violation.evidenceImages.map((img, i) => (
-              <div
-                key={i}
-                className="relative h-24 w-32 overflow-hidden rounded-lg border border-slate-200"
-              >
-                <Image src={img} alt={`Evidence ${i + 1}`} fill className="object-cover" />
-              </div>
-            ))}
+        {violation.evidenceImages.length > 0 && (
+          <div>
+            <p className="text-xs font-medium uppercase text-slate-400">
+              Evidence
+            </p>
+            <div className="mt-2 flex gap-2">
+              {violation.evidenceImages.map((img, i) => (
+                <div
+                  key={i}
+                  className="relative h-24 w-32 overflow-hidden rounded-lg border border-slate-200"
+                >
+                  <Image src={img} alt={`Evidence ${i + 1}`} fill className="object-cover" />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <div>
           <p className="text-xs font-medium uppercase text-slate-400">
@@ -111,24 +143,26 @@ export function NoticePreview({ violation }: NoticePreviewProps) {
             Manager Signature
           </p>
           <p className="mt-2 font-serif text-lg italic text-slate-700">
-            Sarah Mitchell
+            {managerName}
           </p>
           <p className="text-xs text-slate-500">
-            HOA Community Manager, Willow Creek Estates
+            HOA Community Manager, {hoaLabel}
           </p>
         </div>
       </div>
 
-      <div className="mt-6 flex gap-3 border-t border-slate-200 pt-4">
-        <Button size="sm">
-          <CheckCircle2 className="h-4 w-4" />
-          Approve
-        </Button>
-        <Button variant="secondary" size="sm">
+      <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-200 pt-4">
+        {onApprove && (
+          <Button size="sm" onClick={onApprove}>
+            <CheckCircle2 className="h-4 w-4" />
+            Approve
+          </Button>
+        )}
+        <Button variant="secondary" size="sm" onClick={handleDownloadPdf}>
           <Download className="h-4 w-4" />
           Download PDF
         </Button>
-        <Button variant="secondary" size="sm">
+        <Button variant="secondary" size="sm" onClick={handleEmailOwner}>
           <Mail className="h-4 w-4" />
           Email Owner
         </Button>

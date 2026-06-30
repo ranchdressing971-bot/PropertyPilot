@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -8,7 +8,22 @@ import { Header } from "@/components/layout/Header";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { useAppMode } from "@/components/providers/AppModeProvider";
-import { Upload, Film, CheckCircle2, Loader2, Sparkles, FlaskConical } from "lucide-react";
+import { useRoster } from "@/hooks/useRoster";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { loadCcrRules } from "@/lib/ccr-rules";
+import { rosterFromStorage } from "@/lib/roster";
+import {
+  extractVideoFrames,
+  estimateFramesPayloadKb,
+} from "@/lib/video-frames";
+import {
+  Upload,
+  Film,
+  CheckCircle2,
+  Loader2,
+  Sparkles,
+  FlaskConical,
+} from "lucide-react";
 
 const DEMO_STEPS = [
   "Uploading...",
@@ -19,57 +34,95 @@ const DEMO_STEPS = [
 ];
 
 const LIVE_STEPS = [
-  "Uploading...",
-  "Analyzing with AI...",
-  "Detecting Houses...",
-  "Running Compliance Checks...",
-  "Generating Report...",
+  "Reading your video...",
+  "Extracting frames...",
+  "Detecting addresses...",
+  "Running AI compliance scan...",
+  "Generating report...",
 ];
 
 export default function UploadPage() {
   const router = useRouter();
-  const { mode, isDemo, ready } = useAppMode();
+  const { isDemo, ready } = useAppMode();
+  const { properties: roster } = useRoster();
+  const { profile } = useUserProfile();
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [statusDetail, setStatusDetail] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const steps = isDemo ? DEMO_STEPS : LIVE_STEPS;
 
   const startProcessing = useCallback(
-    async (name: string) => {
-      setFileName(name);
+    async (file: File) => {
+      setFileName(file.name);
       setIsProcessing(true);
       setCurrentStep(0);
       setIsComplete(false);
       setError(null);
-
-      const advance = (step: number, delay: number) =>
-        new Promise<void>((resolve) => {
-          setCurrentStep(step);
-          setTimeout(resolve, delay);
-        });
+      setStatusDetail(null);
 
       try {
         if (isDemo) {
           for (let i = 0; i < DEMO_STEPS.length; i++) {
-            await advance(i, i === 0 ? 800 : 1200);
+            setCurrentStep(i);
+            await new Promise((r) => setTimeout(r, i === 0 ? 800 : 1200));
           }
           setIsComplete(true);
           setTimeout(() => router.push("/dashboard/inspections/insp-1"), 1000);
           return;
         }
 
-        await advance(0, 1200);
+        setCurrentStep(0);
+        setStatusDetail("Preparing video...");
+
+        const uploadForm = new FormData();
+        uploadForm.append("video", file);
+        const uploadPromise = fetch("/api/upload-video", {
+          method: "POST",
+          body: uploadForm,
+        }).catch(() => null);
+
         setCurrentStep(1);
+        setStatusDetail("Capturing frames from drive-through footage...");
+        const frames = await extractVideoFrames(file, {
+          intervalSec: 2,
+          maxFrames: 14,
+          maxWidth: 960,
+          quality: 0.62,
+        });
+        setStatusDetail(
+          `${frames.length} frames · ~${estimateFramesPayloadKb(frames)} KB`
+        );
+
+        setCurrentStep(2);
+        const rosterList = roster.length > 0 ? roster : rosterFromStorage();
+        const ccrRules = loadCcrRules();
+
+        setCurrentStep(3);
+        setStatusDetail("Sending frames to GPT-4o Vision...");
 
         const res = await fetch("/api/analyze-inspection", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ videoName: name, mode: "live" }),
+          body: JSON.stringify({
+            videoName: file.name,
+            mode: "live",
+            frames: frames.map((f) => ({
+              index: f.index,
+              timestamp: f.timestamp,
+              dataUrl: f.dataUrl,
+            })),
+            properties: rosterList.length > 0 ? rosterList : undefined,
+            neighborhood: profile?.hoaName || "Your Community",
+            ccrRules,
+          }),
         });
+
+        await uploadPromise;
 
         const data = await res.json();
 
@@ -77,9 +130,12 @@ export default function UploadPage() {
           throw new Error(data.error ?? "Analysis failed");
         }
 
-        await advance(2, 800);
-        await advance(3, 1000);
-        await advance(4, 800);
+        setCurrentStep(4);
+        setStatusDetail(
+          data.usedVideoFrames
+            ? `${data.addressMatches ?? 0} addresses matched · ${data.violationsFound} flags`
+            : null
+        );
 
         setIsComplete(true);
         setTimeout(
@@ -91,7 +147,7 @@ export default function UploadPage() {
         setIsProcessing(false);
       }
     },
-    [router, isDemo]
+    [router, isDemo, roster, profile]
   );
 
   const handleDrop = useCallback(
@@ -100,7 +156,7 @@ export default function UploadPage() {
       setIsDragging(false);
       const file = e.dataTransfer.files[0];
       if (file && (file.type.includes("video") || file.name.match(/\.(mp4|mov)$/i))) {
-        startProcessing(file.name);
+        startProcessing(file);
       }
     },
     [startProcessing]
@@ -108,7 +164,7 @@ export default function UploadPage() {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) startProcessing(file.name);
+    if (file) startProcessing(file);
   };
 
   if (!ready) return null;
@@ -120,7 +176,7 @@ export default function UploadPage() {
         subtitle={
           isDemo
             ? "Demo mode — simulated analysis with sample data"
-            : "Live mode — GPT-4o Vision analysis"
+            : "Live mode — real video frames analyzed by GPT-4o Vision"
         }
       />
       <PageContent className="flex min-h-[calc(100vh-12rem)] items-center">
@@ -129,7 +185,8 @@ export default function UploadPage() {
             <div className="mb-4 space-y-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               <p>{error}</p>
               <p className="text-xs text-red-600/80">
-                Tip: Add OPENAI_API_KEY in Vercel env vars, or switch to Demo mode in Settings.
+                Tip: Use MP4 under 2 minutes, add OPENAI_API_KEY to .env.local, and
+                restart the dev server.
               </p>
             </div>
           )}
@@ -163,7 +220,7 @@ export default function UploadPage() {
                       Drop your inspection video
                     </h3>
                     <p className="mt-2 text-center text-sm text-ink-500">
-                      or tap to browse · .mp4 & .mov
+                      Phone drive-through · .mp4 & .mov · best under 2 min
                     </p>
                     <div
                       className={`mt-4 flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
@@ -180,7 +237,7 @@ export default function UploadPage() {
                       ) : (
                         <>
                           <Sparkles className="h-3.5 w-3.5" />
-                          Live AI
+                          Live video AI
                         </>
                       )}
                     </div>
@@ -235,6 +292,9 @@ export default function UploadPage() {
                           <p className="mt-1 truncate px-4 text-sm text-ink-500">
                             {fileName}
                           </p>
+                        )}
+                        {statusDetail && (
+                          <p className="mt-1 text-xs text-ink-400">{statusDetail}</p>
                         )}
                       </>
                     )}

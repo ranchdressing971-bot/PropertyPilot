@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { createClient, isSupabaseClientConfigured } from "@/lib/supabase/client";
 import { formatSupabaseAuthError } from "@/lib/supabase/config";
+import { postAuthPath } from "@/lib/auth-redirect";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { Loader2 } from "lucide-react";
 
@@ -36,7 +37,7 @@ export default function LoginPageInner() {
 
     try {
       const supabase = createClient();
-      const { error: authError } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -44,7 +45,10 @@ export default function LoginPageInner() {
       if (authError) throw authError;
 
       setMode("live");
-      router.push(next);
+      const destination = authData.user
+        ? postAuthPath(authData.user, next)
+        : next;
+      router.push(destination);
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
