@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Syne, DM_Sans } from "next/font/google";
 import { AppModeProvider } from "@/components/providers/AppModeProvider";
+import { IosHomeScreenIcon } from "@/components/brand/IosHomeScreenIcon";
 import "./globals.css";
 
 const display = Syne({
@@ -15,14 +16,18 @@ const body = DM_Sans({
   weight: ["400", "500", "600"],
 });
 
-/** iOS ignores media on apple-touch-icon — use root + app/apple-icon.png */
+/** Transparent primary icon — iOS 18 adapts it for Dark / Tinted appearance. */
 const iosAppleIcons: Metadata["icons"] = {
   icon: [
     { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
     { url: "/logo.png", sizes: "512x512", type: "image/png" },
   ],
   apple: [
-    { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    {
+      url: "/icons/ios/apple-touch-icon-180-transparent.png",
+      sizes: "180x180",
+      type: "image/png",
+    },
   ],
 };
 
@@ -38,7 +43,7 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     startupImage: [
       {
-        url: "/icons/ios/apple-touch-icon-180.png",
+        url: "/icons/ios/apple-touch-icon-180-transparent.png",
         media: "(device-width: 390px) and (device-height: 844px)",
       },
     ],
@@ -68,6 +73,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${display.variable} ${body.variable}`}>
+      <head>
+        <IosHomeScreenIcon />
+      </head>
       <body className="font-sans">
         <AppModeProvider>{children}</AppModeProvider>
       </body>
