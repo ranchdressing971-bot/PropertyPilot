@@ -15,11 +15,11 @@ import type { Property } from "@/lib/mock-data";
 import { getAuthenticatedUserId, logAudit } from "@/lib/supabase/persist";
 import { getServerRoster, setServerRoster } from "@/lib/roster-server";
 import { rulesToMap, DEFAULT_CCR_RULES } from "@/lib/ccr-rules";
-import { runAddressDetection } from "@/lib/address-detect-run";
+import { runAddressDetection, runHomeDiscovery } from "@/lib/address-detect-run";
 import {
-  assignFramesToRoster,
-  buildPropertiesWithFrames,
-  propertiesFromDetections,
+  discoverPropertiesFromVideo,
+  propertiesFromHomeDiscovery,
+  propertiesFromFrameFallback,
 } from "@/lib/frame-property-map";
 
 export const maxDuration = 60;
@@ -140,37 +140,39 @@ export async function POST(request: NextRequest) {
         dataUrl: f.dataUrl,
       }));
 
+      // AI reads addresses from video — roster is optional enrichment only
       const detections = await runAddressDetection(imageUrls, roster);
+      scanProperties = discoverPropertiesFromVideo(
+        extractedFrames,
+        detections,
+        neighborhood,
+        roster.length > 0 ? roster : undefined
+      );
+      addressMatches = scanProperties.length;
 
-      if (roster.length > 0) {
-        const assignments = assignFramesToRoster(
+      if (scanProperties.length < 2) {
+        const homes = await runHomeDiscovery(imageUrls);
+        const fromHomes = propertiesFromHomeDiscovery(
           extractedFrames,
-          detections,
-          roster
+          homes,
+          neighborhood
         );
-        addressMatches = assignments.length;
-        scanProperties = buildPropertiesWithFrames(roster, assignments);
+        if (fromHomes.length > scanProperties.length) {
+          scanProperties = fromHomes;
+          addressMatches = fromHomes.length;
+        }
       }
 
       if (scanProperties.length === 0) {
-        scanProperties = propertiesFromDetections(
-          extractedFrames,
-          detections,
-          neighborhood
-        );
-        addressMatches = scanProperties.length;
+        scanProperties = propertiesFromFrameFallback(extractedFrames, neighborhood);
+        addressMatches = 0;
       }
-
-      if (scanProperties.length === 0 && roster.length > 0) {
-        scanProperties = roster.slice(0, Math.min(8, roster.length)).map((p, i) => ({
-          ...p,
-          image: extractedFrames[i % extractedFrames.length]?.dataUrl ?? p.image,
-        }));
-      }
+    } else if (roster.length > 0) {
+      scanProperties = roster;
     }
 
     if (scanProperties.length === 0) {
-      scanProperties = roster.length > 0 ? roster : demoProperties;
+      scanProperties = demoProperties;
     }
 
     const batches: Property[][] = [];

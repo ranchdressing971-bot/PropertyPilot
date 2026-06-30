@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
@@ -11,7 +12,7 @@ import { useRoster } from "@/hooks/useRoster";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { properties as demoProperties } from "@/lib/mock-data";
-import { ArrowRight, Calendar, Home, Loader2 } from "lucide-react";
+import { ArrowRight, Calendar, ChevronDown, Home, Loader2 } from "lucide-react";
 
 function PropertyThumb({ address, image }: { address: string; image: string }) {
   if (image) {
@@ -42,22 +43,11 @@ export function PropertiesPageContent() {
   const { isDemo, isLive } = useAppMode();
   const { profile } = useUserProfile();
   const { data: live, loading: liveLoading } = useLiveDashboard(isLive);
-  const { properties: roster, loading: rosterLoading, importCsv } = useRoster();
+  const { importCsv } = useRoster();
+  const [showRoster, setShowRoster] = useState(false);
 
-  const scanProperties = isDemo ? demoProperties : (live?.properties ?? []);
-  const list =
-    isLive && roster.length > 0
-      ? roster.map((r) => {
-          const scanned = scanProperties.find((p) => p.id === r.id);
-          return scanned ?? r;
-        })
-      : isDemo
-        ? demoProperties
-        : scanProperties.length > 0
-          ? scanProperties
-          : roster;
-
-  const loading = isLive && (liveLoading || rosterLoading) && !live && roster.length === 0;
+  const list = isDemo ? demoProperties : (live?.properties ?? []);
+  const loading = isLive && liveLoading && !live;
 
   if (loading) {
     return (
@@ -72,19 +62,37 @@ export function PropertiesPageContent() {
   return (
     <PageContent className="space-y-8">
       {isLive && (
-        <RosterImport
-          neighborhood={profile?.hoaName || "Your Community"}
-          onImport={async (csv) => {
-            await importCsv(csv, profile?.hoaName || "Your Community");
-          }}
-        />
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowRoster(!showRoster)}
+            className="flex w-full items-center justify-between rounded-xl border border-ink-200 bg-ink-50/50 px-4 py-3 text-left text-sm text-ink-600 hover:bg-ink-50"
+          >
+            <span>Optional: import address list for cross-check</span>
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${showRoster ? "rotate-180" : ""}`}
+            />
+          </button>
+          {showRoster && (
+            <div className="mt-3">
+              <RosterImport
+                neighborhood={profile?.hoaName || "Your Community"}
+                onImport={async (csv) => {
+                  await importCsv(csv, profile?.hoaName || "Your Community");
+                }}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       {list.length === 0 ? (
         <EmptyState
           icon={Home}
           title="No properties yet"
-          description="Import your community roster above, or upload an inspection to auto-populate from scans."
+          description="Upload a drive-through inspection — AI will find home addresses from your video automatically."
+          actionLabel="Upload inspection"
+          actionHref="/dashboard/inspections/upload"
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -121,5 +129,5 @@ export function PropertiesPageContent() {
 
 export function getPropertiesSubtitle(isDemo: boolean, count: number) {
   if (isDemo) return `${count} homes in Willow Creek Estates`;
-  return count > 0 ? `${count} properties in your roster` : "Import roster or run a scan";
+  return count > 0 ? `${count} homes found from your scans` : "Upload a video to discover homes";
 }

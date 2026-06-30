@@ -2,6 +2,149 @@ import type { Property } from "./mock-data";
 import type { AddressDetection } from "./address-detect";
 import type { ExtractedFrame } from "./video-frames";
 
+export interface DiscoveredHome {
+  frameIndex: number;
+  address: string;
+  confidence: number;
+  reasoning: string;
+}
+
+function normalizeKey(addr: string): string {
+  return addr.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function formatVideoTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function pickAddress(det: AddressDetection): string | null {
+  const full = det.visibleAddress?.trim();
+  if (full && full.length > 2) return full;
+  if (det.houseNumber?.trim()) return det.houseNumber.trim();
+  return null;
+}
+
+/** Merge detections across frames into unique properties with best frame image. */
+export function discoverPropertiesFromVideo(
+  frames: ExtractedFrame[],
+  detections: AddressDetection[],
+  neighborhood: string,
+  optionalRoster?: Property[]
+): Property[] {
+  const groups = new Map<
+    string,
+    { address: string; confidence: number; frame: ExtractedFrame }
+  >();
+
+  for (const det of detections) {
+    let address = pickAddress(det);
+    if (!address || det.confidence < 35) continue;
+
+    const frame =
+      frames.find((f) => f.index === det.frameIndex) ?? frames[det.frameIndex];
+    if (!frame) continue;
+
+    if (optionalRoster?.length && det.matchedPropertyId) {
+      const match = optionalRoster.find((p) => p.id === det.matchedPropertyId);
+      if (match) address = match.address;
+    }
+
+    const numOnly = /^\d+[a-z]?$/i.test(address);
+    const key = numOnly ? `num-${address}` : normalizeKey(address);
+
+    const existing = groups.get(key);
+    if (!existing || det.confidence > existing.confidence) {
+      groups.set(key, { address, confidence: det.confidence, frame });
+    }
+  }
+
+  mergeHouseNumberWithStreet(groups, detections, frames);
+
+  return Array.from(groups.values()).map((g, i) => ({
+    id: `found-${i + 1}`,
+    address: g.address,
+    image: g.frame.dataUrl,
+    status: "Good Standing" as const,
+    lastInspection: "—",
+    neighborhood,
+  }));
+}
+
+/** e.g. merge "123" with "123 Main St" when house numbers match */
+function mergeHouseNumberWithStreet(
+  groups: Map<string, { address: string; confidence: number; frame: ExtractedFrame }>,
+  detections: AddressDetection[],
+  frames: ExtractedFrame[]
+): void {
+  for (const det of detections) {
+    const full = det.visibleAddress?.trim();
+    if (!full || det.confidence < 35) continue;
+    const num = full.match(/^(\d+[a-z]?)/i)?.[1];
+    if (!num) continue;
+
+    const numKey = `num-${num}`;
+    const partial = groups.get(numKey);
+    if (partial && full.length > partial.address.length) {
+      groups.delete(numKey);
+      groups.set(normalizeKey(full), {
+        address: full,
+        confidence: Math.max(partial.confidence, det.confidence),
+        frame: frames[det.frameIndex] ?? partial.frame,
+      });
+    }
+  }
+}
+
+export function propertiesFromHomeDiscovery(
+  frames: ExtractedFrame[],
+  homes: DiscoveredHome[],
+  neighborhood: string
+): Property[] {
+  const seen = new Set<string>();
+  const props: Property[] = [];
+
+  for (const home of homes) {
+    const addr = home.address?.trim();
+    if (!addr || home.confidence < 40) continue;
+    const key = normalizeKey(addr);
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const frame = frames[home.frameIndex] ?? frames[0];
+    props.push({
+      id: `found-${props.length + 1}`,
+      address: addr,
+      image: frame?.dataUrl ?? "",
+      status: "Good Standing",
+      lastInspection: "—",
+      neighborhood,
+    });
+  }
+
+  return props;
+}
+
+/** Last resort: one entry per frame so compliance scan still runs */
+export function propertiesFromFrameFallback(
+  frames: ExtractedFrame[],
+  neighborhood: string
+): Property[] {
+  const step = Math.max(1, Math.floor(frames.length / 6));
+  const picked = frames.filter((_, i) => i % step === 0).slice(0, 8);
+
+  return picked.map((frame, i) => ({
+    id: `found-${i + 1}`,
+    address: `Property at ${formatVideoTime(frame.timestamp)}`,
+    image: frame.dataUrl,
+    status: "Good Standing" as const,
+    lastInspection: "—",
+    neighborhood,
+  }));
+}
+
+// Legacy exports kept for optional roster matching
 export interface PropertyFrameAssignment {
   propertyId: string;
   address: string;
@@ -11,9 +154,6 @@ export interface PropertyFrameAssignment {
   matchConfidence: number;
 }
 
-/**
- * Pick the best frame per roster property from address detections.
- */
 export function assignFramesToRoster(
   frames: ExtractedFrame[],
   detections: AddressDetection[],
@@ -45,40 +185,6 @@ export function assignFramesToRoster(
   return Array.from(byProperty.values());
 }
 
-/**
- * Create scan targets from unmatched high-confidence address reads (no roster).
- */
-export function propertiesFromDetections(
-  frames: ExtractedFrame[],
-  detections: AddressDetection[],
-  neighborhood: string
-): Property[] {
-  const seen = new Set<string>();
-  const props: Property[] = [];
-
-  for (const det of detections) {
-    if (!det.visibleAddress || det.confidence < 50) continue;
-    const key = det.visibleAddress.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    const frame = frames[det.frameIndex];
-    props.push({
-      id: `detected-${props.length + 1}`,
-      address: det.visibleAddress,
-      image: frame?.dataUrl ?? "",
-      status: "Good Standing",
-      lastInspection: "—",
-      neighborhood,
-    });
-  }
-
-  return props;
-}
-
-/**
- * Merge roster entries with their matched video frames for AI analysis.
- */
 export function buildPropertiesWithFrames(
   roster: Property[],
   assignments: PropertyFrameAssignment[]
@@ -91,4 +197,13 @@ export function buildPropertiesWithFrames(
       const a = assignmentMap.get(p.id)!;
       return { ...p, image: a.frameDataUrl };
     });
+}
+
+/** @deprecated Use discoverPropertiesFromVideo */
+export function propertiesFromDetections(
+  frames: ExtractedFrame[],
+  detections: AddressDetection[],
+  neighborhood: string
+): Property[] {
+  return discoverPropertiesFromVideo(frames, detections, neighborhood);
 }

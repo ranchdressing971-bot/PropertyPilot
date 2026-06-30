@@ -8,10 +8,8 @@ import { Header } from "@/components/layout/Header";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { useAppMode } from "@/components/providers/AppModeProvider";
-import { useRoster } from "@/hooks/useRoster";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { loadCcrRules } from "@/lib/ccr-rules";
-import { rosterFromStorage } from "@/lib/roster";
 import {
   extractVideoFrames,
   estimateFramesPayloadKb,
@@ -36,15 +34,14 @@ const DEMO_STEPS = [
 const LIVE_STEPS = [
   "Reading your video...",
   "Extracting frames...",
-  "Detecting addresses...",
-  "Running AI compliance scan...",
+  "Finding home addresses...",
+  "Running compliance scan...",
   "Generating report...",
 ];
 
 export default function UploadPage() {
   const router = useRouter();
   const { isDemo, ready } = useAppMode();
-  const { properties: roster } = useRoster();
   const { profile } = useUserProfile();
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -99,11 +96,10 @@ export default function UploadPage() {
         );
 
         setCurrentStep(2);
-        const rosterList = roster.length > 0 ? roster : rosterFromStorage();
         const ccrRules = loadCcrRules();
 
         setCurrentStep(3);
-        setStatusDetail("Sending frames to GPT-4o Vision...");
+        setStatusDetail("AI is reading addresses from your video...");
 
         const res = await fetch("/api/analyze-inspection", {
           method: "POST",
@@ -116,7 +112,6 @@ export default function UploadPage() {
               timestamp: f.timestamp,
               dataUrl: f.dataUrl,
             })),
-            properties: rosterList.length > 0 ? rosterList : undefined,
             neighborhood: profile?.hoaName || "Your Community",
             ccrRules,
           }),
@@ -133,7 +128,7 @@ export default function UploadPage() {
         setCurrentStep(4);
         setStatusDetail(
           data.usedVideoFrames
-            ? `${data.addressMatches ?? 0} addresses matched · ${data.violationsFound} flags`
+            ? `${data.propertiesScanned ?? 0} homes found · ${data.violationsFound} flags`
             : null
         );
 
@@ -147,7 +142,7 @@ export default function UploadPage() {
         setIsProcessing(false);
       }
     },
-    [router, isDemo, roster, profile]
+    [router, isDemo, profile]
   );
 
   const handleDrop = useCallback(
@@ -176,7 +171,7 @@ export default function UploadPage() {
         subtitle={
           isDemo
             ? "Demo mode — simulated analysis with sample data"
-            : "Live mode — real video frames analyzed by GPT-4o Vision"
+            : "Live mode — AI reads addresses from your video automatically"
         }
       />
       <PageContent className="flex min-h-[calc(100vh-12rem)] items-center">
@@ -220,7 +215,7 @@ export default function UploadPage() {
                       Drop your inspection video
                     </h3>
                     <p className="mt-2 text-center text-sm text-ink-500">
-                      Phone drive-through · .mp4 & .mov · best under 2 min
+                      Phone drive-through · AI finds addresses · .mp4 & .mov
                     </p>
                     <div
                       className={`mt-4 flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wide ${

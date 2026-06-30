@@ -50,10 +50,10 @@ export function RosterImport({ neighborhood, onImport }: RosterImportProps) {
       <div className="flex items-start gap-3">
         <FileText className="mt-0.5 h-5 w-5 text-ink-400" />
         <div className="flex-1">
-          <h3 className="font-semibold text-ink-900">Import property roster</h3>
+          <h3 className="font-semibold text-ink-900">Optional address list</h3>
           <p className="mt-1 text-sm text-ink-500">
-            Upload a CSV with an <code className="text-xs">address</code> column.
-            {neighborhood ? ` Properties will be tagged to ${neighborhood}.` : ""}
+            AI finds addresses from video automatically. Import a CSV only if you
+            want to cross-check against a known list.
           </p>
         </div>
       </div>

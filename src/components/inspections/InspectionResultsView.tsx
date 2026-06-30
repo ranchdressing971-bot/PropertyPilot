@@ -92,8 +92,8 @@ export function InspectionResultsView({ id }: { id: string }) {
             </div>
             {data.usedVideoFrames && (
               <span className="text-xs text-accent-700/80">
-                {data.frameCount ?? 0} frames · {data.addressMatches ?? 0} addresses
-                matched
+                {data.propertiesScanned ?? data.results.length} homes found ·{" "}
+                {data.frameCount ?? 0} frames analyzed
               </span>
             )}
           </motion.div>
