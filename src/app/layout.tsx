@@ -15,24 +15,14 @@ const body = DM_Sans({
   weight: ["400", "500", "600"],
 });
 
+/** iOS ignores media on apple-touch-icon — use root + app/apple-icon.png */
 const iosAppleIcons: Metadata["icons"] = {
   icon: [
     { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
-    { url: "/logo.png", sizes: "512x512", type: "image/png", media: "(prefers-color-scheme: light)" },
-    { url: "/logo-dark.png", sizes: "512x512", type: "image/png", media: "(prefers-color-scheme: dark)" },
+    { url: "/logo.png", sizes: "512x512", type: "image/png" },
   ],
   apple: [
-    { url: "/icons/ios/apple-touch-icon-180.png", sizes: "180x180", type: "image/png" },
-    { url: "/icons/ios/apple-touch-icon-180-dark.png", sizes: "180x180", type: "image/png", media: "(prefers-color-scheme: dark)" },
-    { url: "/icons/ios/apple-touch-icon-167.png", sizes: "167x167", type: "image/png" },
-    { url: "/icons/ios/apple-touch-icon-167-dark.png", sizes: "167x167", type: "image/png", media: "(prefers-color-scheme: dark)" },
-    { url: "/icons/ios/apple-touch-icon-152.png", sizes: "152x152", type: "image/png" },
-    { url: "/icons/ios/apple-touch-icon-152-dark.png", sizes: "152x152", type: "image/png", media: "(prefers-color-scheme: dark)" },
-    { url: "/icons/ios/apple-touch-icon-120.png", sizes: "120x120", type: "image/png" },
-    { url: "/icons/ios/apple-touch-icon-120-dark.png", sizes: "120x120", type: "image/png", media: "(prefers-color-scheme: dark)" },
-  ],
-  other: [
-    { rel: "apple-touch-icon-precomposed", url: "/icons/ios/apple-touch-icon-180.png" },
+    { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
   ],
 };
 
