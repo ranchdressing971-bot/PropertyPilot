@@ -11,10 +11,10 @@ export function ModeBadge({ className }: { className?: string }) {
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
+        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
         mode === "demo"
-          ? "bg-copper-100 text-copper-800"
-          : "bg-ink-900 text-white",
+          ? "bg-ink-100 text-ink-600 ring-ink-200"
+          : "bg-brand-50 text-brand-700 ring-brand-200",
         className
       )}
     >

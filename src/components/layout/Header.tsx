@@ -15,20 +15,20 @@ export function Header({ title, subtitle }: HeaderProps) {
   const { toggle } = useMobileNav();
 
   return (
-    <header className="sticky top-0 z-30 border-b border-ink-200/70 bg-canvas/95 backdrop-blur-sm">
-      <div className="mx-auto max-w-6xl px-5 py-5 sm:px-8">
+    <header className="sticky top-0 z-30 border-b border-ink-200/60 bg-white/80 shadow-nav backdrop-blur-md">
+      <div className="mx-auto max-w-6xl px-5 py-4 sm:px-8 sm:py-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-start gap-3">
             <button
               onClick={toggle}
-              className="-ml-1 shrink-0 rounded-lg p-2 text-ink-500 transition-colors hover:bg-ink-100 lg:hidden"
+              className="-ml-1 shrink-0 rounded-xl p-2 text-ink-500 transition-colors hover:bg-ink-100 lg:hidden"
               aria-label="Open menu"
             >
               <Menu className="h-5 w-5" />
             </button>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="font-display text-xl font-semibold tracking-tight text-ink-900 sm:text-2xl">
+                <h1 className="text-xl font-semibold tracking-tight text-ink-900 sm:text-2xl">
                   {title}
                 </h1>
                 <ModeBadge />

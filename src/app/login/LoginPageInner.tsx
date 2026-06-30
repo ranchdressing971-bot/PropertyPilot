@@ -65,7 +65,7 @@ export default function LoginPageInner() {
   return (
     <AuthLayout>
       <Card className="w-full max-w-md" padding="lg">
-        <h1 className="font-display text-xl font-semibold text-ink-900">Sign in</h1>
+        <h1 className="text-xl font-semibold text-ink-900">Sign in</h1>
         <p className="mt-1 text-sm text-ink-500">
           Live mode — real AI inspections with your account
         </p>
@@ -119,7 +119,7 @@ export default function LoginPageInner() {
 
         <p className="mt-4 text-center text-sm text-ink-500">
           No account?{" "}
-          <Link href="/signup" className="font-medium text-copper-700 hover:underline">
+          <Link href="/signup" className="font-medium text-brand-600 hover:underline">
             Create one
           </Link>
         </p>

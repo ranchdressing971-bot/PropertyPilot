@@ -229,7 +229,7 @@ export default function UploadPage() {
                     onDrop={handleDrop}
                     className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 sm:p-16 transition-colors ${
                       isDragging
-                        ? "border-copper-400 bg-copper-50/50"
+                        ? "border-brand-400 bg-brand-50/50"
                         : "border-ink-200 bg-ink-50/30 hover:border-ink-300"
                     }`}
                   >
@@ -245,8 +245,8 @@ export default function UploadPage() {
                     <div
                       className={`mt-4 flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
                         isDemo
-                          ? "bg-copper-100 text-copper-800"
-                          : "bg-ink-900 text-white"
+                          ? "bg-ink-100 text-ink-700"
+                          : "bg-brand-600 text-white"
                       }`}
                     >
                       {isDemo ? (
@@ -333,7 +333,7 @@ export default function UploadPage() {
                           {i < currentStep ? (
                             <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
                           ) : i === currentStep ? (
-                            <Loader2 className="h-5 w-5 shrink-0 animate-spin text-copper-600" />
+                            <Loader2 className="h-5 w-5 shrink-0 animate-spin text-brand-600" />
                           ) : (
                             <div className="h-5 w-5 shrink-0 rounded-full border-2 border-ink-200" />
                           )}
@@ -351,7 +351,7 @@ export default function UploadPage() {
 
                       <div className="mt-6 h-1.5 overflow-hidden rounded-full bg-ink-100">
                         <motion.div
-                          className="h-full rounded-full bg-copper-500"
+                          className="h-full rounded-full bg-brand-600"
                           initial={{ width: "0%" }}
                           animate={{
                             width: `${((currentStep + 1) / steps.length) * 100}%`,

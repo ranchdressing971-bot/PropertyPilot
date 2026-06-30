@@ -4,21 +4,20 @@ import { Button } from "@/components/ui/Button";
 
 interface PublicLayoutProps {
   children: React.ReactNode;
-  /** Show sign-in / demo actions in the nav */
   showNavActions?: boolean;
 }
 
 export function PublicLayout({ children, showNavActions = true }: PublicLayoutProps) {
   return (
     <div className="min-h-screen bg-canvas">
-      <nav className="border-b border-ink-200/80 bg-canvas">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5 sm:px-8">
+      <nav className="sticky top-0 z-40 border-b border-ink-200/60 bg-white/80 shadow-nav backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
           <Logo size="md" href="/" />
           {showNavActions && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               <Link
                 href="/pricing"
-                className="text-sm font-medium text-ink-500 hover:text-ink-900"
+                className="rounded-lg px-3 py-2 text-sm font-medium text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900"
               >
                 Pricing
               </Link>
@@ -35,20 +34,20 @@ export function PublicLayout({ children, showNavActions = true }: PublicLayoutPr
         </div>
       </nav>
       {children}
-      <footer className="border-t border-ink-200/80 py-8">
-        <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 px-5 sm:flex-row sm:px-8">
+      <footer className="border-t border-ink-200/60 bg-white py-10">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 sm:flex-row sm:px-8">
           <Logo size="sm" href="/" />
-          <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-ink-400">
-            <Link href="/pricing" className="hover:text-ink-600">
+          <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-ink-500">
+            <Link href="/pricing" className="transition-colors hover:text-ink-900">
               Pricing
             </Link>
-            <Link href="/privacy" className="hover:text-ink-600">
+            <Link href="/privacy" className="transition-colors hover:text-ink-900">
               Privacy
             </Link>
-            <Link href="/terms" className="hover:text-ink-600">
+            <Link href="/terms" className="transition-colors hover:text-ink-900">
               Terms
             </Link>
-            <span>&copy; 2026 Property Pilot</span>
+            <span className="text-ink-400">&copy; 2026 Property Pilot</span>
           </div>
         </div>
       </footer>

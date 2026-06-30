@@ -38,7 +38,7 @@ export function AIInsights({ insights, empty }: AIInsightsProps) {
             </div>
             <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-ink-200">
               <div
-                className="h-full rounded-full bg-copper-500 transition-all"
+                className="h-full rounded-full bg-brand-600 transition-all"
                 style={{ width: `${insights.complianceScore}%` }}
               />
             </div>
@@ -52,7 +52,7 @@ export function AIInsights({ insights, empty }: AIInsightsProps) {
                 {insights.repeatOffenders.slice(0, 3).map((o) => (
                   <li key={o.address} className="flex justify-between text-sm">
                     <span className="text-ink-700">{o.address}</span>
-                    <span className="font-medium text-copper-700">{o.count}×</span>
+                    <span className="font-medium text-brand-700">{o.count}×</span>
                   </li>
                 ))}
               </ul>

@@ -18,7 +18,7 @@ export function Card({
       className={clsx(
         "surface",
         {
-          "transition-colors hover:border-ink-300": hover,
+          "transition-shadow hover:border-ink-300/80 hover:shadow-card-hover": hover,
           "p-4": padding === "sm",
           "p-5 sm:p-6": padding === "md",
           "p-6 sm:p-8": padding === "lg",

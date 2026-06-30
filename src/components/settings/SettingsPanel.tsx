@@ -43,8 +43,8 @@ export function SettingsPanel() {
   return (
     <div className="space-y-5">
       <Card>
-        <h3 className="font-semibold text-slate-900">App Mode</h3>
-        <p className="mt-1 text-sm text-slate-500">
+        <h3 className="font-semibold text-ink-900">App Mode</h3>
+        <p className="mt-1 text-sm text-ink-500">
           Demo uses sample data. Live runs real GPT-4o analysis.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3">
@@ -54,12 +54,12 @@ export function SettingsPanel() {
             className={clsx(
               "rounded-xl border-2 p-4 text-left transition-all",
               mode === "demo"
-                ? "border-violet-500 bg-violet-50"
-                : "border-slate-200 hover:border-slate-300"
+                ? "border-ink-900 bg-ink-50 shadow-sm"
+                : "border-ink-200 hover:border-ink-300"
             )}
           >
-            <p className="font-semibold text-slate-900">Demo</p>
-            <p className="mt-1 text-xs text-slate-500">No API key needed</p>
+            <p className="font-semibold text-ink-900">Demo</p>
+            <p className="mt-1 text-xs text-ink-500">No API key needed</p>
           </button>
           <button
             type="button"
@@ -67,21 +67,21 @@ export function SettingsPanel() {
             className={clsx(
               "rounded-xl border-2 p-4 text-left transition-all",
               mode === "live"
-                ? "border-emerald-500 bg-emerald-50"
-                : "border-slate-200 hover:border-slate-300"
+                ? "border-brand-500 bg-brand-50 shadow-sm"
+                : "border-ink-200 hover:border-ink-300"
             )}
           >
-            <p className="font-semibold text-slate-900">Live</p>
-            <p className="mt-1 text-xs text-slate-500">Real AI analysis</p>
+            <p className="font-semibold text-ink-900">Live</p>
+            <p className="mt-1 text-xs text-ink-500">Real AI analysis</p>
           </button>
         </div>
         {mode === "live" && !isSupabaseClientConfigured() && (
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-3 text-xs text-ink-500">
             Live mode works without sign-in until Supabase is configured.
           </p>
         )}
         {mode === "live" && isSupabaseClientConfigured() && (
-          <Link href="/login" className="mt-3 inline-block text-sm text-accent-600 hover:underline">
+          <Link href="/login" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
             Sign in for live mode →
           </Link>
         )}
@@ -90,8 +90,9 @@ export function SettingsPanel() {
       <SystemCheckCard />
 
       <Card>
+        <h3 className="font-semibold text-ink-900">Connection Status</h3>
         {loadingHealth ? (
-          <Loader2 className="mt-4 h-5 w-5 animate-spin text-slate-400" />
+          <Loader2 className="mt-4 h-5 w-5 animate-spin text-ink-400" />
         ) : health ? (
           <div className="mt-4 space-y-3">
             <StatusRow ok={health.openai} label="OpenAI" message={health.openaiMessage} />
@@ -120,15 +121,15 @@ function StatusRow({
   message: string;
 }) {
   return (
-    <div className="flex gap-3 rounded-xl bg-slate-50 p-4">
+    <div className="flex gap-3 rounded-xl bg-ink-50 p-4 ring-1 ring-ink-100">
       {ok ? (
         <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
       ) : (
         <XCircle className="h-5 w-5 shrink-0 text-red-500" />
       )}
       <div>
-        <p className="text-sm font-medium text-slate-900">{label}</p>
-        <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{message}</p>
+        <p className="text-sm font-medium text-ink-900">{label}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-ink-500">{message}</p>
       </div>
     </div>
   );

@@ -1,22 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Syne, DM_Sans } from "next/font/google";
+import { Inter } from "next/font/google";
 import { AppModeProvider } from "@/components/providers/AppModeProvider";
 import { IosHomeScreenIcon } from "@/components/brand/IosHomeScreenIcon";
 import "./globals.css";
 
-const display = Syne({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-display",
-  weight: ["500", "600", "700"],
+  variable: "--font-sans",
+  weight: ["400", "500", "600", "700"],
 });
 
-const body = DM_Sans({
-  subsets: ["latin"],
-  variable: "--font-body",
-  weight: ["400", "500", "600"],
-});
-
-/** Transparent primary icon — iOS 18 adapts it for Dark / Tinted appearance. */
 const iosAppleIcons: Metadata["icons"] = {
   icon: [
     { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
@@ -60,8 +53,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f4f0" },
-    { media: "(prefers-color-scheme: dark)", color: "#1a1f2e" },
+    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
   ],
   colorScheme: "light dark",
 };
@@ -72,7 +65,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable}`}>
+    <html lang="en" className={inter.variable}>
       <head>
         <IosHomeScreenIcon />
       </head>

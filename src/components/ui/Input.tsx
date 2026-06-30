@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { InputHTMLAttributes, forwardRef } from "react";
 
 export const inputClassName =
-  "mt-1.5 h-11 w-full rounded-lg border border-ink-200 bg-white px-4 text-base text-ink-900 placeholder:text-ink-400 focus:border-copper-400 focus:outline-none focus:ring-2 focus:ring-copper-500/20";
+  "mt-1.5 h-11 w-full rounded-xl border border-ink-200 bg-white px-4 text-base text-ink-900 shadow-sm placeholder:text-ink-400 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/15";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...props }, ref) => (

@@ -21,7 +21,7 @@ export default function PricingPage() {
   return (
     <PublicLayout>
       <section className="mx-auto max-w-3xl px-5 py-16 text-center sm:py-24">
-        <h1 className="font-display text-4xl font-semibold text-ink-900">
+        <h1 className="text-4xl font-semibold tracking-tight text-ink-900">
           One plan. Everything included.
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-ink-500">
@@ -29,24 +29,22 @@ export default function PricingPage() {
           inspections — then $149/month.
         </p>
 
-        <div className="surface mx-auto mt-14 max-w-md p-8 text-left ring-2 ring-copper-400 ring-offset-2 ring-offset-canvas">
-          <span className="rounded-md bg-copper-100 px-2 py-0.5 text-xs font-semibold text-copper-800">
+        <div className="surface mx-auto mt-14 max-w-md p-8 text-left ring-2 ring-brand-500/20">
+          <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 ring-1 ring-brand-100">
             {FREE_TRIAL_SCANS} free scans to start
           </span>
-          <h2 className="mt-3 font-display text-2xl font-semibold text-ink-900">
-            Property Pilot
-          </h2>
+          <h2 className="mt-4 text-2xl font-semibold text-ink-900">Property Pilot</h2>
           <p className="mt-1 text-sm text-ink-500">
             For HOA managers and community associations
           </p>
-          <p className="mt-6 font-display text-4xl font-bold text-ink-900">
+          <p className="mt-6 text-4xl font-semibold tracking-tight text-ink-900">
             $149
             <span className="text-base font-normal text-ink-400">/month</span>
           </p>
           <ul className="mt-8 space-y-3">
             {features.map((f) => (
-              <li key={f} className="flex items-start gap-2 text-sm text-ink-600">
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+              <li key={f} className="flex items-start gap-2.5 text-sm text-ink-600">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
                 {f}
               </li>
             ))}
@@ -61,7 +59,7 @@ export default function PricingPage() {
 
         <p className="mt-10 text-xs text-ink-400">
           Secure billing via Stripe. Questions?{" "}
-          <a href="mailto:support@propertypilot.app" className="underline">
+          <a href="mailto:support@propertypilot.app" className="text-brand-600 hover:underline">
             support@propertypilot.app
           </a>
         </p>

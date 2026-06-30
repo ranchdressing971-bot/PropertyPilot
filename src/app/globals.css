@@ -11,6 +11,7 @@
   body {
     @apply bg-canvas text-ink-900;
     overflow-x: hidden;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
   input,
@@ -31,10 +32,14 @@
 
 @layer utilities {
   .surface {
-    @apply rounded-xl border border-ink-200/80 bg-white;
+    @apply rounded-2xl border border-ink-200/60 bg-white shadow-card;
   }
 
   .surface-muted {
-    @apply rounded-xl border border-ink-100 bg-ink-50/50;
+    @apply rounded-2xl border border-ink-100 bg-ink-50/80;
+  }
+
+  .text-balance {
+    text-wrap: balance;
   }
 }

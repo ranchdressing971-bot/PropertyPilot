@@ -24,7 +24,7 @@ export function MobileBottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t border-ink-200 bg-white lg:hidden"
+      className="fixed bottom-0 left-0 right-0 z-40 border-t border-ink-200/80 bg-white/95 shadow-nav backdrop-blur-md lg:hidden"
       style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
     >
       <div className="mx-auto flex max-w-lg items-end justify-between px-2 pt-1.5">
@@ -44,7 +44,7 @@ export function MobileBottomNav() {
                 href={tab.href}
                 className="relative -mt-5 flex flex-1 flex-col items-center"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-900 text-white shadow-md">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-900 text-white shadow-card-hover">
                   <Icon className="h-5 w-5" strokeWidth={2.25} />
                 </div>
                 <span className="mt-1 text-[10px] font-medium text-ink-600">
@@ -60,7 +60,7 @@ export function MobileBottomNav() {
               href={tab.href}
               className={clsx(
                 "flex min-h-[3rem] flex-1 flex-col items-center justify-end gap-0.5 px-1 pb-0.5",
-                isActive ? "text-ink-900" : "text-ink-400"
+                isActive ? "text-brand-600" : "text-ink-400"
               )}
             >
               <Icon className={clsx("h-5 w-5", isActive && "stroke-[2.25]")} />
