@@ -1,7 +1,8 @@
-import { AIInspectionData } from "./ai-analyze";
+import type { AIInspectionData } from "./ai-analyze";
 import type { ViolationStatus } from "./mock-data";
 import {
   getAuthenticatedUserId,
+  loadInspectionFromDbById,
   loadInspectionsFromDb,
   persistInspection,
   updateViolationInDb,
@@ -10,32 +11,58 @@ import {
 const store = new Map<string, AIInspectionData>();
 let hydrated = false;
 
-async function hydrateFromDb(): Promise<void> {
+function rowToInspection(row: AIInspectionData): AIInspectionData {
+  return row;
+}
+
+/** Load this user's inspections from Supabase (required on Render/serverless). */
+export async function ensureStoreHydrated(): Promise<void> {
   if (hydrated) return;
   const userId = await getAuthenticatedUserId();
   if (userId) {
     const rows = await loadInspectionsFromDb(userId);
     for (const row of rows) {
-      store.set(row.id, row);
+      store.set(row.id, rowToInspection(row));
     }
   }
   hydrated = true;
 }
 
-export function saveAIInspection(data: AIInspectionData): void {
+export async function saveAIInspection(data: AIInspectionData): Promise<void> {
   store.set(data.id, data);
-  void (async () => {
-    const userId = await getAuthenticatedUserId();
-    if (userId) await persistInspection(userId, data);
-  })();
+  const userId = await getAuthenticatedUserId();
+  if (userId) {
+    await persistInspection(userId, data);
+  }
 }
 
-export function getAIInspection(id: string): AIInspectionData | undefined {
-  return store.get(id);
+export async function getAIInspection(id: string): Promise<AIInspectionData | undefined> {
+  const cached = store.get(id);
+  if (cached) return cached;
+
+  await ensureStoreHydrated();
+  const afterHydrate = store.get(id);
+  if (afterHydrate) return afterHydrate;
+
+  const userId = await getAuthenticatedUserId();
+  if (!userId) return undefined;
+
+  const fromDb = await loadInspectionFromDbById(userId, id);
+  if (fromDb) {
+    store.set(id, fromDb);
+    return fromDb;
+  }
+
+  return undefined;
 }
 
+/** @deprecated Prefer listAIInspectionsAsync in API routes */
 export function listAIInspections(): AIInspectionData[] {
-  void hydrateFromDb();
+  return Array.from(store.values());
+}
+
+export async function listAIInspectionsAsync(): Promise<AIInspectionData[]> {
+  await ensureStoreHydrated();
   return Array.from(store.values());
 }
 
@@ -43,6 +70,8 @@ export async function updateViolationStatus(
   violationId: string,
   status: ViolationStatus
 ): Promise<boolean> {
+  await ensureStoreHydrated();
+
   for (const inspection of store.values()) {
     const idx = inspection.violations.findIndex((v) => v.id === violationId);
     if (idx === -1) continue;

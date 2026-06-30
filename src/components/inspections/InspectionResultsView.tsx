@@ -8,24 +8,11 @@ import { Header } from "@/components/layout/Header";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { InspectionResultCard } from "@/components/inspections/InspectionResultCard";
-import { Property, Violation } from "@/lib/mock-data";
+import { formatInspectionForDisplay, type InspectionDisplayData } from "@/lib/inspection-display";
+import { getCachedInspectionClient } from "@/lib/inspection-cache";
 import { CheckCircle2, AlertTriangle, Sparkles, Loader2 } from "lucide-react";
 
-interface InspectionData {
-  id: string;
-  name: string;
-  date: string;
-  aiPowered?: boolean;
-  propertiesScanned: number;
-  frameCount?: number;
-  addressMatches?: number;
-  usedVideoFrames?: boolean;
-  results: {
-    propertyId: string;
-    property: Property;
-    violation: Violation | null;
-  }[];
-}
+interface InspectionData extends InspectionDisplayData {}
 
 export function InspectionResultsView({ id }: { id: string }) {
   const [data, setData] = useState<InspectionData | null>(null);
@@ -33,13 +20,26 @@ export function InspectionResultsView({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const cached = getCachedInspectionClient(id);
+    if (cached) {
+      setData(formatInspectionForDisplay(cached));
+      setLoading(false);
+    }
+
     fetch(`/api/inspection/${id}`)
       .then((r) => {
-        if (!r.ok) throw new Error("Inspection not found");
+        if (!r.ok) {
+          if (cached) return null;
+          throw new Error("Inspection not found");
+        }
         return r.json();
       })
-      .then(setData)
-      .catch((e) => setError(e.message))
+      .then((json) => {
+        if (json) setData(json);
+      })
+      .catch((e) => {
+        if (!cached) setError(e.message);
+      })
       .finally(() => setLoading(false));
   }, [id]);
 

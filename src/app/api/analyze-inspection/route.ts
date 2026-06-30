@@ -220,7 +220,7 @@ export async function POST(request: NextRequest) {
       usedVideoFrames: Boolean(frames?.length),
     };
 
-    saveAIInspection(inspection);
+    await saveAIInspection(inspection);
 
     if (userId) {
       await logAudit(userId, "inspection_complete", "inspection", id, {
@@ -240,6 +240,7 @@ export async function POST(request: NextRequest) {
       frameCount,
       addressMatches,
       usedVideoFrames: Boolean(frames?.length),
+      inspection,
     });
   } catch (error) {
     console.error("AI analysis failed:", error);

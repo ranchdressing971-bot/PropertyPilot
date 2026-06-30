@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { formatInspectionForDisplay } from "@/lib/inspection-display";
 import { getAIInspection } from "@/lib/inspection-store";
 import { isLiveModeFromCookie } from "@/lib/get-mode";
-import { getLiveProperty } from "@/lib/live-data";
 import { getInspection, getProperty, properties } from "@/lib/mock-data";
 
 interface RouteParams {
@@ -12,33 +12,9 @@ export async function GET(request: Request, { params }: RouteParams) {
   const { id } = await params;
   const isLive = isLiveModeFromCookie(request.headers.get("cookie"));
 
-  const aiInspection = getAIInspection(id);
+  const aiInspection = await getAIInspection(id);
   if (aiInspection) {
-    const resolveProperty = isLive ? getLiveProperty : getProperty;
-
-    return NextResponse.json({
-      ...aiInspection,
-      results: aiInspection.results.map((r) => ({
-        propertyId: r.propertyId,
-        property:
-          resolveProperty(r.propertyId) ?? {
-            id: r.propertyId,
-            address: r.address,
-            image:
-              aiInspection.violations.find((v) => v.propertyId === r.propertyId)
-                ?.evidenceImages[0] ?? "",
-            status: aiInspection.violations.some((v) => v.propertyId === r.propertyId)
-              ? "Needs Review"
-              : "Good Standing",
-            lastInspection: aiInspection.date,
-            neighborhood: aiInspection.neighborhood,
-          },
-        violation:
-          aiInspection.violations.find((v) => v.propertyId === r.propertyId) ??
-          null,
-        aiResult: r,
-      })),
-    });
+    return NextResponse.json(formatInspectionForDisplay(aiInspection));
   }
 
   if (isLive) {

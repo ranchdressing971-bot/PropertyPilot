@@ -16,7 +16,7 @@ export async function persistInspection(
   const supabase = await createClient();
   if (!supabase) return;
 
-  await supabase.from("inspections").upsert({
+  const { error } = await supabase.from("inspections").upsert({
     id: inspection.id,
     user_id: userId,
     name: inspection.name,
@@ -24,7 +24,64 @@ export async function persistInspection(
     neighborhood: inspection.neighborhood,
     results: inspection.results,
     violations: inspection.violations,
+    metadata: {
+      frameCount: inspection.frameCount,
+      addressMatches: inspection.addressMatches,
+      usedVideoFrames: inspection.usedVideoFrames,
+    },
   });
+
+  if (error) {
+    console.error("persistInspection failed:", error.message);
+  }
+}
+
+function mapInspectionRow(row: {
+  id: string;
+  name: string;
+  created_at?: string;
+  video_name?: string;
+  neighborhood?: string;
+  results?: AIInspectionData["results"];
+  violations?: AIInspectionData["violations"];
+  metadata?: {
+    frameCount?: number;
+    addressMatches?: number;
+    usedVideoFrames?: boolean;
+  } | null;
+}): AIInspectionData {
+  const meta = row.metadata ?? {};
+  return {
+    id: row.id,
+    name: row.name,
+    date: row.created_at?.split("T")[0] ?? "",
+    videoName: row.video_name ?? "",
+    neighborhood: row.neighborhood ?? "",
+    aiPowered: true,
+    results: row.results ?? [],
+    violations: row.violations ?? [],
+    frameCount: meta.frameCount,
+    addressMatches: meta.addressMatches,
+    usedVideoFrames: meta.usedVideoFrames,
+  };
+}
+
+export async function loadInspectionFromDbById(
+  userId: string,
+  inspectionId: string
+): Promise<AIInspectionData | null> {
+  const supabase = await createClient();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("inspections")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("id", inspectionId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return mapInspectionRow(data);
 }
 
 export async function loadInspectionsFromDb(
@@ -41,16 +98,7 @@ export async function loadInspectionsFromDb(
 
   if (!data) return [];
 
-  return data.map((row) => ({
-    id: row.id,
-    name: row.name,
-    date: row.created_at?.split("T")[0] ?? "",
-    videoName: row.video_name ?? "",
-    neighborhood: row.neighborhood ?? "",
-    aiPowered: true as const,
-    results: row.results ?? [],
-    violations: row.violations ?? [],
-  }));
+  return data.map((row) => mapInspectionRow(row));
 }
 
 export async function persistProperties(

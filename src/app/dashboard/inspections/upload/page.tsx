@@ -14,6 +14,8 @@ import {
   extractVideoFrames,
   estimateFramesPayloadKb,
 } from "@/lib/video-frames";
+import { cacheInspectionClient } from "@/lib/inspection-cache";
+import type { AIInspectionData } from "@/lib/ai-analyze";
 import {
   Upload,
   Film,
@@ -136,6 +138,10 @@ export default function UploadPage() {
             ? `${data.propertiesScanned ?? 0} homes found · ${data.violationsFound} flags`
             : null
         );
+
+        if (data.inspection) {
+          cacheInspectionClient(data.inspection as AIInspectionData);
+        }
 
         setIsComplete(true);
         setTimeout(

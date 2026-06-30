@@ -53,6 +53,7 @@ create table if not exists public.inspections (
   neighborhood text,
   results jsonb not null default '[]'::jsonb,
   violations jsonb not null default '[]'::jsonb,
+  metadata jsonb default '{}'::jsonb,
   created_at timestamptz default now()
 );
 
@@ -95,7 +96,7 @@ alter table public.profiles add column if not exists stripe_customer_id text;
 alter table public.profiles add column if not exists subscription_status text default 'trialing';
 alter table public.profiles add column if not exists plan text default 'standard';
 alter table public.profiles add column if not exists terms_accepted_at timestamptz;
-alter table public.profiles add column if not exists owner_email text;
+alter table public.inspections add column if not exists metadata jsonb default '{}'::jsonb;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
