@@ -244,7 +244,7 @@ export async function POST(request: NextRequest) {
     };
 
     const lean = stripInspectionForStorage(inspection);
-    const saved = await saveAIInspection(lean);
+    const saveResult = await saveAIInspection(lean);
 
     if (userId) {
       await logAudit(userId, "inspection_complete", "inspection", id, {
@@ -253,7 +253,8 @@ export async function POST(request: NextRequest) {
         frameCount,
         addressMatches,
         usedVideoFrames: Boolean(frames?.length),
-        persisted: saved,
+        persisted: saveResult.ok,
+        persistError: saveResult.error,
       });
     }
 
@@ -265,7 +266,8 @@ export async function POST(request: NextRequest) {
       frameCount,
       addressMatches,
       usedVideoFrames: Boolean(frames?.length),
-      saved,
+      saved: saveResult.ok,
+      saveError: saveResult.error,
       inspection: lean,
     });
   } catch (error) {

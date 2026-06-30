@@ -13,5 +13,6 @@ export const config = {
     "/api/inspection/:path*",
     "/api/analyze-inspection",
     "/api/live/dashboard",
+    "/api/setup-status",
   ],
 };

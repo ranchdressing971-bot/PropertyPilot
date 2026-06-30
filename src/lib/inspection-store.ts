@@ -44,16 +44,19 @@ export async function ensureStoreHydrated(): Promise<void> {
   await reloadStoreFromDb();
 }
 
-export async function saveAIInspection(data: AIInspectionData): Promise<boolean> {
+export async function saveAIInspection(
+  data: AIInspectionData
+): Promise<{ ok: boolean; error?: string }> {
   const lean = stripInspectionForStorage(data);
   store.set(lean.id, lean);
   const userId = await getAuthenticatedUserId();
-  if (userId) {
-    const ok = await persistInspection(userId, lean);
-    if (ok) hydratedForUserId = userId;
-    return ok;
+  if (!userId) {
+    return { ok: false, error: "Not signed in — log in before running Live scans." };
   }
-  return false;
+
+  const result = await persistInspection(userId, lean);
+  if (result.ok) hydratedForUserId = userId;
+  return result;
 }
 
 export async function getAIInspection(id: string): Promise<AIInspectionData | undefined> {

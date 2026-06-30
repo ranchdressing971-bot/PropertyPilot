@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { createClient, isSupabaseClientConfigured } from "@/lib/supabase/client";
+import { SystemCheckCard } from "@/components/settings/SystemCheckCard";
 import clsx from "clsx";
 import { CheckCircle2, XCircle, Loader2, LogOut } from "lucide-react";
 
@@ -86,8 +87,9 @@ export function SettingsPanel() {
         )}
       </Card>
 
+      <SystemCheckCard />
+
       <Card>
-        <h3 className="font-semibold text-slate-900">Connection Status</h3>
         {loadingHealth ? (
           <Loader2 className="mt-4 h-5 w-5 animate-spin text-slate-400" />
         ) : health ? (

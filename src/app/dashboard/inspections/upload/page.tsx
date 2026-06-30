@@ -149,9 +149,12 @@ export default function UploadPage() {
         cacheInspectionClient(data.inspection as AIInspectionData);
 
         if (!data.saved) {
-          console.warn(
-            "Inspection cached locally; database save failed — add SUPABASE_SERVICE_ROLE_KEY in Vercel env vars and redeploy."
+          setError(
+            data.saveError ??
+              "Scan completed but could not save to database. Open Settings → System check, or run docs/FIX_SUPABASE.sql in Supabase."
           );
+          setIsProcessing(false);
+          return;
         }
 
         setIsComplete(true);

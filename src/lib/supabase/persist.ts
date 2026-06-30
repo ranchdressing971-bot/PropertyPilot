@@ -14,7 +14,7 @@ export async function getAuthenticatedUserId(): Promise<string | null> {
 export async function persistInspection(
   userId: string,
   inspection: AIInspectionData
-): Promise<boolean> {
+): Promise<{ ok: boolean; error?: string }> {
   const lean = stripInspectionForStorage(inspection);
 
   const baseRow = {
@@ -39,24 +39,50 @@ export async function persistInspection(
 
   async function tryUpsert(
     client: NonNullable<Awaited<ReturnType<typeof createClient>>> | ReturnType<typeof createAdminClient>
-  ): Promise<boolean> {
-    if (!client) return false;
-    let { error } = await client.from("inspections").upsert(withMeta);
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!client) return { ok: false, error: "No Supabase client" };
+
+    let { error } = await client
+      .from("inspections")
+      .upsert(withMeta, { onConflict: "id" });
+
     if (error?.message?.includes("metadata")) {
-      ({ error } = await client.from("inspections").upsert(baseRow));
+      ({ error } = await client
+        .from("inspections")
+        .upsert(baseRow, { onConflict: "id" }));
     }
-    if (!error) return true;
-    console.error("persistInspection failed:", error.message);
-    return false;
+
+    if (!error) return { ok: true };
+
+    console.error("persistInspection failed:", error.message, error.code);
+    return { ok: false, error: `${error.message}${error.code ? ` (${error.code})` : ""}` };
+  }
+
+  const supabase = await createClient();
+  if (supabase) {
+    const userAttempt = await tryUpsert(supabase);
+    if (userAttempt.ok) return userAttempt;
+    if (userAttempt.error?.includes("permission denied")) {
+      return {
+        ok: false,
+        error:
+          "Database permission denied — run docs/FIX_SUPABASE.sql in Supabase SQL Editor.",
+      };
+    }
   }
 
   const admin = createAdminClient();
-  if (admin && (await tryUpsert(admin))) return true;
+  if (admin) {
+    const adminAttempt = await tryUpsert(admin);
+    if (adminAttempt.ok) return adminAttempt;
+    return adminAttempt;
+  }
 
-  const supabase = await createClient();
-  if (supabase && (await tryUpsert(supabase))) return true;
-
-  return false;
+  return {
+    ok: false,
+    error:
+      "Cannot save inspection — add SUPABASE_SERVICE_ROLE_KEY to Vercel env vars and sign in.",
+  };
 }
 
 function mapInspectionRow(row: {
