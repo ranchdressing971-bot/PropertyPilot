@@ -111,7 +111,7 @@ async function prepareLogoPng({ brightenDark = false, adaptive = false } = {}) {
 }
 
 /** Extra transparent margin so iOS squircle mask does not clip the mark. */
-async function addSafePadding(pngBuffer, paddingRatio = 0.22) {
+async function addSafePadding(pngBuffer, paddingRatio = 0.12) {
   const meta = await sharp(pngBuffer).metadata();
   const padX = Math.round(meta.width * paddingRatio);
   const padY = Math.round(meta.height * paddingRatio);
@@ -127,8 +127,8 @@ async function addSafePadding(pngBuffer, paddingRatio = 0.22) {
     .toBuffer();
 }
 
-const ADAPTIVE_FILL = 0.72; // iOS 18 masks corners — keep mark inside safe zone
-const SOLID_FILL = 0.78;
+const ADAPTIVE_FILL = 0.8; // balance: readable size without squircle clipping
+const SOLID_FILL = 0.84;
 
 async function compositeOnCanvas(size, logoPng, background, outPath, fill = SOLID_FILL) {
   const logoSize = Math.round(size * fill);
