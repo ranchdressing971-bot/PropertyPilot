@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadStripe } from "@stripe/stripe-js";
 import {
@@ -11,9 +11,8 @@ import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Loader2 } from "lucide-react";
 import { PLANS, type BillingPlan } from "@/lib/stripe-client";
 
-const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-  ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
-  : null;
+const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim();
+const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
 
 function parsePlan(value: string | null): BillingPlan {
   return value === "professional" ? "professional" : "starter";
@@ -25,6 +24,43 @@ export function CheckoutPageClient() {
   const plan = parsePlan(searchParams.get("plan"));
   const planInfo = PLANS[plan];
   const [error, setError] = useState<string | null>(null);
+  const [redirecting, setRedirecting] = useState(!stripePromise);
+
+  // Hosted Stripe Checkout only needs STRIPE_SECRET_KEY (what you had before).
+  useEffect(() => {
+    if (stripePromise) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan, embedded: false }),
+        });
+        const data = await res.json();
+        if (res.status === 401) {
+          router.push("/signup");
+          return;
+        }
+        if (!res.ok) throw new Error(data.error ?? "Checkout unavailable");
+        if (data.url && !cancelled) {
+          window.location.href = data.url;
+          return;
+        }
+        throw new Error("Checkout URL missing");
+      } catch (err) {
+        if (!cancelled) {
+          setRedirecting(false);
+          setError(err instanceof Error ? err.message : "Checkout unavailable");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [plan, router]);
 
   const fetchClientSecret = useCallback(async () => {
     const res = await fetch("/api/stripe/checkout", {
@@ -52,13 +88,14 @@ export function CheckoutPageClient() {
 
   if (!stripePromise) {
     return (
-      <PublicLayout>
-        <section className="mx-auto max-w-lg px-5 py-16 text-center">
-          <p className="text-sm text-ink-600">
-            Add <code className="text-ink-900">NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code> in
-            Vercel to enable in-app checkout.
+      <PublicLayout showNavActions={false}>
+        <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 px-5">
+          <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
+          <p className="text-sm text-ink-500">
+            {redirecting ? "Redirecting to secure checkout…" : "Loading checkout…"}
           </p>
-        </section>
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        </div>
       </PublicLayout>
     );
   }
@@ -80,14 +117,22 @@ export function CheckoutPageClient() {
           <div className="surface p-6 text-center text-sm text-red-600">{error}</div>
         ) : (
           <div className="surface overflow-hidden p-1 sm:p-2">
-            <EmbeddedCheckoutProvider stripe={stripePromise} options={{ fetchClientSecret }}>
+            <EmbeddedCheckoutProvider
+              stripe={stripePromise}
+              options={{
+                fetchClientSecret,
+                onComplete: () => {
+                  router.push("/dashboard/settings?billing=success");
+                },
+              }}
+            >
               <EmbeddedCheckout className="min-h-[480px]" />
             </EmbeddedCheckoutProvider>
           </div>
         )}
 
         <p className="mt-6 text-center text-xs text-ink-400">
-          Secure payment by Stripe · same look and feel as Property Pilot
+          Secure payment by Stripe
         </p>
       </section>
     </PublicLayout>
