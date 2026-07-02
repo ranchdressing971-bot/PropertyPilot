@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
     }
 
     const appUrl = getAppUrl();
-    const branding = buildCheckoutBranding(appUrl);
+    const branding = buildCheckoutBranding(appUrl, { embedded });
 
     const baseSession = {
       mode: "subscription" as const,

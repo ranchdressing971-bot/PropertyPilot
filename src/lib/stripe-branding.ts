@@ -3,7 +3,8 @@ import { getCheckoutDisplayName } from "./stripe";
 
 /** Match Property Pilot canvas, ink buttons, and rounded cards. */
 export function buildCheckoutBranding(
-  appUrl: string
+  appUrl: string,
+  options?: { embedded?: boolean }
 ): Stripe.Checkout.SessionCreateParams.BrandingSettings {
   const branding: Stripe.Checkout.SessionCreateParams.BrandingSettings = {
     display_name: getCheckoutDisplayName(),
@@ -13,7 +14,11 @@ export function buildCheckoutBranding(
     font_family: "inter",
   };
 
-  // Stripe must fetch logo over public HTTPS — skip on localhost or bad URLs.
+  // embedded_page disallows logo/icon — your app shell shows the logo instead.
+  if (options?.embedded) {
+    return branding;
+  }
+
   const base = appUrl.replace(/\/$/, "");
   if (base.startsWith("https://")) {
     const logoUrl = `${base}/logo.png`;
