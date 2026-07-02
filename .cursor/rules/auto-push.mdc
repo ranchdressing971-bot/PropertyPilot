@@ -1,0 +1,16 @@
+---
+description: Commit and push after completing code changes so Vercel auto-deploys
+alwaysApply: true
+---
+
+# Auto-push after updates
+
+When you finish a task that changes code in this repo:
+
+1. Run `git status` and `git diff` to review changes
+2. Commit with a clear message focused on why (do not commit secrets like `.env.local`)
+3. Push to `origin` on the current branch (`git push -u origin HEAD` if no upstream)
+
+Do this without waiting for the user to ask, unless they explicitly say not to push.
+
+If push fails (auth, conflicts), report the error and what the user needs to fix.
