@@ -1,4 +1,7 @@
 import Stripe from "stripe";
+import { PLANS, type BillingPlan } from "./stripe-client";
+
+export { PLANS, type BillingPlan };
 
 let stripe: Stripe | null = null;
 
@@ -7,24 +10,6 @@ export const FREE_TRIAL_INSPECTIONS = 3;
 
 /** @deprecated Use FREE_TRIAL_INSPECTIONS */
 export const FREE_TRIAL_SCANS = FREE_TRIAL_INSPECTIONS;
-
-export type BillingPlan = "starter" | "professional";
-
-export const PLANS: Record<
-  BillingPlan,
-  { label: string; priceLabel: string; priceMonthly: number }
-> = {
-  starter: {
-    label: "Starter",
-    priceLabel: "$149/mo",
-    priceMonthly: 149,
-  },
-  professional: {
-    label: "Professional",
-    priceLabel: "$299/mo",
-    priceMonthly: 299,
-  },
-};
 
 export function isStripeConfigured(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY);

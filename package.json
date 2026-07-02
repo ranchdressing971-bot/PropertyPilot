@@ -10,6 +10,8 @@
     "generate:icons": "node scripts/generate-ios-icons.mjs"
   },
   "dependencies": {
+    "@stripe/react-stripe-js": "^6.7.0",
+    "@stripe/stripe-js": "^9.9.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
     "clsx": "^2.1.1",

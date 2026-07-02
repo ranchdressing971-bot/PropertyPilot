@@ -3,10 +3,10 @@ import {
   getStripe,
   getStripePriceId,
   getAppUrl,
-  getCheckoutDisplayName,
   isStripeConfigured,
   type BillingPlan,
 } from "@/lib/stripe";
+import { buildCheckoutBranding } from "@/lib/stripe-branding";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const plan = parsePlan(body?.plan);
+  const embedded = Boolean(body?.embedded);
   const priceId = getStripePriceId(plan);
   if (!priceId) {
     const envName =
@@ -77,14 +78,39 @@ export async function POST(req: NextRequest) {
   }
 
   const appUrl = getAppUrl();
+  const branding = buildCheckoutBranding(appUrl);
+
+  if (embedded) {
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      ui_mode: "embedded_page",
+      customer: customerId ?? undefined,
+      customer_email: customerId ? undefined : user.email ?? undefined,
+      line_items: [{ price: priceId, quantity: 1 }],
+      branding_settings: branding,
+      return_url: `${appUrl}/dashboard/settings?billing=success&session_id={CHECKOUT_SESSION_ID}`,
+      subscription_data: {
+        metadata: { supabase_user_id: user.id, plan },
+      },
+      metadata: { supabase_user_id: user.id, plan },
+    });
+
+    if (!session.client_secret) {
+      return NextResponse.json(
+        { error: "Could not start embedded checkout session." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ clientSecret: session.client_secret });
+  }
+
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId ?? undefined,
     customer_email: customerId ? undefined : user.email ?? undefined,
     line_items: [{ price: priceId, quantity: 1 }],
-    branding_settings: {
-      display_name: getCheckoutDisplayName(),
-    },
+    branding_settings: branding,
     subscription_data: {
       metadata: { supabase_user_id: user.id, plan },
     },

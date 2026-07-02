@@ -85,7 +85,7 @@ export function BillingCard() {
             Manage billing
           </Button>
         ) : (
-          <Link href="/pricing">
+          <Link href="/pricing/checkout?plan=starter">
             <Button size="sm">View plans — from $149/mo</Button>
           </Link>
         )}
