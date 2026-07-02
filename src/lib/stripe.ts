@@ -56,6 +56,10 @@ export function getStripePriceId(plan: BillingPlan = "starter"): string | null {
   );
 }
 
+export function getCheckoutDisplayName(): string {
+  return process.env.STRIPE_CHECKOUT_DISPLAY_NAME?.trim() || "Property Pilot";
+}
+
 export function getAppUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");

@@ -3,6 +3,7 @@ import {
   getStripe,
   getStripePriceId,
   getAppUrl,
+  getCheckoutDisplayName,
   isStripeConfigured,
   type BillingPlan,
 } from "@/lib/stripe";
@@ -81,6 +82,9 @@ export async function POST(req: NextRequest) {
     customer: customerId ?? undefined,
     customer_email: customerId ? undefined : user.email ?? undefined,
     line_items: [{ price: priceId, quantity: 1 }],
+    branding_settings: {
+      display_name: getCheckoutDisplayName(),
+    },
     subscription_data: {
       metadata: { supabase_user_id: user.id, plan },
     },
