@@ -51,7 +51,7 @@ export function ReportsPageContent() {
       <PageContent>
         <EmptyState
           icon={FileText}
-          title="Reports unlock after your first scan"
+          title="Reports unlock after your first inspection"
           description="Compliance summaries and exports are generated from your inspection data."
           actionLabel="Upload inspection"
         />

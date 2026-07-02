@@ -13,7 +13,7 @@ import {
 
 const tabs = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: "/dashboard" },
-  { href: "/dashboard/inspections", label: "Scans", icon: Video, match: "/dashboard/inspections" },
+  { href: "/dashboard/inspections", label: "Inspections", icon: Video, match: "/dashboard/inspections" },
   { href: "/dashboard/inspections/upload", label: "Upload", icon: Plus, primary: true },
   { href: "/dashboard/properties", label: "Homes", icon: Home, match: "/dashboard/properties" },
   { href: "/dashboard/violations", label: "Alerts", icon: AlertTriangle, match: "/dashboard/violations" },

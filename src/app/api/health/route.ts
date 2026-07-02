@@ -17,7 +17,7 @@ export async function GET() {
 
   if (supabase && !serviceRole) {
     supabaseMessage =
-      "Missing SUPABASE_SERVICE_ROLE_KEY — scans may not save. Add it in Vercel env vars.";
+      "Missing SUPABASE_SERVICE_ROLE_KEY — inspections may not save. Add it in Vercel env vars.";
   }
 
   if (supabase && serviceRole) {
@@ -42,7 +42,9 @@ export async function GET() {
       openai = false;
       const msg = err instanceof Error ? err.message : "Unknown error";
       if (msg.includes("401") || msg.includes("Incorrect API key")) {
-        openaiMessage = "Invalid API key — create a new key at platform.openai.com";
+        openaiMessage =
+          "Invalid API key — create a new key at platform.openai.com. " +
+          "In Vercel, paste the key with no quotes or extra spaces, then redeploy.";
       } else if (msg.includes("429")) {
         openaiMessage = "Rate limit or billing issue — check OpenAI billing";
       } else {

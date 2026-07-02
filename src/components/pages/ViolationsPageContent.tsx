@@ -32,7 +32,7 @@ export function ViolationsPageContent() {
         <EmptyState
           icon={AlertTriangle}
           title="No violations flagged"
-          description="When AI detects compliance issues during a scan, they'll show up here for your review."
+          description="When AI detects compliance issues during an inspection, they'll show up here for your review."
         />
       </PageContent>
     );
@@ -71,6 +71,6 @@ export function ViolationsPageContent() {
 
 export function getViolationsSubtitle(isDemo: boolean, pending: number, total: number) {
   if (isDemo) return `${pending} pending · ${total} total`;
-  if (total === 0) return "Flags from your scans";
+  if (total === 0) return "Flags from your inspections";
   return `${pending} pending · ${total} total`;
 }

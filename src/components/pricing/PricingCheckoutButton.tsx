@@ -4,15 +4,18 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Loader2 } from "lucide-react";
+import type { BillingPlan } from "@/lib/stripe";
 
 interface PricingCheckoutButtonProps {
   variant?: "primary" | "secondary";
   label: string;
+  plan?: BillingPlan;
 }
 
 export function PricingCheckoutButton({
   variant = "primary",
   label,
+  plan = "starter",
 }: PricingCheckoutButtonProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -20,7 +23,11 @@ export function PricingCheckoutButton({
   async function handleClick() {
     setLoading(true);
     try {
-      const res = await fetch("/api/stripe/checkout", { method: "POST" });
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
       const data = await res.json();
       if (res.status === 401) {
         router.push("/signup");

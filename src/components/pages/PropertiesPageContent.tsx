@@ -129,5 +129,5 @@ export function PropertiesPageContent() {
 
 export function getPropertiesSubtitle(isDemo: boolean, count: number) {
   if (isDemo) return `${count} homes in Willow Creek Estates`;
-  return count > 0 ? `${count} homes found from your scans` : "Upload a video to discover homes";
+  return count > 0 ? `${count} homes found from your inspections` : "Upload a video to discover homes";
 }

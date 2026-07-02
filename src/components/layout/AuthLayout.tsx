@@ -19,7 +19,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
               HOA inspections, without the clip-by-clip grind.
             </h2>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-400">
-              Upload a drive-through video. AI scans every property and prepares
+              Upload a drive-through video. AI inspects every property and prepares
               compliance reports for your review.
             </p>
           </div>

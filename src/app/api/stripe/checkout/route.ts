@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getStripe, getStripePriceId, getAppUrl, isStripeConfigured } from "@/lib/stripe";
+import {
+  getStripe,
+  getStripePriceId,
+  getAppUrl,
+  isStripeConfigured,
+  type BillingPlan,
+} from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export async function POST(_req: NextRequest) {
+function parsePlan(value: unknown): BillingPlan {
+  return value === "professional" ? "professional" : "starter";
+}
+
+export async function POST(req: NextRequest) {
   if (!isStripeConfigured()) {
     return NextResponse.json(
       { error: "Stripe is not configured. Add STRIPE_SECRET_KEY to environment." },
@@ -23,12 +33,15 @@ export async function POST(_req: NextRequest) {
     return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   }
 
-  const priceId = getStripePriceId();
+  const body = await req.json().catch(() => ({}));
+  const plan = parsePlan(body?.plan);
+  const priceId = getStripePriceId(plan);
   if (!priceId) {
+    const envName =
+      plan === "professional" ? "STRIPE_PRICE_PRO" : "STRIPE_PRICE_STARTER";
     return NextResponse.json(
       {
-        error:
-          "STRIPE_PRICE_ID missing. In Stripe, open your product → copy the Price ID (price_...), not the Product ID (prod_...).",
+        error: `${envName} missing. In Stripe, open your product → copy the Price ID (price_...), not the Product ID (prod_...).`,
       },
       { status: 503 }
     );
@@ -67,9 +80,9 @@ export async function POST(_req: NextRequest) {
     customer_email: customerId ? undefined : user.email ?? undefined,
     line_items: [{ price: priceId, quantity: 1 }],
     subscription_data: {
-      metadata: { supabase_user_id: user.id, plan: "standard" },
+      metadata: { supabase_user_id: user.id, plan },
     },
-    metadata: { supabase_user_id: user.id, plan: "standard" },
+    metadata: { supabase_user_id: user.id, plan },
     success_url: `${appUrl}/dashboard/settings?billing=success`,
     cancel_url: `${appUrl}/pricing?billing=canceled`,
   });

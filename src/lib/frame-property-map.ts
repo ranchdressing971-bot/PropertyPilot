@@ -19,7 +19,13 @@ export interface DiscoveredHome {
 }
 
 /** Min seconds between distinct homes in a slow drive-through. */
-const TEMPORAL_GAP_SEC = 4;
+const TEMPORAL_GAP_SEC = 6;
+
+function stablePropertyId(address: string, rosterId?: string): string {
+  if (rosterId && !rosterId.startsWith("found-")) return rosterId;
+  const key = addressDedupeKey(address);
+  return `addr-${key.replace(/\|/g, "-")}`;
+}
 
 function formatVideoTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -152,7 +158,7 @@ export function dedupeProperties(
   }
 
   return merged.map((g, i) =>
-    candidateToProperty(g, hood, g.id ?? `found-${i + 1}`)
+    candidateToProperty(g, hood, stablePropertyId(g.address, g.id ?? `found-${i + 1}`))
   );
 }
 
@@ -341,6 +347,13 @@ export function supplementPropertiesFromFrames(
 
     const slot = Math.floor(frame.timestamp / TEMPORAL_GAP_SEC);
     if (covered.has(slot)) continue;
+
+    const overlapsKnown = existing.some((prop) => {
+      const knownFrame = frameForImage(frames, prop.image);
+      if (!knownFrame) return false;
+      return Math.abs(knownFrame.timestamp - frame.timestamp) < TEMPORAL_GAP_SEC;
+    });
+    if (overlapsKnown) continue;
 
     covered.add(slot);
     extras.push({

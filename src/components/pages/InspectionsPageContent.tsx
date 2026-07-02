@@ -40,7 +40,7 @@ export function InspectionsPageContent() {
       {list.length === 0 ? (
         <EmptyState
           icon={Video}
-          title="No scans on file"
+          title="No inspections on file"
           description="Upload a drive-through video and AI will analyze every property along the route."
         />
       ) : (

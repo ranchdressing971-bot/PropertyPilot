@@ -26,7 +26,7 @@ export function AIInsights({ insights, empty }: AIInsightsProps) {
       ) : (
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <InsightCell label="Top violation" value={insights.mostCommonViolation} />
-          <InsightCell label="Avg scan time" value={insights.avgInspectionTime} />
+          <InsightCell label="Avg inspection time" value={insights.avgInspectionTime} />
           <div className="rounded-lg bg-ink-50 p-3.5 sm:col-span-2">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
               Compliance

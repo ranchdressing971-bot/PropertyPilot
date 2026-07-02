@@ -51,7 +51,7 @@ export async function saveAIInspection(
   store.set(lean.id, lean);
   const userId = await getAuthenticatedUserId();
   if (!userId) {
-    return { ok: false, error: "Not signed in — log in before running Live scans." };
+    return { ok: false, error: "Not signed in — log in before running live inspections." };
   }
 
   const result = await persistInspection(userId, lean);

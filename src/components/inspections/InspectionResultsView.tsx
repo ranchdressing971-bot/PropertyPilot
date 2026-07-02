@@ -135,9 +135,12 @@ export function InspectionResultsView({ id }: { id: string }) {
             </div>
             {data.usedVideoFrames && (
               <span className="text-xs text-accent-700/80">
-                {data.propertiesScanned ?? data.results.length} homes found ·{" "}
+                {data.propertiesScanned ?? data.results.length} new homes ·{" "}
                 {data.frameCount ?? 0} frames
                 {data.usedGpsPipeline ? " · GPS-assisted matching" : ""}
+                {(data.previouslyInspectedCount ?? 0) > 0
+                  ? ` · ${data.previouslyInspectedCount} already inspected`
+                  : ""}
               </span>
             )}
           </motion.div>

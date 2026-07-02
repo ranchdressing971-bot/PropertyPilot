@@ -12,6 +12,7 @@ export interface InspectionDisplayData {
   usedVideoFrames?: boolean;
   usedGpsPipeline?: boolean;
   addressReviews?: AddressReviewItem[];
+  previouslyInspectedCount?: number;
   results: {
     propertyId: string;
     property: Property;
@@ -37,6 +38,7 @@ export function formatInspectionForDisplay(
     usedVideoFrames: aiInspection.usedVideoFrames,
     usedGpsPipeline: aiInspection.usedGpsPipeline,
     addressReviews: aiInspection.addressReviews,
+    previouslyInspectedCount: aiInspection.previouslyInspectedCount,
     results: aiInspection.results.map((r) => {
       const violation =
         aiInspection.violations.find((v) => v.propertyId === r.propertyId) ?? null;
@@ -58,6 +60,8 @@ export function formatInspectionForDisplay(
           addressConfidence: review?.confidence,
           needsAddressReview: review?.needsReview,
           addressMatchReason: review?.reasoning,
+          previouslyInspected: r.previouslyInspected,
+          priorInspectionDate: r.priorInspectionDate,
         },
         violation,
       };

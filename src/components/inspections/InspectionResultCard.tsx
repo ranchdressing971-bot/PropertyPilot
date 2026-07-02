@@ -63,6 +63,12 @@ export function InspectionResultCard({
             </h3>
             <div className="flex flex-wrap items-center gap-2">
               <Badge status={property.status} />
+              {property.previouslyInspected && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  Previously inspected
+                  {property.priorInspectionDate ? ` · ${property.priorInspectionDate}` : ""}
+                </span>
+              )}
               {property.needsAddressReview && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
                   <MapPin className="h-3 w-3" />

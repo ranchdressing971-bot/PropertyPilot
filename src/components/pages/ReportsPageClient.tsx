@@ -12,7 +12,7 @@ export function ReportsPageClient() {
     <DashboardLayout>
       <Header
         title="Reports"
-        subtitle={isDemo ? "Sample compliance exports" : "Generated from your scans"}
+        subtitle={isDemo ? "Sample compliance exports" : "Generated from your inspections"}
       />
       <ReportsPageContent />
     </DashboardLayout>

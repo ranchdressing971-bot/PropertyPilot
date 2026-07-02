@@ -12,7 +12,7 @@ export function InspectionsPageClient() {
     <DashboardLayout>
       <Header
         title="Inspections"
-        subtitle={isDemo ? "Sample drive-through scans" : "Your uploaded scans"}
+        subtitle={isDemo ? "Sample drive-through inspections" : "Your uploaded inspections"}
       />
       <InspectionsPageContent />
     </DashboardLayout>

@@ -24,6 +24,10 @@ export interface Property {
   addressConfidence?: number;
   needsAddressReview?: boolean;
   addressMatchReason?: string;
+  /** Matched a home from a prior saved inspection */
+  previouslyInspected?: boolean;
+  priorInspectionDate?: string;
+  priorInspectionId?: string;
 }
 
 export interface Violation {

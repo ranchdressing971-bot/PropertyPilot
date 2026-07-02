@@ -1,13 +1,16 @@
 import OpenAI from "openai";
+import { getOpenAIApiKey } from "./openai-env";
 
 let client: OpenAI | null = null;
 
+export { getOpenAIApiKey } from "./openai-env";
+
 export function getOpenAI(): OpenAI {
+  const apiKey = getOpenAIApiKey();
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
   if (!client) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is not configured");
-    }
     client = new OpenAI({ apiKey });
   }
   return client;

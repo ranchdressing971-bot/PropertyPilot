@@ -1,3 +1,5 @@
+import { getOpenAIApiKey } from "@/lib/openai-env";
+
 export type AppMode = "demo" | "live";
 
 export const MODE_STORAGE_KEY = "property-pilot-mode";
@@ -11,5 +13,5 @@ export function isSupabaseConfigured(): boolean {
 }
 
 export function isOpenAIConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+  return Boolean(getOpenAIApiKey());
 }

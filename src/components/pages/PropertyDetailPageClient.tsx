@@ -189,14 +189,14 @@ export function PropertyDetailPageClient({
                 Inspection history
               </h3>
               {propertyInspections.length === 0 && !inspectionId ? (
-                <p className="mt-3 text-sm text-ink-500">No scans yet.</p>
+                <p className="mt-3 text-sm text-ink-500">No inspections yet.</p>
               ) : (
                 <div className="mt-4 space-y-2">
                   {inspectionId && propertyInspections.length === 0 && (
                     <div className="flex items-center justify-between rounded-lg border border-ink-100 px-3 py-2.5">
                       <div className="flex items-center gap-3">
                         <Calendar className="h-4 w-4 text-ink-400" />
-                        <p className="text-sm font-medium text-ink-900">Current scan</p>
+                        <p className="text-sm font-medium text-ink-900">Current inspection</p>
                       </div>
                       <Link href={`/dashboard/inspections/${inspectionId}`}>
                         <Button variant="ghost" size="sm">
@@ -265,7 +265,7 @@ export function PropertyDetailPageClient({
               </div>
               <div className="mt-4 space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-ink-500">Last scan</span>
+                  <span className="text-ink-500">Last inspection</span>
                   <span className="font-medium">{property.lastInspection}</span>
                 </div>
                 <div className="flex justify-between">

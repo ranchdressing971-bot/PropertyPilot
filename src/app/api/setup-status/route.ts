@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthenticatedUserId } from "@/lib/supabase/persist";
+import { getOpenAIApiKey } from "@/lib/openai-env";
 
 export async function GET() {
   const userId = await getAuthenticatedUserId();
@@ -13,7 +14,7 @@ export async function GET() {
       supabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
       supabaseAnon: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
       serviceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-      openai: Boolean(process.env.OPENAI_API_KEY?.trim()),
+      openai: Boolean(getOpenAIApiKey()),
     },
     auth: {
       signedIn: Boolean(userId),
@@ -40,7 +41,7 @@ export async function GET() {
   }
 
   if (!status.auth.signedIn) {
-    status.fixes.push("Sign in before running Live scans — guest sessions cannot save to the database.");
+    status.fixes.push("Sign in before running live inspections — guest sessions cannot save to the database.");
   }
 
   if (admin) {

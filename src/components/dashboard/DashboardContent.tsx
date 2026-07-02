@@ -41,7 +41,7 @@ export function DashboardContent() {
         <EmptyState
           icon={Video}
           title="No inspections yet"
-          description="Upload a neighborhood drive-through video to run your first AI-powered scan."
+          description="Upload a neighborhood drive-through video to run your first AI-powered inspection."
           actionLabel="Upload video"
         />
       </PageContent>
@@ -55,7 +55,7 @@ export function DashboardContent() {
           <Link href="/dashboard/inspections/upload">
             <Button size="sm">
               <Upload className="h-4 w-4" />
-              New scan
+              New inspection
             </Button>
           </Link>
         </div>

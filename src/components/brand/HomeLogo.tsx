@@ -27,17 +27,19 @@ export function HomeLogo({
   className,
 }: HomeLogoProps) {
   const { icon, text } = sizes[size];
-  const imgClass = "shrink-0 rounded-xl object-contain";
 
   const content = (
     <div className={clsx("flex items-center gap-3", className)}>
-      <span className="relative inline-flex" style={{ width: icon, height: icon }}>
+      <span
+        className="relative inline-flex shrink-0 overflow-hidden rounded-full ring-2 ring-black dark:ring-white"
+        style={{ width: icon, height: icon }}
+      >
         <Image
           src="/logo.png"
           alt="Property Pilot"
           width={icon}
           height={icon}
-          className={clsx(imgClass, "dark:hidden")}
+          className="h-full w-full object-cover dark:hidden"
           priority
         />
         <Image
@@ -45,7 +47,7 @@ export function HomeLogo({
           alt=""
           width={icon}
           height={icon}
-          className={clsx(imgClass, "hidden dark:block")}
+          className="hidden h-full w-full object-cover dark:block"
           priority
           aria-hidden
         />

@@ -8,6 +8,8 @@ export interface AIPropertyResult {
   recommendation: string;
   reasoning: string;
   rule: string;
+  previouslyInspected?: boolean;
+  priorInspectionDate?: string;
 }
 
 export interface AddressReviewItem {
@@ -38,6 +40,8 @@ export interface AIInspectionData {
   addressReviews?: AddressReviewItem[];
   /** HTTPS URLs for property frame thumbnails (keyed by propertyId) */
   propertyImages?: Record<string, string>;
+  /** Homes skipped because they were already inspected in a prior session */
+  previouslyInspectedCount?: number;
 }
 
 const VIOLATION_RULES: Record<string, string> = {

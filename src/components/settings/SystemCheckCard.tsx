@@ -37,7 +37,7 @@ export function SystemCheckCard() {
     <Card>
       <h3 className="font-display text-sm font-semibold text-ink-900">System check</h3>
       <p className="mt-1 text-sm text-ink-500">
-        Verifies Supabase, sign-in, and that scans can save.
+        Verifies Supabase, sign-in, and that inspections can save.
       </p>
 
       {loading ? (
@@ -84,7 +84,7 @@ export function SystemCheckCard() {
           {status.ok && (
             <p className="flex items-center gap-2 text-sm text-emerald-700">
               <CheckCircle2 className="h-4 w-4" />
-              All checks passed — scans should save and survive refresh.
+              All checks passed — inspections should save and survive refresh.
             </p>
           )}
         </div>

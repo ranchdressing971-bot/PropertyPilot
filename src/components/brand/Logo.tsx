@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import clsx from "clsx";
 
@@ -10,9 +11,9 @@ interface LogoProps {
 }
 
 const sizes = {
-  sm: { text: "text-base", icon: "h-7 w-7 text-xs" },
-  md: { text: "text-lg", icon: "h-8 w-8 text-sm" },
-  lg: { text: "text-xl", icon: "h-9 w-9 text-sm" },
+  sm: { text: "text-base", icon: 28 },
+  md: { text: "text-lg", icon: 32 },
+  lg: { text: "text-xl", icon: 36 },
 };
 
 export function Logo({
@@ -28,15 +29,20 @@ export function Logo({
     <div className={clsx("flex items-center gap-2.5", className)}>
       <span
         className={clsx(
-          "flex shrink-0 items-center justify-center rounded-xl font-semibold",
-          icon,
-          variant === "light"
-            ? "bg-brand-600 text-white shadow-sm"
-            : "bg-ink-900 text-white shadow-sm"
+          "relative inline-flex shrink-0 overflow-hidden rounded-full ring-2 ring-black",
+          variant === "light" && "ring-white"
         )}
+        style={{ width: icon, height: icon }}
         aria-hidden
       >
-        P
+        <Image
+          src="/logo.png"
+          alt=""
+          width={icon}
+          height={icon}
+          className="h-full w-full object-cover"
+          priority
+        />
       </span>
       {showText && (
         <span
@@ -54,7 +60,7 @@ export function Logo({
 
   if (href) {
     return (
-      <Link href={href} className="inline-flex shrink-0">
+      <Link href={href} className="inline-flex shrink-0" aria-label="Property Pilot home">
         {content}
       </Link>
     );

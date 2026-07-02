@@ -45,7 +45,7 @@ export default function HomePage() {
                 Review every home.
               </h1>
               <p className="mt-5 max-w-lg text-base leading-relaxed text-ink-500 sm:text-lg">
-                Upload a neighborhood drive-through. AI scans each property and
+                Upload a neighborhood drive-through. AI inspects each property and
                 prepares violation reports for your review — no clip-by-clip work.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -54,7 +54,7 @@ export default function HomePage() {
                   Explore demo
                 </Button>
                 <Button variant="secondary" size="lg" onClick={startLive}>
-                  Start free — 3 scans
+                  Start free — 3 inspections
                 </Button>
               </div>
               <ul className="mt-8 flex flex-col gap-2 text-sm text-ink-600 sm:flex-row sm:gap-6">
@@ -77,7 +77,7 @@ export default function HomePage() {
                       <Video className="h-5 w-5 text-white" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">Willow Creek scan</p>
+                      <p className="text-sm font-medium">Willow Creek inspection</p>
                       <p className="text-xs text-ink-400">12 properties · 2 flags</p>
                     </div>
                   </div>
@@ -142,7 +142,7 @@ export default function HomePage() {
           <div>
             <h2 className="text-2xl font-semibold tracking-tight">Ready to pilot?</h2>
             <p className="mt-2 max-w-md text-sm text-ink-400">
-              Demo with sample data, or start with 3 free live scans.
+              Demo with sample data, or start with 3 free live inspections.
             </p>
           </div>
           <Link href="/signup">

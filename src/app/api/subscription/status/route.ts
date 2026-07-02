@@ -2,11 +2,22 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
   canRunLiveInspection,
-  getTrialScanUsage,
+  getTrialInspectionUsage,
   getUserSubscription,
   hasActiveSubscription,
 } from "@/lib/subscription";
-import { FREE_TRIAL_SCANS, isStripeConfigured, PLAN_PRICE_LABEL } from "@/lib/stripe";
+import {
+  FREE_TRIAL_INSPECTIONS,
+  isStripeConfigured,
+  PLANS,
+  type BillingPlan,
+} from "@/lib/stripe";
+
+function planPriceLabel(plan: string | null): string {
+  if (plan === "professional") return PLANS.professional.priceLabel;
+  if (plan === "starter") return PLANS.starter.priceLabel;
+  return PLANS.starter.priceLabel;
+}
 
 export async function GET() {
   const supabase = await createClient();
@@ -22,16 +33,20 @@ export async function GET() {
   }
 
   const sub = await getUserSubscription(user.id);
-  const trial = await getTrialScanUsage(user.id);
+  const trial = await getTrialInspectionUsage(user.id);
   const access = await canRunLiveInspection(user.id);
+  const plan = (sub.plan as BillingPlan | null) ?? "starter";
 
   return NextResponse.json({
     stripeConfigured: isStripeConfigured(),
     subscribed: hasActiveSubscription(sub.status),
     status: sub.status,
     plan: sub.plan,
-    price: PLAN_PRICE_LABEL,
-    trialScansLimit: FREE_TRIAL_SCANS,
+    price: planPriceLabel(sub.plan),
+    trialInspectionsLimit: FREE_TRIAL_INSPECTIONS,
+    trialInspectionsUsed: trial.used,
+    trialInspectionsRemaining: trial.remaining,
+    trialScansLimit: FREE_TRIAL_INSPECTIONS,
     trialScansUsed: trial.used,
     trialScansRemaining: trial.remaining,
     canRunLiveInspection: access.allowed,

@@ -15,7 +15,7 @@ import { isOpenAIConfigured } from "@/lib/app-mode";
 import type { Property } from "@/lib/mock-data";
 import { getAuthenticatedUserId, logAudit } from "@/lib/supabase/persist";
 import { persistEvidenceImages, persistPropertyThumbnails } from "@/lib/supabase/evidence-storage";
-import { canRunLiveInspection } from "@/lib/subscription";
+import { canRunLiveInspection, getUserSubscription, hasActiveSubscription } from "@/lib/subscription";
 import { getServerRoster, setServerRoster } from "@/lib/roster-server";
 import { rulesToMap, DEFAULT_CCR_RULES } from "@/lib/ccr-rules";
 import type { AddressReviewItem } from "@/lib/ai-analyze";
@@ -32,6 +32,10 @@ import {
   mergePropertyLists,
   dedupeProperties,
 } from "@/lib/frame-property-map";
+import {
+  loadPriorInspectedAddresses,
+  separatePriorInspected,
+} from "@/lib/prior-inspections";
 
 export const maxDuration = 60;
 
@@ -240,20 +244,47 @@ export async function POST(request: NextRequest) {
       scanProperties = demoProperties;
     }
 
+    const priorMap = userId
+      ? await loadPriorInspectedAddresses(userId, id)
+      : new Map();
+    const { newProperties, skipped: priorSkipped } = separatePriorInspected(
+      scanProperties,
+      priorMap
+    );
+
+    const subscription = userId ? await getUserSubscription(userId) : null;
+    const isPro =
+      hasActiveSubscription(subscription?.status ?? "none") &&
+      subscription?.plan === "professional";
+    const homeLimit = isPro ? 200 : 50;
+    const propertiesToAnalyze = newProperties.slice(0, homeLimit);
+
     const batches: Property[][] = [];
-    for (let i = 0; i < scanProperties.length; i += BATCH_SIZE) {
-      batches.push(scanProperties.slice(i, i + BATCH_SIZE));
+    for (let i = 0; i < propertiesToAnalyze.length; i += BATCH_SIZE) {
+      batches.push(propertiesToAnalyze.slice(i, i + BATCH_SIZE));
     }
 
     const batchResults = await Promise.all(
       batches.map((batch) => analyzeBatch(batch, ruleMap))
     );
-    const results = batchResults.flat();
+    const skippedResults: AIPropertyResult[] = priorSkipped.map((prop) => ({
+      propertyId: prop.id,
+      address: prop.address,
+      violationType: null,
+      confidence: 0,
+      recommendation: "",
+      reasoning: `Previously inspected on ${prop.priorInspectionDate ?? "a prior drive-through"}. Skipped re-analysis.`,
+      rule: "",
+      previouslyInspected: true,
+      priorInspectionDate: prop.priorInspectionDate,
+    }));
+    const results = [...batchResults.flat(), ...skippedResults];
+    const allProperties = [...propertiesToAnalyze, ...priorSkipped];
 
     const violations = buildViolationsFromAI(id, results, ruleMap);
 
     violations.forEach((v) => {
-      const prop = scanProperties.find((p) => p.id === v.propertyId);
+      const prop = allProperties.find((p) => p.id === v.propertyId);
       if (prop?.image) {
         v.evidenceImages = [prop.image];
       }
@@ -263,7 +294,7 @@ export async function POST(request: NextRequest) {
     let storedViolations = violations;
 
     if (userId) {
-      propertyImages = await persistPropertyThumbnails(userId, id, scanProperties);
+      propertyImages = await persistPropertyThumbnails(userId, id, allProperties);
       storedViolations = await persistEvidenceImages(userId, id, violations);
     }
 
@@ -282,6 +313,7 @@ export async function POST(request: NextRequest) {
       usedGpsPipeline,
       addressReviews: addressReviews.length > 0 ? addressReviews : undefined,
       propertyImages,
+      previouslyInspectedCount: priorSkipped.length,
     };
 
     const lean = stripInspectionForStorage(inspection);
@@ -290,7 +322,8 @@ export async function POST(request: NextRequest) {
     if (userId) {
       await logAudit(userId, "inspection_complete", "inspection", id, {
         violationsFound: violations.length,
-        propertiesScanned: scanProperties.length,
+        propertiesScanned: propertiesToAnalyze.length,
+        previouslyInspected: priorSkipped.length,
         frameCount,
         addressMatches,
         usedVideoFrames: Boolean(frames?.length),
@@ -305,7 +338,8 @@ export async function POST(request: NextRequest) {
       id,
       mode: "live",
       violationsFound: violations.length,
-      propertiesScanned: scanProperties.length,
+      propertiesScanned: propertiesToAnalyze.length,
+      previouslyInspected: priorSkipped.length,
       frameCount,
       addressMatches,
       usedVideoFrames: Boolean(frames?.length),

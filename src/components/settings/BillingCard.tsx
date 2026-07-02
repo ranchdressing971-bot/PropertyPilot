@@ -4,13 +4,15 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { CreditCard, Loader2, ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 interface SubStatus {
   subscribed: boolean;
   status: string;
-  trialScansUsed: number;
-  trialScansRemaining: number;
-  trialScansLimit: number;
+  plan: string | null;
+  trialInspectionsUsed: number;
+  trialInspectionsRemaining: number;
+  trialInspectionsLimit: number;
   price: string;
 }
 
@@ -28,21 +30,6 @@ export function BillingCard() {
       })
       .catch(() => setLoading(null));
   }, []);
-
-  async function startCheckout() {
-    setLoading("checkout");
-    setError(null);
-    try {
-      const res = await fetch("/api/stripe/checkout", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Checkout failed");
-      if (data.url) window.location.href = data.url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Checkout failed");
-    } finally {
-      setLoading(null);
-    }
-  }
 
   async function openPortal() {
     setLoading("portal");
@@ -79,8 +66,8 @@ export function BillingCard() {
             {subscribed
               ? `${sub?.price ?? "$149/mo"} · ${sub?.status}`
               : sub
-                ? `${sub.trialScansRemaining} of ${sub.trialScansLimit} free scans left · then ${sub.price}`
-                : "$149/mo after 3 free scans"}
+                ? `${sub.trialInspectionsRemaining} of ${sub.trialInspectionsLimit} free inspections left`
+                : "3 free inspections, then choose a plan"}
           </p>
         </div>
       </div>
@@ -98,10 +85,9 @@ export function BillingCard() {
             Manage billing
           </Button>
         ) : (
-          <Button size="sm" onClick={startCheckout} disabled={!!loading}>
-            {loading === "checkout" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Subscribe — $149/mo
-          </Button>
+          <Link href="/pricing">
+            <Button size="sm">View plans — from $149/mo</Button>
+          </Link>
         )}
       </div>
     </Card>

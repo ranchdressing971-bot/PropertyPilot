@@ -19,7 +19,7 @@ export default function OnboardingPage() {
             <Sparkles className="h-6 w-6 text-accent-600" />
           </div>
           <h1 className="mt-4 font-display text-2xl font-semibold text-ink-900">
-            You&apos;re ready to scan
+            You&apos;re ready to inspect
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
             Upload a drive-through video of {hoaName}. AI will read house

@@ -38,7 +38,7 @@ const LIVE_STEPS = [
   "Reading your video...",
   "Capturing GPS & frames...",
   "Matching mailbox numbers...",
-  "Running compliance scan...",
+  "Running compliance check...",
   "Generating report...",
 ];
 
@@ -162,7 +162,7 @@ export default function UploadPage() {
         if (!data.saved) {
           setError(
             data.saveError ??
-              "Scan completed but could not save to database. Open Settings → System check, or run docs/FIX_SUPABASE.sql in Supabase."
+              "Inspection completed but could not save to database. Open Settings → System check, or run docs/FIX_SUPABASE.sql in Supabase."
           );
           setIsProcessing(false);
           return;
@@ -263,7 +263,7 @@ export default function UploadPage() {
                       {isDemo ? (
                         <>
                           <FlaskConical className="h-3.5 w-3.5" />
-                          Demo scan
+                          Demo inspection
                         </>
                       ) : (
                         <>

@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { FREE_TRIAL_SCANS, isStripeConfigured } from "@/lib/stripe";
+import { FREE_TRIAL_INSPECTIONS, isStripeConfigured } from "@/lib/stripe";
 
 export type SubscriptionStatus =
   | "active"
@@ -54,7 +54,7 @@ export function hasActiveSubscription(status: SubscriptionStatus): boolean {
   return status === "active" || status === "trialing";
 }
 
-export async function getTrialScanUsage(userId: string): Promise<{
+export async function getTrialInspectionUsage(userId: string): Promise<{
   used: number;
   remaining: number;
   limit: number;
@@ -62,16 +62,19 @@ export async function getTrialScanUsage(userId: string): Promise<{
   const used = await countCompletedInspections(userId);
   return {
     used,
-    remaining: Math.max(0, FREE_TRIAL_SCANS - used),
-    limit: FREE_TRIAL_SCANS,
+    remaining: Math.max(0, FREE_TRIAL_INSPECTIONS - used),
+    limit: FREE_TRIAL_INSPECTIONS,
   };
 }
 
-/** Live scans: 3 free, then $149/mo subscription when Stripe is configured. */
+/** @deprecated Use getTrialInspectionUsage */
+export const getTrialScanUsage = getTrialInspectionUsage;
+
+/** Live inspections: 3 free, then subscription when Stripe is configured. */
 export async function canRunLiveInspection(userId: string | null): Promise<{
   allowed: boolean;
   reason?: string;
-  scansRemaining?: number;
+  inspectionsRemaining?: number;
 }> {
   if (!isStripeConfigured()) {
     return { allowed: true };
@@ -86,13 +89,13 @@ export async function canRunLiveInspection(userId: string | null): Promise<{
     return { allowed: true };
   }
 
-  const { used, remaining } = await getTrialScanUsage(userId);
-  if (used < FREE_TRIAL_SCANS) {
-    return { allowed: true, scansRemaining: remaining };
+  const { used, remaining } = await getTrialInspectionUsage(userId);
+  if (used < FREE_TRIAL_INSPECTIONS) {
+    return { allowed: true, inspectionsRemaining: remaining };
   }
 
   return {
     allowed: false,
-    reason: `You've used all ${FREE_TRIAL_SCANS} free scans. Subscribe for $149/mo to continue.`,
+    reason: `You've used all ${FREE_TRIAL_INSPECTIONS} free inspections. Subscribe to continue.`,
   };
 }

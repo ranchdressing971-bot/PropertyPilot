@@ -81,7 +81,7 @@ function SignupForm() {
   return (
     <Card className="w-full max-w-md" padding="lg">
       <h1 className="font-display text-xl font-semibold text-ink-900">Create account</h1>
-      <p className="mt-1 text-sm text-ink-500">3 free scans · then $149/mo</p>
+      <p className="mt-1 text-sm text-ink-500">3 free inspections · plans from $149/mo</p>
 
       {!supabaseReady && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">

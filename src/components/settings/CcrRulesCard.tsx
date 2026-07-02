@@ -55,7 +55,7 @@ export function CcrRulesCard() {
         <div>
           <h3 className="font-semibold text-slate-900">CC&R Rules</h3>
           <p className="text-sm text-slate-500">
-            Toggle which violations AI should detect during scans
+            Toggle which violations AI should detect during inspections
           </p>
         </div>
       </div>
