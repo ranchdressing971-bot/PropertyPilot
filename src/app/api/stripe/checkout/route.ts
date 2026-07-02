@@ -38,7 +38,9 @@ export async function POST(req: NextRequest) {
   const priceId = getStripePriceId(plan);
   if (!priceId) {
     const envName =
-      plan === "professional" ? "STRIPE_PRICE_PRO" : "STRIPE_PRICE_STARTER";
+      plan === "professional"
+        ? "STRIPE_PRICE_PRO"
+        : "STRIPE_PRICE_STARTER or STRIPE_PRICE_ID";
     return NextResponse.json(
       {
         error: `${envName} missing. In Stripe, open your product → copy the Price ID (price_...), not the Product ID (prod_...).`,
