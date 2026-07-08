@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthenticatedUserId } from "@/lib/supabase/persist";
+import { getOpenAI } from "@/lib/openai";
 import { getOpenAIApiKey } from "@/lib/openai-env";
 
 export async function GET() {
@@ -9,13 +10,29 @@ export async function GET() {
   const supabase = await createClient();
   const admin = createAdminClient();
 
+  let openaiOk = Boolean(getOpenAIApiKey());
+  let openaiMessage = openaiOk ? "OpenAI key configured" : "OPENAI_API_KEY missing";
+  if (openaiOk) {
+    try {
+      await getOpenAI().models.list();
+      openaiMessage = "OpenAI key valid";
+    } catch (err) {
+      openaiOk = false;
+      const msg = err instanceof Error ? err.message : "OpenAI check failed";
+      openaiMessage = msg.includes("401") || msg.includes("Incorrect API key")
+        ? "Invalid OpenAI API key — paste a fresh key in Vercel and redeploy"
+        : msg;
+    }
+  }
+
   const status = {
     env: {
       supabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
       supabaseAnon: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
       serviceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-      openai: Boolean(getOpenAIApiKey()),
+      openai: openaiOk,
     },
+    openaiMessage,
     auth: {
       signedIn: Boolean(userId),
     },
@@ -27,6 +44,10 @@ export async function GET() {
     },
     fixes: [] as string[],
   };
+
+  if (!openaiOk) {
+    status.fixes.push(openaiMessage);
+  }
 
   if (!status.env.supabaseUrl || !status.env.supabaseAnon) {
     status.fixes.push(

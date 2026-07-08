@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { getOpenAIApiKey } from "./openai-env";
 
 let client: OpenAI | null = null;
+let cachedApiKey: string | null = null;
 
 export { getOpenAIApiKey } from "./openai-env";
 
@@ -10,8 +11,9 @@ export function getOpenAI(): OpenAI {
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not configured");
   }
-  if (!client) {
+  if (!client || cachedApiKey !== apiKey) {
     client = new OpenAI({ apiKey });
+    cachedApiKey = apiKey;
   }
   return client;
 }
