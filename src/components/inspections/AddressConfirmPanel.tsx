@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Check, Loader2, MapPin, Pencil } from "lucide-react";
+import { Check, Loader2, MapPin, Pencil, ShieldCheck } from "lucide-react";
 
 interface AddressConfirmPanelProps {
   inspectionId: string;
@@ -23,6 +23,7 @@ export function AddressConfirmPanel({
   const [value, setValue] = useState(address);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [verifiedNote, setVerifiedNote] = useState<string | null>(null);
 
   async function submit(confirmedAddress: string) {
     const trimmed = confirmedAddress.trim();
@@ -32,6 +33,7 @@ export function AddressConfirmPanel({
     }
     setLoading(true);
     setError(null);
+    setVerifiedNote(null);
     try {
       const res = await fetch(`/api/inspection/${inspectionId}/confirm-address`, {
         method: "POST",
@@ -42,6 +44,11 @@ export function AddressConfirmPanel({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not save address");
       onConfirmed(data.address ?? trimmed);
+      setVerifiedNote(
+        data.source === "roster"
+          ? "Matched your community roster"
+          : "Verified as a real street address"
+      );
       setEditing(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save address");
@@ -62,7 +69,8 @@ export function AddressConfirmPanel({
         ) : null}
       </p>
       <p className="mt-1 text-xs text-amber-900/80">
-        Check the mailbox digits in the photo. Fix the number if it&apos;s wrong.
+        Check the mailbox in the photo. We&apos;ll verify it&apos;s a real address
+        before saving.
       </p>
 
       {editing ? (
@@ -82,8 +90,12 @@ export function AddressConfirmPanel({
               onClick={() => submit(value)}
               className="flex-1"
             >
-              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-              Save
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ShieldCheck className="h-3.5 w-3.5" />
+              )}
+              {loading ? "Checking map…" : "Verify & save"}
             </Button>
             <Button
               size="sm"
@@ -112,7 +124,7 @@ export function AddressConfirmPanel({
             ) : (
               <Check className="h-3.5 w-3.5" />
             )}
-            Looks right
+            {loading ? "Checking map…" : "Looks right"}
           </Button>
           <Button
             size="sm"
@@ -124,6 +136,12 @@ export function AddressConfirmPanel({
             Fix number
           </Button>
           {error && <p className="w-full text-xs text-red-600">{error}</p>}
+          {verifiedNote && (
+            <p className="flex w-full items-center gap-1 text-xs text-brand-700">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              {verifiedNote}
+            </p>
+          )}
         </div>
       )}
     </div>
