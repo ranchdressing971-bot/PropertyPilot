@@ -1,5 +1,4 @@
 import type { ChatCompletionContentPart } from "openai/resources/chat/completions";
-import { getOpenAI } from "./openai";
 import {
   attachRosterMatches,
   buildAddressDetectionPrompt,
@@ -9,8 +8,10 @@ import {
 import type { DiscoveredHome } from "./frame-property-map";
 import type { Property } from "./mock-data";
 import { sanitizeImageDataUrl } from "./image-data-url";
+import { createChatCompletion, sleep } from "./openai-retry";
 
-const FRAMES_PER_VISION_CALL = 8;
+const FRAMES_PER_VISION_CALL = 4;
+const PAUSE_BETWEEN_BATCHES_MS = 1200;
 
 async function detectBatch(
   imageUrls: string[],
@@ -24,7 +25,14 @@ async function detectBatch(
     },
     ...imageUrls.flatMap((url, i) => {
       const clean = sanitizeImageDataUrl(url);
-      if (!clean) return [{ type: "text" as const, text: `Frame ${startIndex + i}: [invalid image]` }];
+      if (!clean) {
+        return [
+          {
+            type: "text" as const,
+            text: `Frame ${startIndex + i}: [invalid image]`,
+          },
+        ];
+      }
       return [
         { type: "text" as const, text: `Frame ${startIndex + i}:` },
         {
@@ -35,14 +43,20 @@ async function detectBatch(
     }),
   ];
 
-  const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content }],
-    response_format: { type: "json_object" },
-    max_tokens: 2000,
-  });
+  const response = await createChatCompletion(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content }],
+      response_format: { type: "json_object" },
+      max_tokens: 2000,
+    },
+    "address-detect"
+  );
 
-  const text = response.choices[0]?.message?.content ?? "{}";
+  const text =
+    "choices" in response
+      ? (response.choices[0]?.message?.content ?? "{}")
+      : "{}";
   const parsed = JSON.parse(text) as {
     detections?: {
       frameIndex: number;
@@ -55,10 +69,13 @@ async function detectBatch(
 
   const raw = (parsed.detections ?? []).map((d) => ({
     ...d,
-    frameIndex: d.frameIndex >= startIndex ? d.frameIndex : startIndex + d.frameIndex,
+    frameIndex:
+      d.frameIndex >= startIndex ? d.frameIndex : startIndex + d.frameIndex,
   }));
 
-  return roster.length > 0 ? attachRosterMatches(raw, roster) : raw.map((d) => ({ ...d, matchedPropertyId: null }));
+  return roster.length > 0
+    ? attachRosterMatches(raw, roster)
+    : raw.map((d) => ({ ...d, matchedPropertyId: null }));
 }
 
 /** Per-frame address OCR across the video */
@@ -69,6 +86,7 @@ export async function runAddressDetection(
   const all: AddressDetection[] = [];
 
   for (let i = 0; i < imageUrls.length; i += FRAMES_PER_VISION_CALL) {
+    if (i > 0) await sleep(PAUSE_BETWEEN_BATCHES_MS);
     const batch = imageUrls.slice(i, i + FRAMES_PER_VISION_CALL);
     const detections = await detectBatch(batch, i, roster);
     all.push(...detections);
@@ -81,9 +99,12 @@ export async function runAddressDetection(
 export async function runHomeDiscovery(
   imageUrls: string[]
 ): Promise<DiscoveredHome[]> {
-  const sample = imageUrls.length > 12
-    ? imageUrls.filter((_, i) => i % Math.ceil(imageUrls.length / 12) === 0)
-    : imageUrls;
+  const sample =
+    imageUrls.length > 8
+      ? imageUrls.filter(
+          (_, i) => i % Math.ceil(imageUrls.length / 8) === 0
+        )
+      : imageUrls;
 
   const content: ChatCompletionContentPart[] = [
     { type: "text", text: buildHomeDiscoveryPrompt(sample.length) },
@@ -102,14 +123,20 @@ export async function runHomeDiscovery(
     }),
   ];
 
-  const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content }],
-    response_format: { type: "json_object" },
-    max_tokens: 2000,
-  });
+  const response = await createChatCompletion(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content }],
+      response_format: { type: "json_object" },
+      max_tokens: 2000,
+    },
+    "home-discovery"
+  );
 
-  const text = response.choices[0]?.message?.content ?? "{}";
+  const text =
+    "choices" in response
+      ? (response.choices[0]?.message?.content ?? "{}")
+      : "{}";
   const parsed = JSON.parse(text) as { homes?: DiscoveredHome[] };
   return parsed.homes ?? [];
 }

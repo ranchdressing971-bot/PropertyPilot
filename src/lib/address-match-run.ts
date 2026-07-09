@@ -1,5 +1,4 @@
 import type { ChatCompletionContentPart } from "openai/resources/chat/completions";
-import { getOpenAI } from "./openai";
 import type { AddressCandidateContext } from "./geo/nearby-addresses";
 import { matchAddressToRoster, rosterByHouseNumber } from "./address-detect";
 import type { Property } from "./mock-data";
@@ -7,8 +6,11 @@ import type { ExtractedFrame } from "./video-frames";
 import { ADDRESS_REVIEW_THRESHOLD } from "./geo/types";
 import { sanitizeImageDataUrl } from "./image-data-url";
 import { extractHouseNumber } from "./address-normalize";
+import { createChatCompletion, sleep } from "./openai-retry";
 
-const FRAMES_PER_MATCH_CALL = 4;
+/** Smaller batches + pause between calls = stay under new-account TPM caps */
+const FRAMES_PER_MATCH_CALL = 2;
+const PAUSE_BETWEEN_BATCHES_MS = 1200;
 
 export interface AddressMatchResult {
   frameIndex: number;
@@ -106,14 +108,20 @@ async function matchBatch(
     ]),
   ];
 
-  const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content }],
-    response_format: { type: "json_object" },
-    max_tokens: 2000,
-  });
+  const response = await createChatCompletion(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content }],
+      response_format: { type: "json_object" },
+      max_tokens: 2000,
+    },
+    "address-match"
+  );
 
-  const text = response.choices[0]?.message?.content ?? "{}";
+  const text =
+    "choices" in response
+      ? (response.choices[0]?.message?.content ?? "{}")
+      : "{}";
   const parsed = JSON.parse(text) as {
     matches?: {
       frameIndex: number;
@@ -202,6 +210,7 @@ export async function runAddressMatchPipeline(
   const all: AddressMatchResult[] = [];
 
   for (let i = 0; i < frames.length; i += FRAMES_PER_MATCH_CALL) {
+    if (i > 0) await sleep(PAUSE_BETWEEN_BATCHES_MS);
     const batch = frames.slice(i, i + FRAMES_PER_MATCH_CALL);
     const matches = await matchBatch(batch, i, ctx, roster);
     all.push(...matches);

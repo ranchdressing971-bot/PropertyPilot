@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ChatCompletionContentPart } from "openai/resources/chat/completions";
-import { getOpenAI } from "@/lib/openai";
 import {
   AIInspectionData,
   AIPropertyResult,
@@ -41,10 +40,11 @@ import {
 } from "@/lib/prior-inspections";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { sanitizeImageDataUrl } from "@/lib/image-data-url";
+import { createChatCompletion, isQuotaError, sleep } from "@/lib/openai-retry";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
-const BATCH_SIZE = 4;
+const BATCH_SIZE = 3;
 
 interface VideoFrameInput {
   index: number;
@@ -82,14 +82,20 @@ async function analyzeBatch(
     }),
   ];
 
-  const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content }],
-    response_format: { type: "json_object" },
-    max_tokens: 1500,
-  });
+  const response = await createChatCompletion(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content }],
+      response_format: { type: "json_object" },
+      max_tokens: 1500,
+    },
+    "compliance"
+  );
 
-  const text = response.choices[0]?.message?.content ?? "{}";
+  const text =
+    "choices" in response
+      ? (response.choices[0]?.message?.content ?? "{}")
+      : "{}";
   const parsed = JSON.parse(text) as { results?: unknown[] };
   const raw = (parsed.results ?? []) as {
     propertyId: string;
@@ -351,9 +357,12 @@ export async function POST(request: NextRequest) {
       batches.push(verifiedForCompliance.slice(i, i + BATCH_SIZE));
     }
 
-    const batchResults = await Promise.all(
-      batches.map((batch) => analyzeBatch(batch, ruleMap))
-    );
+    // Sequential batches — parallel vision calls blow past new-account TPM caps
+    const batchResults: AIPropertyResult[][] = [];
+    for (let i = 0; i < batches.length; i++) {
+      if (i > 0) await sleep(1200);
+      batchResults.push(await analyzeBatch(batches[i], ruleMap));
+    }
 
     const unverifiedResults: AIPropertyResult[] = unverifiedHomes.map((prop) => ({
       propertyId: prop.id,
@@ -500,18 +509,13 @@ export async function POST(request: NextRequest) {
       userMessage =
         "Video frames were rejected. Use a short MP4 (under 2 min) from your phone camera, not a screen recording or weird format.";
       code = "INVALID_FRAMES";
-    } else if (
-      msg.includes("insufficient_quota") ||
-      msg.toLowerCase().includes("quota") ||
-      msg.toLowerCase().includes("billing") ||
-      msg.toLowerCase().includes("exceeded your current quota")
-    ) {
+    } else if (isQuotaError(error) || msg.includes("insufficient_quota")) {
       userMessage =
         "OpenAI credits ran out. Add $5–10 at platform.openai.com/settings/organization/billing — then wait ~2 min and try again.";
       code = "NO_CREDITS";
     } else if (msg.includes("429") || msg.toLowerCase().includes("rate limit")) {
       userMessage =
-        "OpenAI is rate-limiting right now (or out of credits). Wait 1–2 minutes, or add billing at platform.openai.com/settings/organization/billing";
+        "OpenAI hit its per-minute speed limit (not your dollar balance — $0.04 spend is normal). Wait 60 seconds and upload again. Scans now go slower on purpose so this happens less.";
       code = "RATE_LIMIT";
     }
 
