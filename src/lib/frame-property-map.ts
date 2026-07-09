@@ -18,8 +18,8 @@ export interface DiscoveredHome {
   reasoning: string;
 }
 
-/** Min seconds between distinct homes in a slow drive-through. */
-const TEMPORAL_GAP_SEC = 6;
+/** Min seconds between distinct homes — keep short so adjacent lots aren't merged. */
+const TEMPORAL_GAP_SEC = 3.5;
 
 function stablePropertyId(address: string, rosterId?: string): string {
   if (rosterId && !rosterId.startsWith("found-") && !rosterId.includes(" ")) {
@@ -134,9 +134,16 @@ export function dedupeProperties(
 
   for (const item of sorted) {
     const prev = merged[merged.length - 1];
+    const prevNum = extractHouseNumber(prev?.address ?? "");
+    const itemNum = extractHouseNumber(item.address);
+    // Never merge two different house numbers, even if frames are close
+    const differentNumbers =
+      Boolean(prevNum) && Boolean(itemNum) && prevNum !== itemNum;
+
     // Only merge when same home — never collapse different streets that share a number
     if (
       prev &&
+      !differentNumbers &&
       Math.abs(item.frame.timestamp - prev.frame.timestamp) < TEMPORAL_GAP_SEC &&
       (isPlaceholderAddress(item.address) ||
         isPlaceholderAddress(prev.address) ||
@@ -236,7 +243,8 @@ export function propertiesFromAddressMatches(
 
   for (const m of matches) {
     let addr = m.matchedAddress?.trim();
-    if (!addr || addr === "Unknown" || m.confidence < 20) continue;
+    // Keep weak reads as needs-review instead of dropping the house entirely
+    if (!addr || addr === "Unknown" || m.confidence < 10) continue;
 
     // Prefer visible house number over a mismatched street guess
     const visibleNum = (m.houseNumber || extractHouseNumber(m.visibleText || "") || "").toLowerCase();

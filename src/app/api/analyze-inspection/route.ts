@@ -252,15 +252,17 @@ export async function POST(request: NextRequest) {
       // Only claim GPS pipeline when geo actually contributed candidates
       usedGpsPipeline = hasGps && fromGps.length > 0;
 
-      const verifiedMatches = fromGps.filter(
-        (p) =>
-          !/^Home at /i.test(p.address) &&
-          (p.addressConfidence ?? 0) >= 50
+      const namedHomes = fromGps.filter(
+        (p) => !/^Home at /i.test(p.address) && !/^Property at /i.test(p.address)
+      );
+      // Expect roughly one home per ~2 frames on a slow drive-through
+      const expectedHomes = Math.max(
+        4,
+        Math.min(12, Math.ceil(extractedFrames.length * 0.75))
       );
 
-      // Prefer GPS-assisted match when it found enough verified homes;
-      // only fall back to OCR/home-discovery when yield is weak.
-      if (verifiedMatches.length >= 2) {
+      // Don't stop early after 2–3 hits — keep discovering until we cover the drive
+      if (namedHomes.length >= expectedHomes) {
         scanProperties = fromGps;
       } else {
         const detections = await runAddressDetection(imageUrls, roster);
@@ -289,12 +291,13 @@ export async function POST(request: NextRequest) {
         (p) => !/^Home at /i.test(p.address)
       ).length;
 
-      if (scanProperties.length < 3) {
+      // Fill gaps so a 6-house drive isn't stuck at 3 cards
+      if (scanProperties.length < expectedHomes) {
         scanProperties = supplementPropertiesFromFrames(
           scanProperties,
           extractedFrames,
           neighborhood,
-          Math.min(6, Math.ceil(extractedFrames.length / 3))
+          expectedHomes
         );
       }
 

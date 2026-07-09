@@ -35,7 +35,9 @@ export function addressDedupeKey(address: string): string {
   const street = streetCore(trimmed);
 
   if (number && street) return `${number}|${street}`;
-  if (number) return `num|${number}`;
+  // Number-only keys are too aggressive across a drive (many homes share "just digits"
+  // when the street isn't read yet). Keep street-less reads unique by full text.
+  if (number) return `num|${number}|${trimmed.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 32)}`;
   return `text|${trimmed.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
 }
 
