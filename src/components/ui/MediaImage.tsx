@@ -1,16 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { Home } from "lucide-react";
-
-function isSupabaseOrDataUrl(src: string): boolean {
-  return (
-    src.startsWith("data:") ||
-    src.includes("supabase.co/storage/") ||
-    src.includes("/storage/v1/object/")
-  );
-}
 
 interface MediaImageProps {
   src?: string | null;
@@ -24,7 +15,7 @@ interface MediaImageProps {
 
 /**
  * Safe image for evidence/thumbnails.
- * Signed Supabase URLs break next/Image remotePatterns — use <img> for those.
+ * Always uses <img> — next/Image + signed Supabase / flaky CDNs show broken icons.
  */
 export function MediaImage({
   src,
@@ -46,41 +37,16 @@ export function MediaImage({
     );
   }
 
-  if (isSupabaseOrDataUrl(src)) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return (
-      <img
-        src={src}
-        alt={alt}
-        className={fill ? `absolute inset-0 h-full w-full ${className}` : className}
-        style={fill ? undefined : width && height ? { width, height } : undefined}
-        onError={() => setFailed(true)}
-      />
-    );
-  }
-
-  if (fill) {
-    return (
-      <Image
-        src={src}
-        alt={alt}
-        fill
-        className={className}
-        unoptimized
-        onError={() => setFailed(true)}
-      />
-    );
-  }
-
+  // eslint-disable-next-line @next/next/no-img-element
   return (
-    <Image
+    <img
       src={src}
       alt={alt}
-      width={width ?? 112}
-      height={height ?? 80}
-      className={className}
-      unoptimized
+      className={fill ? `absolute inset-0 h-full w-full ${className}` : className}
+      style={fill ? undefined : width && height ? { width, height } : undefined}
       onError={() => setFailed(true)}
+      loading="lazy"
+      referrerPolicy="no-referrer"
     />
   );
 }

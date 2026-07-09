@@ -75,17 +75,17 @@ const houseImages = [
   "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&h=400&fit=crop",
   "https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=600&h=400&fit=crop",
   "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=600&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1605276374101-dee0a782ed10?w=600&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1583608205776-bdfd35f0c9ab?w=600&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1568605114967-8130f3a36993?w=600&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1598228723793-52759bba202c?w=600&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?w=600&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=600&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=600&h=400&fit=crop",
 ];
 
 const evidenceImages = [
-  "https://images.unsplash.com/photo-1621451537827-9a072b0222b9?w=400&h=300&fit=crop",
   "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop",
-  "https://images.unsplash.com/photo-1595428774223-ef52624120b2?w=400&h=300&fit=crop",
   "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&h=300&fit=crop",
+  "https://images.unsplash.com/photo-1558904541-efa843a96f01?w=400&h=300&fit=crop",
+  "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=400&h=300&fit=crop",
 ];
 
 const streets = [

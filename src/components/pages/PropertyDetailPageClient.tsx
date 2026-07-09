@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { MediaImage } from "@/components/ui/MediaImage";
 import { GoodPropertyReport } from "@/components/reports/GoodPropertyReport";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { useLiveDashboard } from "@/hooks/useLiveDashboard";
@@ -27,35 +27,11 @@ import {
   CheckCircle2,
   ArrowRight,
   Loader2,
-  Home,
 } from "lucide-react";
 
 interface PropertyDetailPageClientProps {
   id: string;
   inspectionId?: string;
-}
-
-function isSupabaseStorageUrl(src: string): boolean {
-  return src.includes("supabase.co/storage/");
-}
-
-function PropertyPhoto({ src, alt }: { src: string; alt: string }) {
-  if (!src) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-ink-50">
-        <Home className="h-12 w-12 text-ink-200" />
-      </div>
-    );
-  }
-
-  if (src.startsWith("data:") || isSupabaseStorageUrl(src)) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={src} alt={alt} className="h-full w-full object-cover" />
-    );
-  }
-
-  return <Image src={src} alt={alt} fill className="object-cover" unoptimized />;
 }
 
 export function PropertyDetailPageClient({
@@ -166,7 +142,7 @@ export function PropertyDetailPageClient({
           <div className="space-y-5 lg:col-span-2">
             <Card padding="none" className="overflow-hidden">
               <div className="relative h-52 w-full sm:h-64">
-                <PropertyPhoto src={property.image} alt={property.address} />
+                <MediaImage src={property.image} alt={property.address} fill className="object-cover" />
               </div>
               <div className="p-5">
                 <div className="flex items-start justify-between gap-3">
