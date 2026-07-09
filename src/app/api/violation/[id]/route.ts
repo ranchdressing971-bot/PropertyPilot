@@ -66,6 +66,11 @@ export async function GET(request: Request, { params }: RouteParams) {
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const userId = await getAuthenticatedUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+  }
+
   const { id } = await params;
   const body = await request.json();
   const status = body.status as ViolationStatus;
@@ -79,10 +84,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Violation not found" }, { status: 404 });
   }
 
-  const userId = await getAuthenticatedUserId();
-  if (userId) {
-    await logAudit(userId, `violation_${status}`, "violation", id);
-  }
+  await logAudit(userId, `violation_${status}`, "violation", id);
 
   await reloadStoreFromDb();
   const inspections = await listAIInspectionsAsync();

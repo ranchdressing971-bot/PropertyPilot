@@ -51,6 +51,7 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
 }
 
 export function hasActiveSubscription(status: SubscriptionStatus): boolean {
+  // past_due / unpaid / canceled / none do NOT unlock paid access
   return status === "active" || status === "trialing";
 }
 
@@ -76,12 +77,13 @@ export async function canRunLiveInspection(userId: string | null): Promise<{
   reason?: string;
   inspectionsRemaining?: number;
 }> {
-  if (!isStripeConfigured()) {
-    return { allowed: true };
-  }
-
+  // Always require sign-in for live AI (prevents anonymous OpenAI abuse)
   if (!userId) {
     return { allowed: false, reason: "Sign in required for live inspections." };
+  }
+
+  if (!isStripeConfigured()) {
+    return { allowed: true };
   }
 
   const sub = await getUserSubscription(userId);

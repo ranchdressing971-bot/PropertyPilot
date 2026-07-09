@@ -13,10 +13,13 @@ import { saveAIInspection } from "@/lib/inspection-store";
 import { properties as demoProperties } from "@/lib/mock-data";
 import { isOpenAIConfigured } from "@/lib/app-mode";
 import type { Property } from "@/lib/mock-data";
-import { getAuthenticatedUserId, logAudit } from "@/lib/supabase/persist";
+import {
+  getAuthenticatedUserId,
+  loadPropertiesFromDb,
+  logAudit,
+} from "@/lib/supabase/persist";
 import { persistEvidenceImages, persistPropertyThumbnails } from "@/lib/supabase/evidence-storage";
 import { canRunLiveInspection, getUserSubscription, hasActiveSubscription } from "@/lib/subscription";
-import { getServerRoster, setServerRoster } from "@/lib/roster-server";
 import { rulesToMap, DEFAULT_CCR_RULES } from "@/lib/ccr-rules";
 import type { AddressReviewItem } from "@/lib/ai-analyze";
 import { runAddressMatchPipeline } from "@/lib/address-match-run";
@@ -36,6 +39,7 @@ import {
   loadPriorInspectedAddresses,
   separatePriorInspected,
 } from "@/lib/prior-inspections";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 60;
 
@@ -130,6 +134,24 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Sign in required for live inspections.", code: "AUTH_REQUIRED" },
+        { status: 401 }
+      );
+    }
+
+    const limit = checkRateLimit(`analyze-inspection:${userId}`, 8, 60_000);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        {
+          error: "Too many inspections. Wait a minute and try again.",
+          code: "RATE_LIMIT",
+          retryAfter: limit.retryAfterSec,
+        },
+        { status: 429 }
+      );
+    }
 
     const access = await canRunLiveInspection(userId);
     if (!access.allowed) {
@@ -142,13 +164,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let roster: Property[] = clientRoster?.length
-      ? clientRoster
-      : getServerRoster(userId);
-
-    if (userId && clientRoster?.length) {
-      setServerRoster(userId, roster);
-    }
+    // Supabase roster is source of truth; client body is backup only
+    const dbRoster = await loadPropertiesFromDb(userId);
+    let roster: Property[] =
+      dbRoster.length > 0 ? dbRoster : clientRoster?.length ? clientRoster : [];
 
     const id = `ai-${Date.now()}`;
     const date = new Date().toISOString().split("T")[0];

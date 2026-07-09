@@ -11,7 +11,24 @@ function parseDataUrl(dataUrl: string): { contentType: string; buffer: Buffer } 
   };
 }
 
-/** Upload frame evidence to Supabase Storage; replace data: URLs with public HTTPS URLs. */
+async function signedUrl(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  bucket: string,
+  path: string
+): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(path, 60 * 60 * 24 * 7); // 7 days
+  if (error || !data?.signedUrl) {
+    // Fallback for buckets still marked public during migration
+    const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
+    return pub.publicUrl;
+  }
+  return data.signedUrl;
+}
+
+/** Upload frame evidence to Supabase Storage; replace data: URLs with signed HTTPS URLs. */
 export async function persistEvidenceImages(
   userId: string,
   inspectionId: string,
@@ -45,8 +62,7 @@ export async function persistEvidenceImages(
             return "";
           }
 
-          const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-          return data.publicUrl;
+          return signedUrl(supabase, bucket, path);
         })
       );
 
@@ -95,8 +111,7 @@ export async function persistPropertyThumbnails(
         return;
       }
 
-      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-      urls[property.id] = data.publicUrl;
+      urls[property.id] = await signedUrl(supabase, bucket, path);
     })
   );
 

@@ -13,6 +13,19 @@ interface EmailBody {
   managerName?: string;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 export async function POST(req: NextRequest) {
   if (!isResendConfigured()) {
     return NextResponse.json(
@@ -31,6 +44,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
+  if (!isValidEmail(body.to)) {
+    return NextResponse.json({ error: "Invalid recipient email" }, { status: 400 });
+  }
+
   const supabase = await createClient();
   let hoaName = body.hoaName ?? "Your HOA";
   let managerName = body.managerName ?? "Property Manager";
@@ -45,18 +62,26 @@ export async function POST(req: NextRequest) {
     if (profile?.full_name) managerName = profile.full_name;
   }
 
+  const safe = {
+    hoaName: escapeHtml(hoaName),
+    managerName: escapeHtml(managerName),
+    propertyAddress: escapeHtml(body.propertyAddress),
+    violationType: escapeHtml(body.violationType),
+    violationDescription: escapeHtml(body.violationDescription || ""),
+  };
+
   const subject =
     body.subject ?? `HOA Violation Notice — ${body.propertyAddress}`;
 
   const html = `
     <div style="font-family: system-ui, sans-serif; max-width: 560px; color: #1a1a20;">
-      <p style="font-size: 12px; color: #676774; text-transform: uppercase; letter-spacing: 0.1em;">${hoaName}</p>
+      <p style="font-size: 12px; color: #676774; text-transform: uppercase; letter-spacing: 0.1em;">${safe.hoaName}</p>
       <h1 style="font-size: 20px; margin: 8px 0;">Violation Notice</h1>
-      <p><strong>Property:</strong> ${body.propertyAddress}</p>
-      <p><strong>Issue:</strong> ${body.violationType}</p>
-      <p style="line-height: 1.6;">${body.violationDescription}</p>
+      <p><strong>Property:</strong> ${safe.propertyAddress}</p>
+      <p><strong>Issue:</strong> ${safe.violationType}</p>
+      <p style="line-height: 1.6;">${safe.violationDescription}</p>
       <p style="margin-top: 24px; font-size: 13px; color: #676774;">
-        — ${managerName}<br/>
+        — ${safe.managerName}<br/>
         Sent via Property Pilot. Human review is required before enforcement.
       </p>
     </div>
@@ -65,7 +90,7 @@ export async function POST(req: NextRequest) {
   const resend = getResend();
   const { data, error } = await resend.emails.send({
     from: getEmailFrom(),
-    to: body.to,
+    to: body.to.trim(),
     subject,
     html,
   });

@@ -11,8 +11,8 @@ create table if not exists public.profiles (
   ccr_rules jsonb default '[]'::jsonb,
   onboarding_complete boolean default false,
   stripe_customer_id text,
-  subscription_status text default 'trialing',
-  plan text default 'standard',
+  subscription_status text default 'none',
+  plan text default 'starter',
   terms_accepted_at timestamptz,
   owner_email text,
   created_at timestamptz default now()
@@ -85,7 +85,7 @@ create or replace function public.handle_new_user()
 returns trigger as $$
 begin
   insert into public.profiles (id, email, subscription_status, plan)
-  values (new.id, new.email, 'trialing', 'standard')
+  values (new.id, new.email, 'none', 'starter')
   on conflict (id) do nothing;
   return new;
 end;
@@ -93,8 +93,8 @@ $$ language plpgsql security definer;
 
 -- Run if profiles table already exists (safe to re-run)
 alter table public.profiles add column if not exists stripe_customer_id text;
-alter table public.profiles add column if not exists subscription_status text default 'trialing';
-alter table public.profiles add column if not exists plan text default 'standard';
+alter table public.profiles add column if not exists subscription_status text default 'none';
+alter table public.profiles add column if not exists plan text default 'starter';
 alter table public.profiles add column if not exists terms_accepted_at timestamptz;
 alter table public.inspections add column if not exists metadata jsonb default '{}'::jsonb;
 
@@ -103,9 +103,9 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
--- Video storage (optional — for cloud backup of raw uploads)
+-- Video storage (private — serve via signed URLs)
 insert into storage.buckets (id, name, public)
-values ('inspection-videos', 'inspection-videos', true)
+values ('inspection-videos', 'inspection-videos', false)
 on conflict (id) do nothing;
 
 create policy "Users upload own videos"
@@ -122,9 +122,9 @@ create policy "Users read own videos"
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
--- Evidence frame thumbnails (public read for result cards)
+-- Evidence frame thumbnails (private — serve via signed URLs)
 insert into storage.buckets (id, name, public)
-values ('inspection-evidence', 'inspection-evidence', true)
+values ('inspection-evidence', 'inspection-evidence', false)
 on conflict (id) do nothing;
 
 create policy "Users upload own evidence"
@@ -134,9 +134,12 @@ create policy "Users upload own evidence"
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
-create policy "Public read inspection evidence"
+create policy "Users read own evidence"
   on storage.objects for select
-  using (bucket_id = 'inspection-evidence');
+  using (
+    bucket_id = 'inspection-evidence'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
 
 -- ── Required grants (without these, signed-in users cannot save inspections) ──
 grant usage on schema public to postgres, anon, authenticated, service_role;

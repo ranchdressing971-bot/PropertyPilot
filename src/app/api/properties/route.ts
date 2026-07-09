@@ -5,28 +5,23 @@ import {
   loadPropertiesFromDb,
   persistProperties,
 } from "@/lib/supabase/persist";
-import { getCachedRoster, setCachedRoster } from "@/lib/roster-server";
 
 export async function GET() {
   const userId = await getAuthenticatedUserId();
-
-  if (userId) {
-    const dbProps = await loadPropertiesFromDb(userId);
-    if (dbProps.length > 0) {
-      setCachedRoster(userId, dbProps);
-      return NextResponse.json({ properties: dbProps });
-    }
-    const cached = getCachedRoster(userId);
-    if (cached?.length) {
-      return NextResponse.json({ properties: cached });
-    }
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   }
 
-  return NextResponse.json({ properties: [] });
+  const dbProps = await loadPropertiesFromDb(userId);
+  return NextResponse.json({ properties: dbProps });
 }
 
 export async function POST(request: NextRequest) {
   const userId = await getAuthenticatedUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+  }
+
   const body = await request.json();
   const incoming = (body.properties as Property[]) ?? [];
 
@@ -42,10 +37,7 @@ export async function POST(request: NextRequest) {
     lastInspection: p.lastInspection ?? "—",
   }));
 
-  if (userId) {
-    setCachedRoster(userId, normalized);
-    await persistProperties(userId, normalized);
-  }
+  await persistProperties(userId, normalized);
 
   return NextResponse.json({ properties: normalized, count: normalized.length });
 }

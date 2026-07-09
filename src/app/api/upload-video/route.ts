@@ -21,12 +21,16 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+    }
+
     const supabase = await createClient();
 
-    if (!supabase || !userId) {
+    if (!supabase) {
       return NextResponse.json({
         stored: false,
-        message: "Video processed in-browser; sign in + Supabase Storage for cloud backup",
+        message: "Supabase not configured — video still analyzed from frames",
         videoName: file.name,
         sizeBytes: file.size,
       });
@@ -52,14 +56,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const { data: urlData } = supabase.storage
+    const { data: signed, error: signError } = await supabase.storage
       .from("inspection-videos")
-      .getPublicUrl(path);
+      .createSignedUrl(path, 60 * 60 * 24 * 7);
 
     return NextResponse.json({
       stored: true,
       path,
-      publicUrl: urlData.publicUrl,
+      url: signed?.signedUrl ?? null,
+      signError: signError?.message,
       videoName: file.name,
       sizeBytes: file.size,
     });
