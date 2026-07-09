@@ -97,8 +97,8 @@ async function matchBatch(
             type: "image_url" as const,
             image_url: {
               url,
-              // high detail for reading mailbox digits accurately
-              detail: "high" as const,
+              // low detail keeps cost down; house-number logic still works with clear mailbox shots
+              detail: "low" as const,
             },
           },
         ];

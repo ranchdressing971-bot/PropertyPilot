@@ -500,13 +500,19 @@ export async function POST(request: NextRequest) {
       userMessage =
         "Video frames were rejected. Use a short MP4 (under 2 min) from your phone camera, not a screen recording or weird format.";
       code = "INVALID_FRAMES";
-    } else if (msg.includes("429")) {
+    } else if (
+      msg.includes("insufficient_quota") ||
+      msg.toLowerCase().includes("quota") ||
+      msg.toLowerCase().includes("billing") ||
+      msg.toLowerCase().includes("exceeded your current quota")
+    ) {
       userMessage =
-        "OpenAI rate limit or no billing credits. Check platform.openai.com/account/billing";
-      code = "RATE_LIMIT";
-    } else if (msg.includes("insufficient_quota")) {
-      userMessage = "OpenAI account has no credits. Add billing at platform.openai.com";
+        "OpenAI credits ran out. Add $5–10 at platform.openai.com/settings/organization/billing — then wait ~2 min and try again.";
       code = "NO_CREDITS";
+    } else if (msg.includes("429") || msg.toLowerCase().includes("rate limit")) {
+      userMessage =
+        "OpenAI is rate-limiting right now (or out of credits). Wait 1–2 minutes, or add billing at platform.openai.com/settings/organization/billing";
+      code = "RATE_LIMIT";
     }
 
     return NextResponse.json({ error: userMessage, code, detail: msg }, { status: 500 });
