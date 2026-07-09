@@ -1,13 +1,15 @@
 import type { Violation } from "../mock-data";
+import { sanitizeImageDataUrl, safeStorageSegment } from "../image-data-url";
 import { createAdminClient } from "./admin";
 import { createClient } from "./server";
 
 function parseDataUrl(dataUrl: string): { contentType: string; buffer: Buffer } | null {
-  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  const clean = sanitizeImageDataUrl(dataUrl) ?? dataUrl;
+  const match = clean.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return null;
   return {
     contentType: match[1],
-    buffer: Buffer.from(match[2], "base64"),
+    buffer: Buffer.from(match[2].replace(/\s+/g, ""), "base64"),
   };
 }
 
@@ -50,7 +52,7 @@ export async function persistEvidenceImages(
           if (!parsed) return "";
 
           const ext = parsed.contentType.includes("png") ? "png" : "jpg";
-          const path = `${userId}/${inspectionId}/${violation.propertyId}-${index}.${ext}`;
+          const path = `${safeStorageSegment(userId)}/${safeStorageSegment(inspectionId)}/${safeStorageSegment(violation.propertyId)}-${index}.${ext}`;
 
           const { error } = await supabase.storage.from(bucket).upload(path, parsed.buffer, {
             contentType: parsed.contentType,
@@ -99,7 +101,7 @@ export async function persistPropertyThumbnails(
       if (!parsed) return;
 
       const ext = parsed.contentType.includes("png") ? "png" : "jpg";
-      const path = `${userId}/${inspectionId}/thumb-${property.id}.${ext}`;
+      const path = `${safeStorageSegment(userId)}/${safeStorageSegment(inspectionId)}/thumb-${safeStorageSegment(property.id)}.${ext}`;
 
       const { error } = await supabase.storage.from(bucket).upload(path, parsed.buffer, {
         contentType: parsed.contentType,

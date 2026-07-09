@@ -5,6 +5,7 @@ import { matchAddressToRoster } from "./address-detect";
 import type { Property } from "./mock-data";
 import type { ExtractedFrame } from "./video-frames";
 import { ADDRESS_REVIEW_THRESHOLD } from "./geo/types";
+import { sanitizeImageDataUrl } from "./image-data-url";
 
 const FRAMES_PER_MATCH_CALL = 4;
 
@@ -80,10 +81,17 @@ async function matchBatch(
         type: "text" as const,
         text: `Frame ${startIndex + i} (${frame.timestamp.toFixed(1)}s):`,
       },
-      {
-        type: "image_url" as const,
-        image_url: { url: frame.dataUrl, detail: "high" as const },
-      },
+      ...(sanitizeImageDataUrl(frame.dataUrl)
+        ? [
+            {
+              type: "image_url" as const,
+              image_url: {
+                url: sanitizeImageDataUrl(frame.dataUrl)!,
+                detail: "high" as const,
+              },
+            },
+          ]
+        : []),
     ]),
   ];
 

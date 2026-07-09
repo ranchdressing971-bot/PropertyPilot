@@ -3,6 +3,8 @@
  * Prefers scene-change frames over blind fixed-interval sampling when possible.
  */
 
+import { sanitizeImageDataUrl } from "./image-data-url";
+
 export interface ExtractedFrame {
   index: number;
   /** Seconds into the video */
@@ -130,10 +132,14 @@ export async function extractVideoFrames(
       const change = prevFp.length ? fingerprintDiff(prevFp, fingerprint) : 1;
       prevFp = fingerprint;
 
+      const rawUrl = canvas.toDataURL("image/jpeg", quality);
+      const dataUrl = sanitizeImageDataUrl(rawUrl);
+      if (!dataUrl) continue;
+
       candidates.push({
         index: idx,
         timestamp: t,
-        dataUrl: canvas.toDataURL("image/jpeg", quality),
+        dataUrl,
         fingerprint,
         score: change,
       });

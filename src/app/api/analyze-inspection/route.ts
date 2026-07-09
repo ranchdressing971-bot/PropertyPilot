@@ -39,6 +39,7 @@ import {
   separatePriorInspected,
 } from "@/lib/prior-inspections";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { sanitizeImageDataUrl } from "@/lib/image-data-url";
 
 export const maxDuration = 60;
 
@@ -56,25 +57,28 @@ async function analyzeBatch(
 ): Promise<AIPropertyResult[]> {
   const content: ChatCompletionContentPart[] = [
     { type: "text", text: buildInspectionPrompt(batch, ruleMap) },
-    ...batch.flatMap((prop) => [
-      { type: "text" as const, text: `Property ${prop.address} (${prop.id}):` },
-      ...(prop.image
-        ? [
-            {
-              type: "image_url" as const,
-              image_url: {
-                url: prop.image,
-                detail: "high" as const,
+    ...batch.flatMap((prop) => {
+      const cleanImage = sanitizeImageDataUrl(prop.image);
+      return [
+        { type: "text" as const, text: `Property ${prop.address} (${prop.id}):` },
+        ...(cleanImage
+          ? [
+              {
+                type: "image_url" as const,
+                image_url: {
+                  url: cleanImage,
+                  detail: "high" as const,
+                },
               },
-            },
-          ]
-        : [
-            {
-              type: "text" as const,
-              text: "[No frame captured for this property in the drive-through]",
-            },
-          ]),
-    ]),
+            ]
+          : [
+              {
+                type: "text" as const,
+                text: "[No frame captured for this property in the drive-through]",
+              },
+            ]),
+      ];
+    }),
   ];
 
   const response = await getOpenAI().chat.completions.create({
@@ -189,13 +193,31 @@ export async function POST(request: NextRequest) {
     let addressReviews: AddressReviewItem[] = [];
 
     if (frames?.length) {
-      frameCount = frames.length;
-      const imageUrls = frames.map((f) => f.dataUrl);
-      const extractedFrames = frames.map((f) => ({
-        index: f.index,
-        timestamp: f.timestamp,
-        dataUrl: f.dataUrl,
-      }));
+      const extractedFrames = frames
+        .map((f) => {
+          const dataUrl = sanitizeImageDataUrl(f.dataUrl);
+          if (!dataUrl) return null;
+          return {
+            index: f.index,
+            timestamp: f.timestamp,
+            dataUrl,
+          };
+        })
+        .filter((f): f is NonNullable<typeof f> => Boolean(f));
+
+      if (extractedFrames.length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "Could not read video frames. Try a shorter MP4 (under 2 minutes) from your phone camera.",
+            code: "INVALID_FRAMES",
+          },
+          { status: 400 }
+        );
+      }
+
+      frameCount = extractedFrames.length;
+      const imageUrls = extractedFrames.map((f) => f.dataUrl);
 
       const geo = body.geo as UploadGeoContext | undefined;
       const hasGps = Boolean(geo?.lat && geo?.lng);
@@ -449,6 +471,15 @@ export async function POST(request: NextRequest) {
       userMessage =
         "Invalid OpenAI API key. Generate a new key at platform.openai.com/api-keys";
       code = "INVALID_API_KEY";
+    } else if (
+      msg.toLowerCase().includes("did not match") ||
+      msg.toLowerCase().includes("did not follow") ||
+      msg.toLowerCase().includes("pattern") ||
+      msg.toLowerCase().includes("invalid_image")
+    ) {
+      userMessage =
+        "Video frames were rejected. Use a short MP4 (under 2 min) from your phone camera, not a screen recording or weird format.";
+      code = "INVALID_FRAMES";
     } else if (msg.includes("429")) {
       userMessage =
         "OpenAI rate limit or no billing credits. Check platform.openai.com/account/billing";

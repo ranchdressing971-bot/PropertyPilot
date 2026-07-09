@@ -8,6 +8,7 @@ import {
 } from "./address-detect";
 import type { DiscoveredHome } from "./frame-property-map";
 import type { Property } from "./mock-data";
+import { sanitizeImageDataUrl } from "./image-data-url";
 
 const FRAMES_PER_VISION_CALL = 8;
 
@@ -21,10 +22,17 @@ async function detectBatch(
       type: "text",
       text: `${buildAddressDetectionPrompt()}\n\nFrame indices in this batch start at ${startIndex}.`,
     },
-    ...imageUrls.flatMap((url, i) => [
-      { type: "text" as const, text: `Frame ${startIndex + i}:` },
-      { type: "image_url" as const, image_url: { url, detail: "low" as const } },
-    ]),
+    ...imageUrls.flatMap((url, i) => {
+      const clean = sanitizeImageDataUrl(url);
+      if (!clean) return [{ type: "text" as const, text: `Frame ${startIndex + i}: [invalid image]` }];
+      return [
+        { type: "text" as const, text: `Frame ${startIndex + i}:` },
+        {
+          type: "image_url" as const,
+          image_url: { url: clean, detail: "low" as const },
+        },
+      ];
+    }),
   ];
 
   const response = await getOpenAI().chat.completions.create({
@@ -79,10 +87,19 @@ export async function runHomeDiscovery(
 
   const content: ChatCompletionContentPart[] = [
     { type: "text", text: buildHomeDiscoveryPrompt(sample.length) },
-    ...sample.flatMap((url, i) => [
-      { type: "text" as const, text: `Frame ${i}:` },
-      { type: "image_url" as const, image_url: { url, detail: "low" as const } },
-    ]),
+    ...sample.flatMap((url, i) => {
+      const clean = sanitizeImageDataUrl(url);
+      if (!clean) {
+        return [{ type: "text" as const, text: `Frame ${i}: [invalid image]` }];
+      }
+      return [
+        { type: "text" as const, text: `Frame ${i}:` },
+        {
+          type: "image_url" as const,
+          image_url: { url: clean, detail: "low" as const },
+        },
+      ];
+    }),
   ];
 
   const response = await getOpenAI().chat.completions.create({
