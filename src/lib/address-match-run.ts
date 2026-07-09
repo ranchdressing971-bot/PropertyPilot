@@ -81,17 +81,20 @@ async function matchBatch(
         type: "text" as const,
         text: `Frame ${startIndex + i} (${frame.timestamp.toFixed(1)}s):`,
       },
-      ...(sanitizeImageDataUrl(frame.dataUrl)
-        ? [
-            {
-              type: "image_url" as const,
-              image_url: {
-                url: sanitizeImageDataUrl(frame.dataUrl)!,
-                detail: "high" as const,
-              },
+      ...(() => {
+        const url = sanitizeImageDataUrl(frame.dataUrl);
+        if (!url) return [];
+        return [
+          {
+            type: "image_url" as const,
+            image_url: {
+              url,
+              // low detail is enough for mailbox numbers and avoids huge payloads
+              detail: "low" as const,
             },
-          ]
-        : []),
+          },
+        ];
+      })(),
     ]),
   ];
 

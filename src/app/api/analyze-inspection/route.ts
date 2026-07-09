@@ -18,6 +18,7 @@ import {
   logAudit,
 } from "@/lib/supabase/persist";
 import { persistEvidenceImages, persistPropertyThumbnails } from "@/lib/supabase/evidence-storage";
+import { uploadFramesForVision } from "@/lib/supabase/vision-frames";
 import { canRunLiveInspection, getUserSubscription, hasActiveSubscription } from "@/lib/subscription";
 import { rulesToMap, DEFAULT_CCR_RULES } from "@/lib/ccr-rules";
 import type { AddressReviewItem } from "@/lib/ai-analyze";
@@ -67,7 +68,7 @@ async function analyzeBatch(
                 type: "image_url" as const,
                 image_url: {
                   url: cleanImage,
-                  detail: "high" as const,
+                  detail: "low" as const,
                 },
               },
             ]
@@ -193,7 +194,7 @@ export async function POST(request: NextRequest) {
     let addressReviews: AddressReviewItem[] = [];
 
     if (frames?.length) {
-      const extractedFrames = frames
+      const cleanedFrames = frames
         .map((f) => {
           const dataUrl = sanitizeImageDataUrl(f.dataUrl);
           if (!dataUrl) return null;
@@ -205,7 +206,7 @@ export async function POST(request: NextRequest) {
         })
         .filter((f): f is NonNullable<typeof f> => Boolean(f));
 
-      if (extractedFrames.length === 0) {
+      if (cleanedFrames.length === 0) {
         return NextResponse.json(
           {
             error:
@@ -214,6 +215,16 @@ export async function POST(request: NextRequest) {
           },
           { status: 400 }
         );
+      }
+
+      // Upload frames to storage and use HTTPS URLs for OpenAI.
+      // Huge base64 data URLs often fail with "string did not follow the pattern".
+      let extractedFrames = cleanedFrames;
+      try {
+        const hosted = await uploadFramesForVision(userId, id, cleanedFrames);
+        if (hosted.length > 0) extractedFrames = hosted;
+      } catch (err) {
+        console.error("vision frame hosting failed, using data URLs:", err);
       }
 
       frameCount = extractedFrames.length;
