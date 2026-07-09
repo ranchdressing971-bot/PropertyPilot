@@ -277,7 +277,7 @@ export async function POST(request: NextRequest) {
           scanProperties,
           extractedFrames,
           neighborhood,
-          Math.min(6, Math.ceil(frames.length / 3))
+          Math.min(6, Math.ceil(extractedFrames.length / 3))
         );
       }
 
