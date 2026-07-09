@@ -72,6 +72,19 @@ export function ProfileCard() {
         hoa_name: trimmedHoa,
       });
 
+      const claimRes = await fetch("/api/community/claim-trial", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hoaName: trimmedHoa }),
+      });
+      const claimData = await claimRes.json();
+      if (!claimRes.ok) {
+        throw new Error(
+          claimData.error ?? "Could not update community trial"
+        );
+      }
+
       setEditing(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save profile");

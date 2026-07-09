@@ -16,6 +16,10 @@ interface SubStatus {
   trialInspectionsRemaining: number;
   trialInspectionsLimit: number;
   price: string;
+  hoaName?: string | null;
+  communityTrialStatus?: string;
+  accessReason?: string;
+  canRunLiveInspection?: boolean;
 }
 
 export function BillingCard() {
@@ -76,11 +80,29 @@ export function BillingCard() {
             {subscribed
               ? `${sub?.price ?? "$149/mo"} · ${sub?.status}`
               : sub
-                ? `${sub.trialInspectionsRemaining} of ${sub.trialInspectionsLimit} free inspections left`
-                : "3 free inspections, then choose a plan"}
+                ? `${sub.trialInspectionsRemaining} of ${sub.trialInspectionsLimit} free inspections left${
+                    sub.hoaName ? ` · ${sub.hoaName}` : ""
+                  }`
+                : "3 free inspections per community, then choose a plan"}
           </p>
         </div>
       </div>
+
+      {!subscribed && sub?.communityTrialStatus === "claimed_by_other" && (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          This community already used its free trial. Subscribe to run live
+          inspections.
+        </p>
+      )}
+      {!subscribed &&
+        sub &&
+        !sub.canRunLiveInspection &&
+        sub.accessReason &&
+        sub.communityTrialStatus !== "claimed_by_other" && (
+          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            {sub.accessReason}
+          </p>
+        )}
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 

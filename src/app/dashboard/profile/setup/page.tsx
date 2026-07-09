@@ -46,13 +46,31 @@ export default function ProfileSetupPage() {
       });
       if (updateError) throw updateError;
 
-      // Optional: sync to profiles table when schema exists
       await supabase.from("profiles").upsert({
         id: user.id,
         email: user.email,
         full_name: trimmedName,
         hoa_name: trimmedHoa,
       });
+
+      const claimRes = await fetch("/api/community/claim-trial", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hoaName: trimmedHoa }),
+      });
+      const claimData = await claimRes.json();
+      if (!claimRes.ok && claimRes.status === 409) {
+        // Allow continuing — they can subscribe; free scans will be blocked
+        setError(
+          claimData.error ??
+            "This community already used its free trial. You can still continue and subscribe."
+        );
+        // Don't block navigation forever — brief pause then continue
+        await new Promise((r) => setTimeout(r, 1800));
+      } else if (!claimRes.ok && claimData.code === "INVALID_COMMUNITY") {
+        throw new Error(claimData.error ?? "Invalid community name");
+      }
 
       router.push("/dashboard/onboarding");
       router.refresh();
@@ -72,7 +90,8 @@ export default function ProfileSetupPage() {
             Set up your profile
           </h1>
           <p className="mt-2 text-sm text-ink-500">
-            This name appears on violation notices and in your workspace settings.
+            Your community name locks the free trial to this HOA — one trial per
+            community, so extra email accounts can&apos;t reuse it.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
   canRunLiveInspection,
+  getCommunityTrialStatus,
   getTrialInspectionUsage,
   getUserSubscription,
   hasActiveSubscription,
@@ -35,6 +36,7 @@ export async function GET() {
   const sub = await getUserSubscription(user.id);
   const trial = await getTrialInspectionUsage(user.id);
   const access = await canRunLiveInspection(user.id);
+  const community = await getCommunityTrialStatus(user.id, sub.hoaName);
   const plan = (sub.plan as BillingPlan | null) ?? "starter";
 
   return NextResponse.json({
@@ -43,6 +45,9 @@ export async function GET() {
     status: sub.status,
     plan: sub.plan,
     price: planPriceLabel(sub.plan),
+    hoaName: sub.hoaName,
+    communityKey: sub.communityKey,
+    communityTrialStatus: community.status,
     trialInspectionsLimit: FREE_TRIAL_INSPECTIONS,
     trialInspectionsUsed: trial.used,
     trialInspectionsRemaining: trial.remaining,
@@ -50,5 +55,7 @@ export async function GET() {
     trialScansUsed: trial.used,
     trialScansRemaining: trial.remaining,
     canRunLiveInspection: access.allowed,
+    accessReason: access.reason,
+    accessCode: access.code,
   });
 }

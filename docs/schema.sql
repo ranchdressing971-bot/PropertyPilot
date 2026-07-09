@@ -15,6 +15,7 @@ create table if not exists public.profiles (
   plan text default 'starter',
   terms_accepted_at timestamptz,
   owner_email text,
+  community_key text,
   created_at timestamptz default now()
 );
 
@@ -96,7 +97,27 @@ alter table public.profiles add column if not exists stripe_customer_id text;
 alter table public.profiles add column if not exists subscription_status text default 'none';
 alter table public.profiles add column if not exists plan text default 'starter';
 alter table public.profiles add column if not exists terms_accepted_at timestamptz;
+alter table public.profiles add column if not exists community_key text;
 alter table public.inspections add column if not exists metadata jsonb default '{}'::jsonb;
+
+create index if not exists profiles_community_key_idx
+  on public.profiles (community_key);
+
+-- One free trial per community (blocks email-farming)
+create table if not exists public.community_trials (
+  community_key text primary key,
+  claimed_by uuid references auth.users on delete set null,
+  hoa_name text not null,
+  claimed_at timestamptz default now()
+);
+
+alter table public.community_trials enable row level security;
+
+drop policy if exists "Anyone authenticated can read community trials" on public.community_trials;
+create policy "Anyone authenticated can read community trials"
+  on public.community_trials for select
+  to authenticated
+  using (true);
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
@@ -140,6 +161,9 @@ create policy "Users read own evidence"
     bucket_id = 'inspection-evidence'
     and auth.uid()::text = (storage.foldername(name))[1]
   );
+
+grant select on public.community_trials to authenticated;
+grant all on public.community_trials to service_role;
 
 -- ── Required grants (without these, signed-in users cannot save inspections) ──
 grant usage on schema public to postgres, anon, authenticated, service_role;

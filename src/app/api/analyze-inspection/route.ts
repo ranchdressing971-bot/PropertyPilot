@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: access.reason ?? "Subscription required for live inspections.",
-          code: "SUBSCRIPTION_REQUIRED",
+          code: access.code ?? "SUBSCRIPTION_REQUIRED",
         },
         { status: 402 }
       );

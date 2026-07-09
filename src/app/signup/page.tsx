@@ -19,6 +19,7 @@ function SignupForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [hoaName, setHoaName] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +33,10 @@ function SignupForm() {
       setError("Please agree to the Terms and Privacy Policy.");
       return;
     }
+    if (!hoaName.trim()) {
+      setError("Enter your HOA / community name.");
+      return;
+    }
     if (!supabaseReady) {
       setError("Supabase is not configured yet. See docs/SUPABASE_SETUP.md");
       return;
@@ -42,12 +47,16 @@ function SignupForm() {
 
     try {
       const supabase = createClient();
+      const trimmedHoa = hoaName.trim();
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard/profile/setup`,
-          data: { terms_accepted_at: new Date().toISOString() },
+          data: {
+            terms_accepted_at: new Date().toISOString(),
+            hoa_name: trimmedHoa,
+          },
         },
       });
 
@@ -57,8 +66,27 @@ function SignupForm() {
         await supabase.from("profiles").upsert({
           id: authData.user.id,
           email: authData.user.email,
+          hoa_name: trimmedHoa,
           terms_accepted_at: new Date().toISOString(),
         });
+      }
+
+      // Claim community trial while session exists (may fail if already used — that's ok at signup)
+      if (authData.session) {
+        const claimRes = await fetch("/api/community/claim-trial", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hoaName: trimmedHoa }),
+        });
+        if (claimRes.status === 409) {
+          const data = await claimRes.json();
+          setError(
+            data.error ??
+              "This community already used its free trial. You can still create an account and subscribe."
+          );
+          // Still allow account — they can pay
+        }
       }
 
       setSuccess(true);
@@ -81,7 +109,9 @@ function SignupForm() {
   return (
     <Card className="w-full max-w-md" padding="lg">
       <h1 className="font-display text-xl font-semibold text-ink-900">Create account</h1>
-      <p className="mt-1 text-sm text-ink-500">3 free inspections · plans from $149/mo</p>
+      <p className="mt-1 text-sm text-ink-500">
+        3 free inspections per community · plans from $149/mo
+      </p>
 
       {!supabaseReady && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -113,6 +143,21 @@ function SignupForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-700">
+              HOA / community name
+            </label>
+            <Input
+              type="text"
+              required
+              value={hoaName}
+              onChange={(e) => setHoaName(e.target.value)}
+              placeholder="Oak Ridge Village HOA"
+            />
+            <p className="mt-1 text-xs text-ink-400">
+              One free trial per community — use your real HOA name.
+            </p>
           </div>
 
           <label className="flex items-start gap-2 text-sm text-ink-600">

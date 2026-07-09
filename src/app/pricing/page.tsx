@@ -34,13 +34,13 @@ export default function PricingPage() {
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-ink-500">
           Demo mode is always free. Live AI inspections start with{" "}
-          {FREE_TRIAL_INSPECTIONS} free inspections — then choose a plan.
+          {FREE_TRIAL_INSPECTIONS} free inspections per community — then choose a plan.
         </p>
 
         <div className="mt-14 grid gap-6 md:grid-cols-2">
           <div className="surface p-8 text-left">
             <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 ring-1 ring-brand-100">
-              {FREE_TRIAL_INSPECTIONS} free inspections to start
+              {FREE_TRIAL_INSPECTIONS} free inspections per community
             </span>
             <h2 className="mt-4 text-2xl font-semibold text-ink-900">Starter</h2>
             <p className="mt-1 text-sm text-ink-500">
