@@ -83,7 +83,7 @@ export function ProfileCard() {
   if (loading) {
     return (
       <Card>
-        <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+        <Loader2 className="h-5 w-5 animate-spin text-ink-400" />
       </Card>
     );
   }
@@ -92,17 +92,17 @@ export function ProfileCard() {
     <div className="space-y-5">
       <Card>
         <div className="flex items-center gap-3">
-          <Building2 className="h-5 w-5 text-slate-400" />
+          <Building2 className="h-5 w-5 text-ink-400" />
           <div className="flex-1">
-            <h3 className="font-semibold text-slate-900">Organization</h3>
+            <h3 className="font-semibold text-ink-900">Organization</h3>
             {editing && !isDemo ? (
               <input
                 value={hoaName}
                 onChange={(e) => setHoaName(e.target.value)}
-                className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+                className="mt-1.5 h-10 w-full rounded-lg border border-ink-200 px-3 text-sm"
               />
             ) : (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-ink-500">
                 {hoaName || "Not set — complete your profile"}
               </p>
             )}
@@ -112,17 +112,17 @@ export function ProfileCard() {
 
       <Card>
         <div className="flex items-center gap-3">
-          <User className="h-5 w-5 text-slate-400" />
+          <User className="h-5 w-5 text-ink-400" />
           <div className="flex-1">
-            <h3 className="font-semibold text-slate-900">Manager Profile</h3>
+            <h3 className="font-semibold text-ink-900">Manager Profile</h3>
             {editing && !isDemo ? (
               <input
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+                className="mt-1.5 h-10 w-full rounded-lg border border-ink-200 px-3 text-sm"
               />
             ) : (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-ink-500">
                 {fullName || "Not set — complete your profile"}
               </p>
             )}
@@ -132,7 +132,7 @@ export function ProfileCard() {
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
         {isDemo ? (
-          <p className="mt-4 text-xs text-slate-400">
+          <p className="mt-4 text-xs text-ink-400">
             Demo mode uses sample names. Sign in to use your own profile.
           </p>
         ) : editing ? (

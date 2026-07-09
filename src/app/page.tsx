@@ -1,19 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/Button";
+import { Logo } from "@/components/brand/Logo";
 import { useAppMode } from "@/components/providers/AppModeProvider";
-import {
-  Upload,
-  Play,
-  Shield,
-  BarChart3,
-  ArrowRight,
-  Video,
-  CheckCircle2,
-} from "lucide-react";
+import { Play, CheckCircle2, ArrowRight } from "lucide-react";
+import { motion } from "framer-motion";
 
 export default function HomePage() {
   const router = useRouter();
@@ -31,129 +24,115 @@ export default function HomePage() {
 
   return (
     <PublicLayout>
-      <section className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(59,130,246,0.08),_transparent_55%)]" />
-        <div className="relative mx-auto max-w-6xl px-5 pb-20 pt-16 sm:px-8 sm:pb-28 sm:pt-24">
-          <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
-            <div>
-              <p className="inline-flex items-center rounded-full border border-brand-200/80 bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700">
-                AI-powered HOA inspections
-              </p>
-              <h1 className="mt-6 text-balance text-4xl font-semibold leading-[1.1] tracking-tight text-ink-900 sm:text-5xl lg:text-[3.25rem]">
-                Drive once.
-                <br />
-                Review every home.
-              </h1>
-              <p className="mt-5 max-w-lg text-base leading-relaxed text-ink-500 sm:text-lg">
-                Upload a neighborhood drive-through. AI inspects each property and
-                prepares violation reports for your review — no clip-by-clip work.
-              </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Button size="lg" onClick={startDemo}>
-                  <Play className="h-4 w-4" />
-                  Explore demo
-                </Button>
-                <Button variant="secondary" size="lg" onClick={startLive}>
-                  Start free — 3 inspections
-                </Button>
-              </div>
-              <ul className="mt-8 flex flex-col gap-2 text-sm text-ink-600 sm:flex-row sm:gap-6">
-                {["No credit card", "Works on phone video", "Manager review workflow"].map(
-                  (item) => (
-                    <li key={item} className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-brand-600" />
-                      {item}
-                    </li>
-                  )
-                )}
-              </ul>
+      <section className="relative min-h-[calc(100dvh-4rem)] overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_70%_20%,rgba(79,127,95,0.14),transparent_55%)]" />
+        <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-5 pb-16 pt-12 sm:px-8 sm:pb-20 sm:pt-16 lg:grid-cols-[0.95fr_1.05fr] lg:gap-14">
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <Logo size="lg" className="mb-8" />
+            <h1 className="font-display text-balance text-4xl font-semibold leading-[1.08] tracking-tight text-ink-900 sm:text-5xl lg:text-[3.4rem]">
+              Drive once.
+              <br />
+              Review every home.
+            </h1>
+            <p className="mt-5 max-w-md text-base leading-relaxed text-ink-500 sm:text-lg">
+              Property Pilot turns a neighborhood drive-through into a manager-ready
+              inspection — addresses matched, flags prepared, you approve.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Button size="lg" onClick={startLive}>
+                Start free — 3 inspections
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button variant="secondary" size="lg" onClick={startDemo}>
+                <Play className="h-4 w-4" />
+                Explore demo
+              </Button>
             </div>
+            <p className="mt-5 text-sm text-ink-500">
+              Built for HOA managers. No credit card to try.
+            </p>
+          </motion.div>
 
-            <div className="relative lg:pl-4">
-              <div className="surface overflow-hidden p-2">
-                <div className="rounded-xl bg-ink-950 p-6 text-white">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600">
-                      <Video className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Willow Creek inspection</p>
-                      <p className="text-xs text-ink-400">12 properties · 2 flags</p>
-                    </div>
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.08 }}
+            className="relative"
+          >
+            <div className="surface overflow-hidden p-3 sm:p-4">
+              <div className="rounded-xl border border-ink-100 bg-white">
+                <div className="flex items-center justify-between border-b border-ink-100 px-4 py-3">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-brand-700">
+                      Inspection results
+                    </p>
+                    <p className="mt-0.5 text-sm font-semibold text-ink-900">
+                      Willow Creek · Today
+                    </p>
                   </div>
-                  <div className="mt-6 space-y-2">
-                    {[
-                      { label: "123 Main St", flag: "Trash bin visible", ok: false },
-                      { label: "789 Pine Ln", flag: "Tall grass", ok: false },
-                      { label: "456 Oak Dr", flag: "No violations", ok: true },
-                    ].map((row) => (
-                      <div
-                        key={row.label}
-                        className="flex items-center justify-between rounded-lg border border-ink-800 bg-ink-900/60 px-3 py-2.5"
-                      >
-                        <span className="text-xs font-medium text-ink-200">{row.label}</span>
-                        <span
-                          className={`text-[11px] ${row.ok ? "text-emerald-400" : "text-amber-400"}`}
+                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 ring-1 ring-amber-200">
+                    2 need review
+                  </span>
+                </div>
+                <div className="divide-y divide-ink-100">
+                  {[
+                    {
+                      addr: "123 Maple Lane",
+                      status: "Trash bin visible",
+                      tone: "flag" as const,
+                      conf: "88%",
+                    },
+                    {
+                      addr: "456 Oak Drive",
+                      status: "Clean",
+                      tone: "ok" as const,
+                      conf: "—",
+                    },
+                    {
+                      addr: "789 Pine Court",
+                      status: "Confirm address",
+                      tone: "review" as const,
+                      conf: "62%",
+                    },
+                  ].map((row) => (
+                    <div
+                      key={row.addr}
+                      className="flex items-center gap-3 px-4 py-3.5"
+                    >
+                      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-brand-100 to-ink-100 ring-1 ring-ink-200/60" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-ink-900">
+                          {row.addr}
+                        </p>
+                        <p
+                          className={
+                            row.tone === "flag"
+                              ? "text-xs text-amber-700"
+                              : row.tone === "review"
+                                ? "text-xs text-copper-700"
+                                : "text-xs text-brand-700"
+                          }
                         >
-                          {row.flag}
-                        </span>
+                          {row.status}
+                        </p>
                       </div>
-                    ))}
+                      <span className="text-[11px] text-ink-400">{row.conf}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-ink-100 bg-ink-50/80 px-4 py-3">
+                  <div className="flex items-center gap-2 text-xs text-ink-600">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-brand-600" />
+                    Human review required before any notice is sent
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y border-ink-200/60 bg-white py-16 sm:py-20">
-        <div className="mx-auto grid max-w-6xl gap-10 px-5 sm:grid-cols-3 sm:px-8">
-          {[
-            {
-              icon: Upload,
-              title: "Upload once",
-              desc: "Phone or desktop. Drop a drive-through and go.",
-            },
-            {
-              icon: Shield,
-              title: "AI compliance",
-              desc: "Vision models flag bins, grass, debris, and landscaping.",
-            },
-            {
-              icon: BarChart3,
-              title: "Manager review",
-              desc: "Approve notices, track compliance, export reports.",
-            },
-          ].map((f) => (
-            <div key={f.title} className="rounded-2xl border border-ink-100 bg-canvas p-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-ink-200/60">
-                <f.icon className="h-5 w-5 text-brand-600" strokeWidth={1.75} />
-              </div>
-              <h3 className="mt-4 font-semibold text-ink-900">{f.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink-500">{f.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-20">
-        <div className="surface flex flex-col items-start justify-between gap-6 bg-ink-950 px-6 py-10 text-white sm:flex-row sm:items-center sm:px-10">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Ready to pilot?</h2>
-            <p className="mt-2 max-w-md text-sm text-ink-400">
-              Demo with sample data, or start with 3 free live inspections.
-            </p>
-          </div>
-          <Link href="/signup">
-            <Button
-              size="lg"
-              className="bg-white text-ink-900 hover:bg-ink-100"
-            >
-              Get started
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
+          </motion.div>
         </div>
       </section>
     </PublicLayout>

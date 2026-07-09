@@ -51,10 +51,10 @@ export function CcrRulesCard() {
   return (
     <Card>
       <div className="flex items-center gap-3">
-        <Shield className="h-5 w-5 text-slate-400" />
+        <Shield className="h-5 w-5 text-ink-400" />
         <div>
-          <h3 className="font-semibold text-slate-900">CC&R Rules</h3>
-          <p className="text-sm text-slate-500">
+          <h3 className="font-semibold text-ink-900">CC&R Rules</h3>
+          <p className="text-sm text-ink-500">
             Toggle which violations AI should detect during inspections
           </p>
         </div>
@@ -64,20 +64,20 @@ export function CcrRulesCard() {
         {rules.map((rule, i) => (
           <li
             key={rule.violationType}
-            className="flex items-start gap-3 rounded-lg border border-slate-100 bg-slate-50/80 p-3"
+            className="flex items-start gap-3 rounded-lg border border-ink-100 bg-ink-50/80 p-3"
           >
             <input
               type="checkbox"
               checked={rule.enabled}
               onChange={() => toggleRule(i)}
-              className="mt-1 h-4 w-4 rounded border-slate-300"
+              className="mt-1 h-4 w-4 rounded border-ink-300"
             />
             <div className="flex-1 text-sm">
-              <p className="font-medium text-slate-900">
+              <p className="font-medium text-ink-900">
                 {rule.violationType}{" "}
-                <span className="text-slate-400">§{rule.section}</span>
+                <span className="text-ink-400">§{rule.section}</span>
               </p>
-              <p className="mt-0.5 text-slate-500">{rule.description}</p>
+              <p className="mt-0.5 text-ink-500">{rule.description}</p>
             </div>
           </li>
         ))}

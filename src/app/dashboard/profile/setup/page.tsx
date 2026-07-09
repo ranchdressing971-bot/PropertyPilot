@@ -68,16 +68,16 @@ export default function ProfileSetupPage() {
     <DashboardLayout>
       <div className="mx-auto flex min-h-[70vh] max-w-lg items-center px-5 py-12">
         <Card className="w-full" padding="lg">
-          <h1 className="font-display text-2xl font-semibold text-slate-900">
+          <h1 className="font-display text-2xl font-semibold text-ink-900">
             Set up your profile
           </h1>
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-2 text-sm text-ink-500">
             This name appears on violation notices and in your workspace settings.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
-              <label className="text-sm font-medium text-slate-700">
+              <label className="text-sm font-medium text-ink-700">
                 Your name
               </label>
               <input
@@ -86,11 +86,11 @@ export default function ProfileSetupPage() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Jane Smith"
-                className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-4 text-base focus:border-accent-300 focus:outline-none focus:ring-2 focus:ring-accent-500/20"
+                className="mt-1.5 h-11 w-full rounded-xl border border-ink-200 px-4 text-base focus:border-accent-300 focus:outline-none focus:ring-2 focus:ring-accent-500/20"
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700">
+              <label className="text-sm font-medium text-ink-700">
                 HOA / community name
               </label>
               <input
@@ -99,7 +99,7 @@ export default function ProfileSetupPage() {
                 value={hoaName}
                 onChange={(e) => setHoaName(e.target.value)}
                 placeholder="Oak Ridge Village HOA"
-                className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-4 text-base focus:border-accent-300 focus:outline-none focus:ring-2 focus:ring-accent-500/20"
+                className="mt-1.5 h-11 w-full rounded-xl border border-ink-200 px-4 text-base focus:border-accent-300 focus:outline-none focus:ring-2 focus:ring-accent-500/20"
               />
             </div>
 

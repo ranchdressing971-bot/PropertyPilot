@@ -1,13 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Manrope, Fraunces } from "next/font/google";
 import { AppModeProvider } from "@/components/providers/AppModeProvider";
+import { ToastProvider } from "@/components/providers/ToastProvider";
 import { IosHomeScreenIcon } from "@/components/brand/IosHomeScreenIcon";
 import "./globals.css";
 
-const inter = Inter({
+const manrope = Manrope({
   subsets: ["latin"],
   variable: "--font-sans",
   weight: ["400", "500", "600", "700"],
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-display",
+  weight: ["500", "600", "700"],
 });
 
 const iosAppleIcons: Metadata["icons"] = {
@@ -25,9 +32,9 @@ const iosAppleIcons: Metadata["icons"] = {
 };
 
 export const metadata: Metadata = {
-  title: "Property Pilot — AI-Powered HOA Inspections",
+  title: "Property Pilot — HOA Drive-Through Inspections",
   description:
-    "Upload a neighborhood inspection video and let AI prepare every property review automatically.",
+    "Upload a neighborhood drive-through. Property Pilot flags homes that need review so managers can approve notices with confidence.",
   manifest: "/manifest.json",
   applicationName: "Property Pilot",
   appleWebApp: {
@@ -50,13 +57,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  maximumScale: 5,
   viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
-    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
-  ],
-  colorScheme: "light dark",
+  themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f4f6f3" }],
+  colorScheme: "light",
 };
 
 export default function RootLayout({
@@ -65,12 +69,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${manrope.variable} ${fraunces.variable}`}>
       <head>
         <IosHomeScreenIcon />
       </head>
       <body className="font-sans">
-        <AppModeProvider>{children}</AppModeProvider>
+        <AppModeProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AppModeProvider>
       </body>
     </html>
   );

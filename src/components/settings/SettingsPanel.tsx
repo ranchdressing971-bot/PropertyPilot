@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useAppMode } from "@/components/providers/AppModeProvider";
@@ -18,18 +18,29 @@ interface HealthStatus {
   supabaseMessage: string;
 }
 
+function showDevTools(searchParams: URLSearchParams | null): boolean {
+  if (process.env.NODE_ENV === "development") return true;
+  return searchParams?.get("dev") === "1";
+}
+
 export function SettingsPanel() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { mode, setMode } = useAppMode();
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [loadingHealth, setLoadingHealth] = useState(true);
+  const dev = showDevTools(searchParams);
 
   useEffect(() => {
+    if (!dev) {
+      setLoadingHealth(false);
+      return;
+    }
     fetch("/api/health")
       .then((r) => r.json())
       .then(setHealth)
       .finally(() => setLoadingHealth(false));
-  }, [mode]);
+  }, [mode, dev]);
 
   async function signOut() {
     if (!isSupabaseClientConfigured()) return;
@@ -42,64 +53,70 @@ export function SettingsPanel() {
 
   return (
     <div className="space-y-5">
-      <Card>
-        <h3 className="font-semibold text-ink-900">App Mode</h3>
-        <p className="mt-1 text-sm text-ink-500">
-          Demo uses sample data. Live runs real GPT-4o analysis.
-        </p>
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setMode("demo")}
-            className={clsx(
-              "rounded-xl border-2 p-4 text-left transition-all",
-              mode === "demo"
-                ? "border-ink-900 bg-ink-50 shadow-sm"
-                : "border-ink-200 hover:border-ink-300"
+      {dev && (
+        <>
+          <Card>
+            <h3 className="font-semibold text-ink-900">App Mode</h3>
+            <p className="mt-1 text-sm text-ink-500">
+              Demo uses sample data. Live runs real AI analysis. (Dev only)
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setMode("demo")}
+                className={clsx(
+                  "rounded-xl border-2 p-4 text-left transition-all",
+                  mode === "demo"
+                    ? "border-ink-900 bg-ink-50 shadow-sm"
+                    : "border-ink-200 hover:border-ink-300"
+                )}
+              >
+                <p className="font-semibold text-ink-900">Demo</p>
+                <p className="mt-1 text-xs text-ink-500">No API key needed</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("live")}
+                className={clsx(
+                  "rounded-xl border-2 p-4 text-left transition-all",
+                  mode === "live"
+                    ? "border-brand-500 bg-brand-50 shadow-sm"
+                    : "border-ink-200 hover:border-ink-300"
+                )}
+              >
+                <p className="font-semibold text-ink-900">Live</p>
+                <p className="mt-1 text-xs text-ink-500">Real AI analysis</p>
+              </button>
+            </div>
+            {mode === "live" && isSupabaseClientConfigured() && (
+              <Link
+                href="/login"
+                className="mt-3 inline-block text-sm text-brand-600 hover:underline"
+              >
+                Sign in for live mode →
+              </Link>
             )}
-          >
-            <p className="font-semibold text-ink-900">Demo</p>
-            <p className="mt-1 text-xs text-ink-500">No API key needed</p>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("live")}
-            className={clsx(
-              "rounded-xl border-2 p-4 text-left transition-all",
-              mode === "live"
-                ? "border-brand-500 bg-brand-50 shadow-sm"
-                : "border-ink-200 hover:border-ink-300"
-            )}
-          >
-            <p className="font-semibold text-ink-900">Live</p>
-            <p className="mt-1 text-xs text-ink-500">Real AI analysis</p>
-          </button>
-        </div>
-        {mode === "live" && !isSupabaseClientConfigured() && (
-          <p className="mt-3 text-xs text-ink-500">
-            Live mode works without sign-in until Supabase is configured.
-          </p>
-        )}
-        {mode === "live" && isSupabaseClientConfigured() && (
-          <Link href="/login" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
-            Sign in for live mode →
-          </Link>
-        )}
-      </Card>
+          </Card>
 
-      <SystemCheckCard />
+          <SystemCheckCard />
 
-      <Card>
-        <h3 className="font-semibold text-ink-900">Connection Status</h3>
-        {loadingHealth ? (
-          <Loader2 className="mt-4 h-5 w-5 animate-spin text-ink-400" />
-        ) : health ? (
-          <div className="mt-4 space-y-3">
-            <StatusRow ok={health.openai} label="OpenAI" message={health.openaiMessage} />
-            <StatusRow ok={health.supabase} label="Supabase" message={health.supabaseMessage} />
-          </div>
-        ) : null}
-      </Card>
+          <Card>
+            <h3 className="font-semibold text-ink-900">Connection Status</h3>
+            {loadingHealth ? (
+              <Loader2 className="mt-4 h-5 w-5 animate-spin text-ink-400" />
+            ) : health ? (
+              <div className="mt-4 space-y-3">
+                <StatusRow ok={health.openai} label="OpenAI" message={health.openaiMessage} />
+                <StatusRow
+                  ok={health.supabase}
+                  label="Supabase"
+                  message={health.supabaseMessage}
+                />
+              </div>
+            ) : null}
+          </Card>
+        </>
+      )}
 
       {isSupabaseClientConfigured() && (
         <Button variant="secondary" className="w-full" onClick={signOut}>

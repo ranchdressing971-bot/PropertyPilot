@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { CreditCard, Loader2, ExternalLink } from "lucide-react";
 import Link from "next/link";
+import { useToast } from "@/components/providers/ToastProvider";
 
 interface SubStatus {
   subscribed: boolean;
@@ -17,9 +19,17 @@ interface SubStatus {
 }
 
 export function BillingCard() {
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
   const [loading, setLoading] = useState<"checkout" | "portal" | "init" | null>("init");
   const [error, setError] = useState<string | null>(null);
   const [sub, setSub] = useState<SubStatus | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("billing") === "success") {
+      toast("Billing updated — welcome aboard");
+    }
+  }, [searchParams, toast]);
 
   useEffect(() => {
     fetch("/api/subscription/status")

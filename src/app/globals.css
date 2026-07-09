@@ -11,7 +11,11 @@
   body {
     @apply bg-canvas text-ink-900;
     overflow-x: hidden;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    background-image:
+      radial-gradient(ellipse 90% 55% at 10% -10%, rgba(79, 127, 95, 0.12), transparent 55%),
+      radial-gradient(ellipse 70% 45% at 95% 5%, rgba(181, 122, 69, 0.08), transparent 50%),
+      linear-gradient(180deg, #f7f8f5 0%, #f4f6f3 40%, #eef1eb 100%);
+    background-attachment: fixed;
   }
 
   input,
@@ -32,14 +36,18 @@
 
 @layer utilities {
   .surface {
-    @apply rounded-2xl border border-ink-200/60 bg-white shadow-card;
+    @apply rounded-2xl border border-ink-200/70 bg-white/90 shadow-card backdrop-blur-sm;
   }
 
   .surface-muted {
-    @apply rounded-2xl border border-ink-100 bg-ink-50/80;
+    @apply rounded-2xl border border-ink-100 bg-ink-50/90;
   }
 
   .text-balance {
     text-wrap: balance;
+  }
+
+  .font-display {
+    font-family: var(--font-display), Georgia, serif;
   }
 }

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
 import { PageContent } from "@/components/layout/PageContent";
@@ -10,16 +11,22 @@ import { BillingCard } from "@/components/settings/BillingCard";
 export default function SettingsPage() {
   return (
     <DashboardLayout>
-      <Header title="Settings" subtitle="Mode, connections, and preferences" />
+      <Header title="Settings" subtitle="Profile, billing, and preferences" />
       <PageContent className="max-w-2xl">
-        <SettingsPanel />
-
         <div className="space-y-5">
           <ProfileCard />
-          <BillingCard />
+          <Suspense fallback={null}>
+            <BillingCard />
+          </Suspense>
           <NotificationsCard />
           <CcrRulesCard />
         </div>
+
+        <Suspense fallback={null}>
+          <div className="mt-5">
+            <SettingsPanel />
+          </div>
+        </Suspense>
       </PageContent>
     </DashboardLayout>
   );

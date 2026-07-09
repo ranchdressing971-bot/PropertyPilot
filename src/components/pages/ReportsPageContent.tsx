@@ -11,11 +11,20 @@ import { Download, FileText, BarChart3, Award, Loader2 } from "lucide-react";
 import { downloadComplianceReportPdf } from "@/lib/pdf-notice";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { displayHoaName } from "@/lib/profile";
+import { useToast } from "@/components/providers/ToastProvider";
 
 export function ReportsPageContent() {
   const { isDemo, isLive } = useAppMode();
   const { data: live, loading } = useLiveDashboard(isLive);
   const { profile, isDemo: demoProfile } = useUserProfile();
+  const { toast } = useToast();
+
+  function exportPdf(
+    opts: Parameters<typeof downloadComplianceReportPdf>[0]
+  ) {
+    downloadComplianceReportPdf(opts);
+    toast("PDF downloaded");
+  }
 
   const hasData = isDemo
     ? true
@@ -67,7 +76,7 @@ export function ReportsPageContent() {
           title="Compliance report"
           description={`Neighborhood score: ${compliance}%. ${inspectionCount} inspection${inspectionCount === 1 ? "" : "s"} on record.`}
           onExport={() =>
-            downloadComplianceReportPdf({
+            exportPdf({
               hoaName: displayHoaName(profile, demoProfile),
               complianceScore: compliance,
               inspectionCount,
@@ -83,7 +92,7 @@ export function ReportsPageContent() {
           title="Good standing"
           description={`${cleanCount} properties compliant. Generate recognition reports for homeowners.`}
           onExport={() =>
-            downloadComplianceReportPdf({
+            exportPdf({
               hoaName: displayHoaName(profile, demoProfile),
               complianceScore: compliance,
               inspectionCount,
@@ -97,7 +106,7 @@ export function ReportsPageContent() {
           title="Violation summary"
           description={`Most common: ${topViolation}. ${repeatCount} repeat address${repeatCount === 1 ? "" : "es"}.`}
           onExport={() =>
-            downloadComplianceReportPdf({
+            exportPdf({
               hoaName: displayHoaName(profile, demoProfile),
               complianceScore: compliance,
               inspectionCount,

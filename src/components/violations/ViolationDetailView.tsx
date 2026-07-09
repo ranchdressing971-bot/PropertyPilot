@@ -19,8 +19,11 @@ import {
   Sparkles,
   Loader2,
 } from "lucide-react";
+import { useToast } from "@/components/providers/ToastProvider";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 export function ViolationDetailView({ id }: { id: string }) {
+  const { toast } = useToast();
   const [violation, setViolation] = useState<Violation | null>(null);
   const [propertyAddress, setPropertyAddress] = useState<string | null>(null);
   const [aiPowered, setAiPowered] = useState(false);
@@ -47,11 +50,21 @@ export function ViolationDetailView({ id }: { id: string }) {
     try {
       const res = await fetch(`/api/violation/${id}`, {
         method: "PATCH",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
       const data = await res.json();
-      if (res.ok) setViolation(data.violation);
+      if (res.ok) {
+        setViolation(data.violation);
+        toast(
+          status === "approved" ? "Violation approved" : "Violation dismissed"
+        );
+      } else {
+        toast(data.error ?? "Could not update violation", "error");
+      }
+    } catch {
+      toast("Could not update violation", "error");
     } finally {
       setActionLoading(false);
     }
@@ -72,7 +85,14 @@ export function ViolationDetailView({ id }: { id: string }) {
     return (
       <DashboardLayout>
         <Header title="Not Found" />
-        <div className="p-8 text-center text-slate-500">Violation not found.</div>
+        <PageContent>
+          <ErrorState
+            title="Violation not found"
+            message="This flag may have been removed or you don't have access."
+            actionLabel="Back to violations"
+            actionHref="/dashboard/violations"
+          />
+        </PageContent>
       </DashboardLayout>
     );
   }
@@ -86,7 +106,7 @@ export function ViolationDetailView({ id }: { id: string }) {
       <PageContent>
         <Link
           href="/dashboard/violations"
-          className="inline-flex min-h-[44px] items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900"
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-sm text-ink-500 hover:text-ink-900"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to violations
@@ -104,8 +124,8 @@ export function ViolationDetailView({ id }: { id: string }) {
             <Card>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm text-slate-500">Property</p>
-                  <p className="text-lg font-semibold text-slate-900">
+                  <p className="text-sm text-ink-500">Property</p>
+                  <p className="text-lg font-semibold text-ink-900">
                     {propertyAddress ?? "Unknown address"}
                   </p>
                 </div>
@@ -114,19 +134,19 @@ export function ViolationDetailView({ id }: { id: string }) {
 
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <div>
-                  <p className="text-xs font-medium uppercase text-slate-400">
+                  <p className="text-xs font-medium uppercase text-ink-400">
                     Detected Rule
                   </p>
-                  <p className="mt-1 text-sm text-slate-700">{violation.rule}</p>
+                  <p className="mt-1 text-sm text-ink-700">{violation.rule}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium uppercase text-slate-400">
+                  <p className="text-xs font-medium uppercase text-ink-400">
                     Confidence
                   </p>
-                  <p className="mt-1 text-2xl font-bold text-slate-900">
+                  <p className="mt-1 text-2xl font-bold text-ink-900">
                     {violation.confidence}%
                   </p>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-ink-100">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-accent-600 to-accent-400"
                       style={{ width: `${violation.confidence}%` }}
@@ -138,14 +158,14 @@ export function ViolationDetailView({ id }: { id: string }) {
 
             {violation.evidenceImages.length > 0 && (
               <Card>
-                <h3 className="text-sm font-semibold text-slate-900">
+                <h3 className="text-sm font-semibold text-ink-900">
                   Evidence Images
                 </h3>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   {violation.evidenceImages.map((img, i) => (
                     <div
                       key={i}
-                      className="relative aspect-[4/3] overflow-hidden rounded-xl border border-slate-200"
+                      className="relative aspect-[4/3] overflow-hidden rounded-xl border border-ink-200"
                     >
                       <Image src={img} alt={`Evidence ${i + 1}`} fill className="object-cover" />
                     </div>
@@ -157,11 +177,11 @@ export function ViolationDetailView({ id }: { id: string }) {
             <Card>
               <div className="flex items-center gap-2">
                 <Brain className="h-4 w-4 text-accent-600" />
-                <h3 className="text-sm font-semibold text-slate-900">
+                <h3 className="text-sm font-semibold text-ink-900">
                   AI Reasoning
                 </h3>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              <p className="mt-3 text-sm leading-relaxed text-ink-600">
                 {violation.reasoning}
               </p>
             </Card>
@@ -188,7 +208,7 @@ export function ViolationDetailView({ id }: { id: string }) {
           </div>
 
           <div className="space-y-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-400">
               Notice Preview
             </h3>
             <NoticePreview

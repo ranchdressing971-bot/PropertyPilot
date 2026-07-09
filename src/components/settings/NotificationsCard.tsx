@@ -40,7 +40,7 @@ export function NotificationsCard() {
   return (
     <Card>
       <div className="flex items-center gap-3">
-        <Bell className="h-5 w-5 text-slate-400" />
+        <Bell className="h-5 w-5 text-ink-400" />
         <div className="flex-1">
           <h3 className="font-semibold text-ink-900">Notifications</h3>
           <p className="text-sm text-ink-500">
@@ -52,7 +52,7 @@ export function NotificationsCard() {
             type="checkbox"
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300"
+            className="h-4 w-4 rounded border-ink-300"
           />
           Enabled
         </label>

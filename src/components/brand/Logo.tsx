@@ -47,7 +47,7 @@ export function Logo({
       {showText && (
         <span
           className={clsx(
-            "font-semibold tracking-tight",
+            "font-display font-semibold tracking-tight",
             variant === "light" ? "text-white" : "text-ink-900",
             text
           )}
