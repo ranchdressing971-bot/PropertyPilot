@@ -1,6 +1,6 @@
 /**
  * Client-side video frame extraction using the browser Video API + Canvas.
- * No FFmpeg required — works on phone uploads and desktop.
+ * Prefers scene-change frames over blind fixed-interval sampling when possible.
  */
 
 export interface ExtractedFrame {
@@ -14,11 +14,11 @@ export interface ExtractedFrame {
 export interface ExtractFramesOptions {
   /** Capture one frame every N seconds (default 2) */
   intervalSec?: number;
-  /** Hard cap on frames to control API cost and payload size (default 16) */
+  /** Hard cap on frames to control API cost and payload size (default 14) */
   maxFrames?: number;
   /** Scale down wide videos before JPEG encode (default 960) */
   maxWidth?: number;
-  /** JPEG quality 0–1 (default 0.65) */
+  /** JPEG quality 0–1 (default 0.68) */
   quality?: number;
 }
 
@@ -48,18 +48,44 @@ function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
   });
 }
 
+/** Cheap luminance fingerprint for scene-change scoring (downsampled). */
+function frameFingerprint(ctx: CanvasRenderingContext2D, w: number, h: number): number[] {
+  const sampleW = 32;
+  const sampleH = 18;
+  const tmp = document.createElement("canvas");
+  tmp.width = sampleW;
+  tmp.height = sampleH;
+  const tctx = tmp.getContext("2d");
+  if (!tctx) return [];
+  tctx.drawImage(ctx.canvas, 0, 0, w, h, 0, 0, sampleW, sampleH);
+  const { data } = tctx.getImageData(0, 0, sampleW, sampleH);
+  const out: number[] = [];
+  for (let i = 0; i < data.length; i += 4) {
+    out.push(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+  }
+  return out;
+}
+
+function fingerprintDiff(a: number[], b: number[]): number {
+  if (!a.length || !b.length || a.length !== b.length) return 1;
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+  return sum / (a.length * 255);
+}
+
 /**
- * Extract evenly-spaced JPEG frames from a local video file.
+ * Extract JPEG frames from a local video file.
+ * Samples denser candidates, then keeps the most scene-diverse set within maxFrames.
  */
 export async function extractVideoFrames(
   file: File,
   options: ExtractFramesOptions = {}
 ): Promise<ExtractedFrame[]> {
   const {
-    intervalSec = 2,
-    maxFrames = 16,
+    intervalSec = 1.8,
+    maxFrames = 14,
     maxWidth = 960,
-    quality = 0.65,
+    quality = 0.68,
   } = options;
 
   const url = URL.createObjectURL(file);
@@ -80,10 +106,19 @@ export async function extractVideoFrames(
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas not supported");
 
-    const frames: ExtractedFrame[] = [];
-    const step = Math.max(intervalSec, duration / maxFrames);
+    // Over-sample candidates (~2x), then pick diverse frames
+    const candidateCap = Math.min(maxFrames * 2, 28);
+    const step = Math.max(intervalSec * 0.65, duration / candidateCap);
 
-    for (let t = 0, idx = 0; t < duration && frames.length < maxFrames; t += step, idx++) {
+    type Candidate = ExtractedFrame & { fingerprint: number[]; score: number };
+    const candidates: Candidate[] = [];
+    let prevFp: number[] = [];
+
+    for (
+      let t = 0, idx = 0;
+      t < duration && candidates.length < candidateCap;
+      t += step, idx++
+    ) {
       await seekVideo(video, t);
 
       const scale = video.videoWidth > maxWidth ? maxWidth / video.videoWidth : 1;
@@ -91,16 +126,60 @@ export async function extractVideoFrames(
       canvas.height = Math.round(video.videoHeight * scale);
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      frames.push({
+      const fingerprint = frameFingerprint(ctx, canvas.width, canvas.height);
+      const change = prevFp.length ? fingerprintDiff(prevFp, fingerprint) : 1;
+      prevFp = fingerprint;
+
+      candidates.push({
         index: idx,
         timestamp: t,
         dataUrl: canvas.toDataURL("image/jpeg", quality),
+        fingerprint,
+        score: change,
       });
     }
 
-    if (frames.length === 0) {
+    if (candidates.length === 0) {
       throw new Error("No frames could be extracted from this video");
     }
+
+    // Always keep first + last, then greedily pick highest scene-change scores
+    const selected: Candidate[] = [];
+    const used = new Set<number>();
+
+    const take = (c: Candidate) => {
+      if (used.has(c.index)) return;
+      used.add(c.index);
+      selected.push(c);
+    };
+
+    take(candidates[0]);
+    if (candidates.length > 1) take(candidates[candidates.length - 1]);
+
+    const ranked = [...candidates].sort((a, b) => b.score - a.score);
+    for (const c of ranked) {
+      if (selected.length >= maxFrames) break;
+      // Prefer frames that differ from already-selected ones
+      const minDiff = Math.min(
+        ...selected.map((s) => fingerprintDiff(s.fingerprint, c.fingerprint))
+      );
+      if (minDiff < 0.04 && selected.length > 2) continue;
+      take(c);
+    }
+
+    // Fill remaining slots chronologically if still short
+    for (const c of candidates) {
+      if (selected.length >= maxFrames) break;
+      take(c);
+    }
+
+    const frames = selected
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map((c, i) => ({
+        index: i,
+        timestamp: c.timestamp,
+        dataUrl: c.dataUrl,
+      }));
 
     return frames;
   } finally {

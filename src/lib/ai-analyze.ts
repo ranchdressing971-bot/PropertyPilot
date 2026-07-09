@@ -106,17 +106,29 @@ export function normalizeAIResults(
   ruleMap?: Record<string, string>
 ): AIPropertyResult[] {
   const rules = ruleMap ?? VIOLATION_RULES;
+  const enabledTypes = new Set(Object.keys(rules));
+
   return properties.map((prop) => {
     const match = raw.find((r) => r.propertyId === prop.id);
-    const type = VALID_TYPES.includes(match?.violationType as ViolationType)
+    let type = VALID_TYPES.includes(match?.violationType as ViolationType)
       ? (match?.violationType as ViolationType)
       : null;
+
+    // Only keep violation types that are enabled in the HOA's CCR rules
+    if (type && !enabledTypes.has(type)) {
+      type = null;
+    }
+
+    // Honest confidence — no artificial 60 floor
+    const confidence = type
+      ? Math.min(100, Math.max(0, Math.round(match?.confidence ?? 0)))
+      : 0;
 
     return {
       propertyId: prop.id,
       address: prop.address,
       violationType: type,
-      confidence: type ? Math.min(99, Math.max(60, match?.confidence ?? 80)) : 0,
+      confidence,
       recommendation: type ? RECOMMENDATIONS[type] ?? "Manager Review" : "",
       reasoning:
         match?.reasoning ??

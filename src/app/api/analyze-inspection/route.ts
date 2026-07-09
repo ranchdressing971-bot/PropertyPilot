@@ -10,7 +10,6 @@ import {
 } from "@/lib/ai-analyze";
 import { stripInspectionForStorage } from "@/lib/inspection-sanitize";
 import { saveAIInspection } from "@/lib/inspection-store";
-import { properties as demoProperties } from "@/lib/mock-data";
 import { isOpenAIConfigured } from "@/lib/app-mode";
 import type { Property } from "@/lib/mock-data";
 import {
@@ -65,7 +64,7 @@ async function analyzeBatch(
               type: "image_url" as const,
               image_url: {
                 url: prop.image,
-                detail: "low" as const,
+                detail: "high" as const,
               },
             },
           ]
@@ -95,6 +94,17 @@ async function analyzeBatch(
   }[];
 
   return normalizeAIResults(raw, batch, ruleMap);
+}
+
+function isAddressVerified(prop: Property): boolean {
+  if (/^Home at /i.test(prop.address) || /^Property at /i.test(prop.address)) {
+    return false;
+  }
+  if (prop.needsAddressReview) return false;
+  if (prop.addressConfidence != null && prop.addressConfidence < 70) {
+    return false;
+  }
+  return true;
 }
 
 function demoResponse(videoName: string) {
@@ -188,6 +198,7 @@ export async function POST(request: NextRequest) {
       }));
 
       const geo = body.geo as UploadGeoContext | undefined;
+      const hasGps = Boolean(geo?.lat && geo?.lng);
       const candidateCtx = await buildAddressCandidates({ roster, geo, neighborhood });
       const addressMatchResults = await runAddressMatchPipeline(
         extractedFrames,
@@ -199,9 +210,18 @@ export async function POST(request: NextRequest) {
         extractedFrames,
         neighborhood
       );
-      usedGpsPipeline = true;
+      // Only claim GPS pipeline when geo actually contributed candidates
+      usedGpsPipeline = hasGps && fromGps.length > 0;
 
-      if (fromGps.length >= 2) {
+      const verifiedMatches = fromGps.filter(
+        (p) =>
+          !/^Home at /i.test(p.address) &&
+          (p.addressConfidence ?? 0) >= 50
+      );
+
+      // Prefer GPS-assisted match when it found enough verified homes;
+      // only fall back to OCR/home-discovery when yield is weak.
+      if (verifiedMatches.length >= 2) {
         scanProperties = fromGps;
       } else {
         const detections = await runAddressDetection(imageUrls, roster);
@@ -259,8 +279,18 @@ export async function POST(request: NextRequest) {
       scanProperties = roster;
     }
 
-    if (scanProperties.length === 0) {
-      scanProperties = demoProperties;
+    if (scanProperties.length === 0 && roster.length === 0) {
+      // Last resort only when no roster and no detections — avoid inventing demo homes for live users
+      scanProperties = propertiesFromFrameFallback(
+        frames?.map((f) => ({
+          index: f.index,
+          timestamp: f.timestamp,
+          dataUrl: f.dataUrl,
+        })) ?? [],
+        neighborhood
+      );
+    } else if (scanProperties.length === 0 && roster.length > 0) {
+      scanProperties = roster.slice(0, 20);
     }
 
     const priorMap = userId
@@ -276,16 +306,33 @@ export async function POST(request: NextRequest) {
       hasActiveSubscription(subscription?.status ?? "none") &&
       subscription?.plan === "professional";
     const homeLimit = isPro ? 200 : 50;
-    const propertiesToAnalyze = newProperties.slice(0, homeLimit);
+    const capped = newProperties.slice(0, homeLimit);
+
+    // Only run compliance AI on verified addresses — placeholders / low-confidence
+    // homes stay in results as needs-review without enforceable violations.
+    const verifiedForCompliance = capped.filter(isAddressVerified);
+    const unverifiedHomes = capped.filter((p) => !isAddressVerified(p));
 
     const batches: Property[][] = [];
-    for (let i = 0; i < propertiesToAnalyze.length; i += BATCH_SIZE) {
-      batches.push(propertiesToAnalyze.slice(i, i + BATCH_SIZE));
+    for (let i = 0; i < verifiedForCompliance.length; i += BATCH_SIZE) {
+      batches.push(verifiedForCompliance.slice(i, i + BATCH_SIZE));
     }
 
     const batchResults = await Promise.all(
       batches.map((batch) => analyzeBatch(batch, ruleMap))
     );
+
+    const unverifiedResults: AIPropertyResult[] = unverifiedHomes.map((prop) => ({
+      propertyId: prop.id,
+      address: prop.address,
+      violationType: null,
+      confidence: 0,
+      recommendation: "",
+      reasoning:
+        "Address needs human confirmation before compliance analysis. No violation created.",
+      rule: "",
+    }));
+
     const skippedResults: AIPropertyResult[] = priorSkipped.map((prop) => ({
       propertyId: prop.id,
       address: prop.address,
@@ -297,10 +344,34 @@ export async function POST(request: NextRequest) {
       previouslyInspected: true,
       priorInspectionDate: prop.priorInspectionDate,
     }));
-    const results = [...batchResults.flat(), ...skippedResults];
+
+    const propertiesToAnalyze = capped;
+    const results = [
+      ...batchResults.flat(),
+      ...unverifiedResults,
+      ...skippedResults,
+    ];
     const allProperties = [...propertiesToAnalyze, ...priorSkipped];
 
-    const violations = buildViolationsFromAI(id, results, ruleMap);
+    // Enforceable violations only from verified homes with real findings
+    const violations = buildViolationsFromAI(
+      id,
+      batchResults.flat().filter((r) => (r.confidence ?? 0) >= 70),
+      ruleMap
+    );
+
+    // Mark unverified homes in addressReviews
+    for (const prop of unverifiedHomes) {
+      if (!addressReviews.some((r) => r.propertyId === prop.id)) {
+        addressReviews.push({
+          propertyId: prop.id,
+          address: prop.address,
+          confidence: prop.addressConfidence ?? 0,
+          needsReview: true,
+          reasoning: prop.addressMatchReason ?? "Unverified address",
+        });
+      }
+    }
 
     violations.forEach((v) => {
       const prop = allProperties.find((p) => p.id === v.propertyId);

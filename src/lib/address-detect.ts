@@ -1,4 +1,9 @@
 import type { Property } from "./mock-data";
+import {
+  addressDedupeKey,
+  extractHouseNumber,
+  streetCore,
+} from "./address-normalize";
 
 export interface AddressDetection {
   frameIndex: number;
@@ -68,24 +73,42 @@ Respond with JSON only:
 }`;
 }
 
-/** Optional: match AI-read address to an imported roster */
+/** Optional: match AI-read address to an imported roster (strict house # + street). */
 export function matchAddressToRoster(
   detected: string,
   roster: Property[]
 ): Property | null {
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const target = norm(detected);
+  const target = detected.trim();
   if (!target) return null;
+
+  const targetKey = addressDedupeKey(target);
+  const targetNum = extractHouseNumber(target);
+  const targetStreet = streetCore(target);
+
+  for (const prop of roster) {
+    if (addressDedupeKey(prop.address) === targetKey) return prop;
+  }
+
+  if (!targetNum) return null;
 
   let best: Property | null = null;
   let bestScore = 0;
 
   for (const prop of roster) {
-    const addr = norm(prop.address);
-    if (addr === target) return prop;
-    if (addr.includes(target) || target.includes(addr)) {
-      const score =
-        Math.min(addr.length, target.length) / Math.max(addr.length, target.length);
+    const propNum = extractHouseNumber(prop.address);
+    if (!propNum || propNum !== targetNum) continue;
+
+    const propStreet = streetCore(prop.address);
+    if (!targetStreet || !propStreet) continue;
+
+    if (propStreet === targetStreet) return prop;
+
+    const shorter =
+      propStreet.length <= targetStreet.length ? propStreet : targetStreet;
+    const longer =
+      propStreet.length > targetStreet.length ? propStreet : targetStreet;
+    if (longer.startsWith(shorter) && shorter.length >= 4) {
+      const score = shorter.length / longer.length;
       if (score > bestScore) {
         bestScore = score;
         best = prop;
@@ -93,7 +116,7 @@ export function matchAddressToRoster(
     }
   }
 
-  return bestScore >= 0.4 ? best : null;
+  return bestScore >= 0.7 ? best : null;
 }
 
 export function attachRosterMatches(

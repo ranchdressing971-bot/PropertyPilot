@@ -90,10 +90,10 @@ export default function UploadPage() {
         setStatusDetail("Capturing GPS and video frames...");
         const [frames, geo] = await Promise.all([
           extractVideoFrames(file, {
-            intervalSec: 1.5,
-            maxFrames: 20,
+            intervalSec: 1.8,
+            maxFrames: 14,
             maxWidth: 960,
-            quality: 0.62,
+            quality: 0.68,
           }),
           captureUploadGeo(),
         ]);
