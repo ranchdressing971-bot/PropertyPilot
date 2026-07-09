@@ -76,30 +76,49 @@ Respond with JSON only:
 /** Optional: match AI-read address to an imported roster (strict house # + street). */
 export function matchAddressToRoster(
   detected: string,
-  roster: Property[]
+  roster: Property[],
+  visibleHouseNumber?: string | null
 ): Property | null {
   const target = detected.trim();
-  if (!target) return null;
+  if (!target && !visibleHouseNumber) return null;
 
-  const targetKey = addressDedupeKey(target);
-  const targetNum = extractHouseNumber(target);
-  const targetStreet = streetCore(target);
+  const targetKey = target ? addressDedupeKey(target) : "";
+  const targetNum =
+    (visibleHouseNumber || "").trim().toLowerCase() ||
+    (target ? extractHouseNumber(target) : null);
+  const targetStreet = target ? streetCore(target) : "";
 
-  for (const prop of roster) {
-    if (addressDedupeKey(prop.address) === targetKey) return prop;
+  // Exact normalized key wins immediately
+  if (targetKey) {
+    for (const prop of roster) {
+      if (addressDedupeKey(prop.address) === targetKey) return prop;
+    }
   }
 
+  // Require a house number — never match street-only
   if (!targetNum) return null;
+
+  const numberMatches = roster.filter((prop) => {
+    const propNum = extractHouseNumber(prop.address);
+    return propNum && propNum === targetNum;
+  });
+
+  if (numberMatches.length === 0) return null;
+  if (numberMatches.length === 1 && !targetStreet) {
+    // Only one home with that number on the roster — accept it
+    return numberMatches[0];
+  }
 
   let best: Property | null = null;
   let bestScore = 0;
 
-  for (const prop of roster) {
-    const propNum = extractHouseNumber(prop.address);
-    if (!propNum || propNum !== targetNum) continue;
-
+  for (const prop of numberMatches) {
     const propStreet = streetCore(prop.address);
-    if (!targetStreet || !propStreet) continue;
+    if (!targetStreet || !propStreet) {
+      // Prefer exact number-only when street unknown, but only if unique
+      if (numberMatches.length === 1) return prop;
+      continue;
+    }
 
     if (propStreet === targetStreet) return prop;
 
@@ -116,7 +135,18 @@ export function matchAddressToRoster(
     }
   }
 
-  return bestScore >= 0.7 ? best : null;
+  // Raised threshold — only strong street-prefix overlap
+  return bestScore >= 0.85 ? best : null;
+}
+
+/** Find roster homes that share an exact house number. */
+export function rosterByHouseNumber(
+  houseNumber: string | null | undefined,
+  roster: Property[]
+): Property[] {
+  const num = (houseNumber || "").trim().toLowerCase();
+  if (!num) return [];
+  return roster.filter((p) => extractHouseNumber(p.address) === num);
 }
 
 export function attachRosterMatches(

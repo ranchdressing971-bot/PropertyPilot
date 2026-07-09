@@ -56,7 +56,7 @@ export function useRoster() {
     const normalized = normalizeRosterIds(data.properties);
     saveRosterToStorage(normalized);
     setProperties(normalized);
-    return normalized;
+    return { properties: normalized, count: data.count ?? normalized.length };
   }
 
   return { properties, loading, refresh, saveRoster, importCsv };

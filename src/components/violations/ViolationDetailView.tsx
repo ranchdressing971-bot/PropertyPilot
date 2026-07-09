@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
@@ -9,6 +8,7 @@ import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { MediaImage } from "@/components/ui/MediaImage";
 import { NoticePreview } from "@/components/violations/NoticePreview";
 import { Violation } from "@/lib/mock-data";
 import {
@@ -167,7 +167,12 @@ export function ViolationDetailView({ id }: { id: string }) {
                       key={i}
                       className="relative aspect-[4/3] overflow-hidden rounded-xl border border-ink-200"
                     >
-                      <Image src={img} alt={`Evidence ${i + 1}`} fill className="object-cover" />
+                      <MediaImage
+                        src={img}
+                        alt={`Evidence ${i + 1}`}
+                        fill
+                        className="object-cover"
+                      />
                     </div>
                   ))}
                 </div>

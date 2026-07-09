@@ -211,11 +211,20 @@ export default function UploadPage() {
         subtitle={
           isDemo
             ? "Demo mode — simulated analysis with sample data"
-            : "Live mode — AI reads addresses from your video automatically"
+            : "Live mode — AI reads mailbox numbers from your video"
         }
       />
       <PageContent className="flex min-h-[calc(100vh-12rem)] items-center">
         <div className="w-full max-w-2xl">
+          {!isDemo && (
+            <p className="mb-4 rounded-xl border border-brand-200 bg-brand-50/70 px-4 py-3 text-sm text-ink-700">
+              Tip: Import your community CSV under{" "}
+              <a href="/dashboard/properties" className="font-medium text-brand-800 underline">
+                Properties
+              </a>{" "}
+              first — matching house numbers to a roster is much more accurate.
+            </p>
+          )}
           {error && (
             <div className="mb-4 space-y-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               <p>{error}</p>

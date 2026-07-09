@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { Violation } from "@/lib/mock-data";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { MediaImage } from "@/components/ui/MediaImage";
 import { Download, Mail, CheckCircle2, Loader2 } from "lucide-react";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { displayHoaName, displayManagerName } from "@/lib/profile";
@@ -128,7 +128,12 @@ export function NoticePreview({
                   key={i}
                   className="relative h-24 w-32 overflow-hidden rounded-lg border border-ink-200"
                 >
-                  <Image src={img} alt={`Evidence ${i + 1}`} fill className="object-cover" />
+                  <MediaImage
+                    src={img}
+                    alt={`Evidence ${i + 1}`}
+                    fill
+                    className="object-cover"
+                  />
                 </div>
               ))}
             </div>

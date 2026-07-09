@@ -134,14 +134,13 @@ export function dedupeProperties(
 
   for (const item of sorted) {
     const prev = merged[merged.length - 1];
+    // Only merge when same home — never collapse different streets that share a number
     if (
       prev &&
       Math.abs(item.frame.timestamp - prev.frame.timestamp) < TEMPORAL_GAP_SEC &&
       (isPlaceholderAddress(item.address) ||
         isPlaceholderAddress(prev.address) ||
-        addressesLikelySame(item.address, prev.address) ||
-        (extractHouseNumber(item.address) &&
-          extractHouseNumber(item.address) === extractHouseNumber(prev.address)))
+        addressesLikelySame(item.address, prev.address))
     ) {
       prev.address = pickBetterAddress(prev.address, item.address);
       if (
@@ -236,8 +235,17 @@ export function propertiesFromAddressMatches(
   >();
 
   for (const m of matches) {
-    const addr = m.matchedAddress?.trim();
+    let addr = m.matchedAddress?.trim();
     if (!addr || addr === "Unknown" || m.confidence < 20) continue;
+
+    // Prefer visible house number over a mismatched street guess
+    const visibleNum = (m.houseNumber || extractHouseNumber(m.visibleText || "") || "").toLowerCase();
+    const addrNum = extractHouseNumber(addr);
+    if (visibleNum && addrNum && visibleNum !== addrNum) {
+      addr = addr.replace(/^\d+[a-z]?/i, m.houseNumber || visibleNum);
+    } else if (visibleNum && !addrNum) {
+      addr = `${m.houseNumber || visibleNum} ${addr}`.trim();
+    }
 
     const frame =
       frames[m.frameIndex] ?? frames.find((f) => f.index === m.frameIndex);
@@ -245,19 +253,32 @@ export function propertiesFromAddressMatches(
 
     const key = addressDedupeKey(addr);
     const existing = groups.get(key);
+    const needsReview =
+      m.needsReview ||
+      !visibleNum ||
+      (Boolean(visibleNum) && Boolean(addrNum) && visibleNum !== addrNum);
 
     if (!existing || m.confidence > existing.confidence) {
       groups.set(key, {
         address: addr,
         confidence: m.confidence,
-        needsReview: m.needsReview,
+        needsReview,
         reasoning: m.reasoning,
         frame,
         propertyId: m.matchedPropertyId,
       });
     } else {
-      existing.needsReview = existing.needsReview || m.needsReview;
-      existing.address = pickBetterAddress(existing.address, addr);
+      existing.needsReview = existing.needsReview || needsReview;
+      // Prefer address whose house number matches the visible digits
+      const existingNum = extractHouseNumber(existing.address);
+      if (visibleNum && existingNum !== visibleNum) {
+        existing.address = addr;
+        existing.frame = frame;
+        existing.confidence = m.confidence;
+        existing.propertyId = m.matchedPropertyId;
+      } else {
+        existing.address = pickBetterAddress(existing.address, addr);
+      }
     }
   }
 

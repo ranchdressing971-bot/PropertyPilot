@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { MediaImage } from "@/components/ui/MediaImage";
 import { Violation, getProperty } from "@/lib/mock-data";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { useLiveDashboard } from "@/hooks/useLiveDashboard";
@@ -31,15 +31,9 @@ export function ViolationCard({ violation }: ViolationCardProps) {
   return (
     <Card hover>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        {imageSrc ? (
-          <div className="relative h-32 w-full shrink-0 overflow-hidden rounded-lg sm:h-20 sm:w-28">
-            <Image src={imageSrc} alt="Evidence" fill className="object-cover" />
-          </div>
-        ) : (
-          <div className="flex h-32 w-full shrink-0 items-center justify-center rounded-lg bg-ink-50 sm:h-20 sm:w-28">
-            <MapPin className="h-5 w-5 text-ink-300" />
-          </div>
-        )}
+        <div className="relative h-32 w-full shrink-0 overflow-hidden rounded-lg sm:h-20 sm:w-28">
+          <MediaImage src={imageSrc} alt="Evidence" fill className="object-cover" />
+        </div>
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1.5 text-sm text-ink-500">
             <MapPin className="h-3.5 w-3.5" />

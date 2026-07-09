@@ -43,11 +43,12 @@ export function PropertiesPageContent() {
   const { isDemo, isLive } = useAppMode();
   const { profile } = useUserProfile();
   const { data: live, loading: liveLoading } = useLiveDashboard(isLive);
-  const { importCsv } = useRoster();
-  const [showRoster, setShowRoster] = useState(false);
+  const { importCsv, properties: roster } = useRoster();
+  const [showRoster, setShowRoster] = useState(true);
 
   const list = isDemo ? demoProperties : (live?.properties ?? []);
   const loading = isLive && liveLoading && !live;
+  const rosterCount = roster.length;
 
   if (loading) {
     return (
@@ -66,9 +67,13 @@ export function PropertiesPageContent() {
           <button
             type="button"
             onClick={() => setShowRoster(!showRoster)}
-            className="flex w-full items-center justify-between rounded-xl border border-ink-200 bg-ink-50/50 px-4 py-3 text-left text-sm text-ink-600 hover:bg-ink-50"
+            className="flex w-full items-center justify-between rounded-xl border border-brand-200 bg-brand-50/60 px-4 py-3 text-left text-sm text-ink-700 hover:bg-brand-50"
           >
-            <span>Optional: import address list for cross-check</span>
+            <span>
+              {rosterCount > 0
+                ? `Address roster · ${rosterCount} homes (improves mailbox matching)`
+                : "Import address roster — recommended before your next upload"}
+            </span>
             <ChevronDown
               className={`h-4 w-4 transition-transform ${showRoster ? "rotate-180" : ""}`}
             />
@@ -78,7 +83,7 @@ export function PropertiesPageContent() {
               <RosterImport
                 neighborhood={profile?.hoaName || "Your Community"}
                 onImport={async (csv) => {
-                  await importCsv(csv, profile?.hoaName || "Your Community");
+                  return importCsv(csv, profile?.hoaName || "Your Community");
                 }}
               />
             </div>
@@ -90,7 +95,7 @@ export function PropertiesPageContent() {
         <EmptyState
           icon={Home}
           title="No properties yet"
-          description="Upload a drive-through inspection — AI will find home addresses from your video automatically."
+          description="Import your community CSV above, then upload a drive-through — AI matches mailbox numbers to your roster."
           actionLabel="Upload inspection"
           actionHref="/dashboard/inspections/upload"
         />

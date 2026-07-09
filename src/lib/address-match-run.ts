@@ -1,11 +1,12 @@
 import type { ChatCompletionContentPart } from "openai/resources/chat/completions";
 import { getOpenAI } from "./openai";
 import type { AddressCandidateContext } from "./geo/nearby-addresses";
-import { matchAddressToRoster } from "./address-detect";
+import { matchAddressToRoster, rosterByHouseNumber } from "./address-detect";
 import type { Property } from "./mock-data";
 import type { ExtractedFrame } from "./video-frames";
 import { ADDRESS_REVIEW_THRESHOLD } from "./geo/types";
 import { sanitizeImageDataUrl } from "./image-data-url";
+import { extractHouseNumber } from "./address-normalize";
 
 const FRAMES_PER_MATCH_CALL = 4;
 
@@ -34,16 +35,23 @@ function buildMatchPrompt(
 
   return `You are matching HOA drive-through video frames to street addresses.
 
+CRITICAL — HOUSE NUMBER FIRST:
+- Read the mailbox / curb / door digits carefully. Digits must match what you SEE.
+- Never invent or guess a house number. If unclear, set houseNumber null and needsReview true.
+- matchedAddress MUST start with the same houseNumber you read (e.g. houseNumber "456" → "456 Oak Lane").
+- If the street is known from context but the number is wrong on a candidate, DO NOT pick that candidate.
+- Prefer a candidate whose number EXACTLY matches the visible digits. Street name is secondary.
+
 Pipeline for EACH frame:
-1. Mentally crop to mailbox, house number, curb, door, or street sign
-2. Read visible numbers and text (visibleText, houseNumber)
-3. Pick the BEST matching address from the candidate list OR state a new full address if clearly different
-4. Assign confidence 0-100 (use <${ADDRESS_REVIEW_THRESHOLD} when unsure or ambiguous between two homes)
-5. Set needsReview true when confidence < ${ADDRESS_REVIEW_THRESHOLD} or two candidates could match
+1. Mentally crop to mailbox, house number, curb, or door
+2. Read digits first → houseNumber (string of digits only, e.g. "123")
+3. Then pick matchedAddress from candidates that share THAT exact number, or build "NUMBER Street"
+4. confidence 0-100 (use <${ADDRESS_REVIEW_THRESHOLD} when digits are blurry or two numbers are possible)
+5. needsReview true when confidence < ${ADDRESS_REVIEW_THRESHOLD} OR digits are uncertain
 
 Context: ${ctx.promptContext}
 
-Candidate addresses (prefer these when the visible number matches):
+Candidate addresses (ONLY use one if its house number matches what you read):
 ${candidateBlock}
 
 Respond JSON only:
@@ -51,13 +59,13 @@ Respond JSON only:
   "matches": [
     {
       "frameIndex": ${startIndex},
-      "visibleText": "123" or "mailbox 123 Oak" or null,
-      "houseNumber": "123" or null,
-      "matchedAddress": "123 Oak Lane",
+      "visibleText": "456" or "mailbox 456 Oak" or null,
+      "houseNumber": "456" or null,
+      "matchedAddress": "456 Oak Lane",
       "confidence": 85,
       "needsReview": false,
       "focalRegion": "mailbox",
-      "reasoning": "clear mailbox digits 123 matches candidate 1"
+      "reasoning": "mailbox shows 456; matches candidate with 456"
     }
   ]
 }
@@ -89,8 +97,8 @@ async function matchBatch(
             type: "image_url" as const,
             image_url: {
               url,
-              // low detail is enough for mailbox numbers and avoids huge payloads
-              detail: "low" as const,
+              // high detail for reading mailbox digits accurately
+              detail: "high" as const,
             },
           },
         ];
@@ -123,20 +131,57 @@ async function matchBatch(
     const frameIndex =
       m.frameIndex >= startIndex ? m.frameIndex : startIndex + m.frameIndex;
 
-    const rosterMatch =
+    const rawHouse =
+      (m.houseNumber || "").trim() ||
+      extractHouseNumber(m.visibleText || "") ||
+      extractHouseNumber(m.matchedAddress || "");
+
+    // Prefer roster rows that share the VISIBLE house number
+    let rosterMatch =
       roster.length > 0
-        ? matchAddressToRoster(m.matchedAddress, roster)
+        ? matchAddressToRoster(m.matchedAddress || "", roster, rawHouse)
         : null;
 
-    const confidence = Math.min(99, Math.max(0, m.confidence ?? 0));
-    const needsReview =
-      m.needsReview ?? confidence < ADDRESS_REVIEW_THRESHOLD;
+    if (!rosterMatch && rawHouse && roster.length > 0) {
+      const byNum = rosterByHouseNumber(rawHouse, roster);
+      if (byNum.length === 1) rosterMatch = byNum[0];
+    }
+
+    // Force address to use the visible house number when we have one
+    let matchedAddress =
+      m.matchedAddress?.trim() || m.visibleText?.trim() || "Unknown";
+    if (rosterMatch) {
+      const rosterNum = extractHouseNumber(rosterMatch.address);
+      if (rawHouse && rosterNum && rosterNum === rawHouse.toLowerCase()) {
+        matchedAddress = rosterMatch.address;
+      } else if (rawHouse && rosterNum && rosterNum !== rawHouse.toLowerCase()) {
+        // Roster pick disagrees with visible digits — keep vision number, flag review
+        matchedAddress = matchedAddress.replace(/^\d+[a-z]?/i, rawHouse);
+        rosterMatch = null;
+      }
+    } else if (rawHouse && !extractHouseNumber(matchedAddress)) {
+      matchedAddress = `${rawHouse} ${matchedAddress}`.trim();
+    } else if (
+      rawHouse &&
+      extractHouseNumber(matchedAddress) &&
+      extractHouseNumber(matchedAddress) !== rawHouse.toLowerCase()
+    ) {
+      // GPT put the wrong number on the street — fix the digits
+      matchedAddress = matchedAddress.replace(/^\d+[a-z]?/i, rawHouse);
+    }
+
+    let confidence = Math.min(99, Math.max(0, m.confidence ?? 0));
+    let needsReview = m.needsReview ?? confidence < ADDRESS_REVIEW_THRESHOLD;
+    if (!rawHouse) {
+      needsReview = true;
+      confidence = Math.min(confidence, 55);
+    }
 
     return {
       frameIndex,
       visibleText: m.visibleText,
-      houseNumber: m.houseNumber,
-      matchedAddress: m.matchedAddress?.trim() || m.visibleText || "Unknown",
+      houseNumber: rawHouse,
+      matchedAddress,
       matchedPropertyId: rosterMatch?.id ?? null,
       confidence,
       needsReview,

@@ -19,12 +19,12 @@ export function parseCsvRoster(csv: string, neighborhood = "Your Community"): Pr
     const cols = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((c) =>
       c.replace(/^"|"$/g, "").trim()
     );
+    // Keep address clean (house # + street only) so mailbox matching works
     const address = cols[0] || `Property ${i + 1}`;
-    const lot = cols[1] || undefined;
 
     return {
       id: `prop-${i + 1}`,
-      address: lot ? `${address} (Lot ${lot})` : address,
+      address,
       image: "",
       status: "Good Standing" as const,
       lastInspection: "—",

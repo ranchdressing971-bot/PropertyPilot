@@ -84,6 +84,33 @@ export function InspectionResultsView({ id }: { id: string }) {
       }));
   }, [data]);
 
+  function handleAddressConfirmed(propertyId: string, address: string) {
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        addressReviews: (prev.addressReviews ?? []).map((r) =>
+          r.propertyId === propertyId
+            ? { ...r, address, confidence: 100, needsReview: false }
+            : r
+        ),
+        results: prev.results.map((r) =>
+          r.propertyId === propertyId
+            ? {
+                ...r,
+                property: {
+                  ...r.property,
+                  address,
+                  needsAddressReview: false,
+                  addressConfidence: 100,
+                },
+              }
+            : r
+        ),
+      };
+    });
+  }
+
   const filtered = useMemo(() => {
     if (!data) return [];
     switch (tab) {
@@ -162,7 +189,8 @@ export function InspectionResultsView({ id }: { id: string }) {
                   {addressReviewItems.length === 1 ? "" : "es"} need confirmation
                 </p>
                 <p className="mt-1 text-xs text-amber-800/90">
-                  Unverified homes were not turned into enforceable violations.
+                  Open the <span className="font-medium">Needs review</span> tab —
+                  check the photo, then tap Looks right or Fix number.
                 </p>
               </div>
             </div>
@@ -227,6 +255,7 @@ export function InspectionResultsView({ id }: { id: string }) {
                   property={result.property}
                   violation={result.violation}
                   index={i}
+                  onAddressConfirmed={handleAddressConfirmed}
                 />
               );
             })
