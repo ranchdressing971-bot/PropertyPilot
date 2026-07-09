@@ -29,11 +29,25 @@ export function AppModeProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get("mode");
     const stored = localStorage.getItem(MODE_STORAGE_KEY) as AppMode | null;
-    if (stored === "demo" || stored === "live") {
-      setModeState(stored);
-      persistMode(stored);
-    }
+
+    // /demo sets the cookie; honor cookie or ?mode=demo for share links
+    const cookieMatch = document.cookie.match(/(?:^|; )pp-mode=(demo|live)/);
+    const fromCookie = cookieMatch?.[1] as AppMode | undefined;
+
+    const next =
+      fromQuery === "demo" || fromQuery === "live"
+        ? fromQuery
+        : fromCookie === "demo" || fromCookie === "live"
+          ? fromCookie
+          : stored === "demo" || stored === "live"
+            ? stored
+            : "demo";
+
+    setModeState(next);
+    persistMode(next);
     setReady(true);
   }, []);
 

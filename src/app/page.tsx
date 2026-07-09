@@ -53,7 +53,10 @@ export default function HomePage() {
               </Button>
             </div>
             <p className="mt-5 text-sm text-ink-500">
-              Built for HOA managers. No credit card to try.
+              Built for HOA managers. Share demo:{" "}
+              <a href="/demo" className="font-medium text-brand-700 underline">
+                /demo
+              </a>
             </p>
           </motion.div>
 
