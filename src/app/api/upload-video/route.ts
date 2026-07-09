@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthenticatedUserId } from "@/lib/supabase/persist";
+import { safeStorageSegment } from "@/lib/image-data-url";
 
 const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+
+function safeExt(fileName: string, mime: string): string {
+  const raw = (fileName.split(".").pop() || "").toLowerCase();
+  if (/^(mp4|mov|webm|m4v)$/.test(raw)) return raw;
+  if (mime.includes("webm")) return "webm";
+  if (mime.includes("quicktime")) return "mov";
+  return "mp4";
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +31,13 @@ export async function POST(request: NextRequest) {
 
     const userId = await getAuthenticatedUserId();
     if (!userId) {
-      return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+      // Cloud backup is optional — analysis still runs from frames
+      return NextResponse.json({
+        stored: false,
+        message: "Sign in for cloud video backup (analysis still works)",
+        videoName: file.name,
+        sizeBytes: file.size,
+      });
     }
 
     const supabase = await createClient();
@@ -36,8 +51,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const ext = file.name.split(".").pop() ?? "mp4";
-    const path = `${userId}/${Date.now()}.${ext}`;
+    const ext = safeExt(file.name, file.type || "");
+    const path = `${safeStorageSegment(userId)}/${Date.now()}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const { error } = await supabase.storage
@@ -48,9 +63,11 @@ export async function POST(request: NextRequest) {
       });
 
     if (error) {
+      // Never fail the inspection flow because of optional cloud backup
+      console.error("video upload skipped:", error.message);
       return NextResponse.json({
         stored: false,
-        message: "Storage bucket not configured — video still analyzed from frames",
+        message: "Storage backup skipped — video still analyzed from frames",
         videoName: file.name,
         storageError: error.message,
       });
@@ -70,6 +87,11 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Upload failed";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Soft-fail — frame analysis is the source of truth
+    return NextResponse.json({
+      stored: false,
+      message: msg,
+      error: msg,
+    });
   }
 }

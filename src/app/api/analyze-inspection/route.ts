@@ -406,8 +406,17 @@ export async function POST(request: NextRequest) {
     let storedViolations = violations;
 
     if (userId) {
-      propertyImages = await persistPropertyThumbnails(userId, id, allProperties);
-      storedViolations = await persistEvidenceImages(userId, id, violations);
+      try {
+        propertyImages = await persistPropertyThumbnails(userId, id, allProperties);
+      } catch (err) {
+        console.error("thumbnail persist skipped:", err);
+      }
+      try {
+        storedViolations = await persistEvidenceImages(userId, id, violations);
+      } catch (err) {
+        console.error("evidence persist skipped:", err);
+        storedViolations = violations.map((v) => ({ ...v, evidenceImages: [] }));
+      }
     }
 
     const inspection: AIInspectionData = {

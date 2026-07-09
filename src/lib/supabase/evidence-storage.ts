@@ -36,44 +36,49 @@ export async function persistEvidenceImages(
   inspectionId: string,
   violations: Violation[]
 ): Promise<Violation[]> {
-  const admin = createAdminClient();
-  const supabase = admin ?? (await createClient());
-  if (!supabase) return violations;
+  try {
+    const admin = createAdminClient();
+    const supabase = admin ?? (await createClient());
+    if (!supabase) return violations;
 
-  const bucket = "inspection-evidence";
+    const bucket = "inspection-evidence";
 
-  return Promise.all(
-    violations.map(async (violation) => {
-      const evidenceImages = await Promise.all(
-        violation.evidenceImages.map(async (img, index) => {
-          if (!img.startsWith("data:")) return img;
+    return await Promise.all(
+      violations.map(async (violation) => {
+        const evidenceImages = await Promise.all(
+          violation.evidenceImages.map(async (img, index) => {
+            if (!img.startsWith("data:")) return img;
 
-          const parsed = parseDataUrl(img);
-          if (!parsed) return "";
+            const parsed = parseDataUrl(img);
+            if (!parsed) return "";
 
-          const ext = parsed.contentType.includes("png") ? "png" : "jpg";
-          const path = `${safeStorageSegment(userId)}/${safeStorageSegment(inspectionId)}/${safeStorageSegment(violation.propertyId)}-${index}.${ext}`;
+            const ext = parsed.contentType.includes("png") ? "png" : "jpg";
+            const path = `${safeStorageSegment(userId)}/${safeStorageSegment(inspectionId)}/${safeStorageSegment(violation.propertyId)}-${index}.${ext}`;
 
-          const { error } = await supabase.storage.from(bucket).upload(path, parsed.buffer, {
-            contentType: parsed.contentType,
-            upsert: true,
-          });
+            const { error } = await supabase.storage.from(bucket).upload(path, parsed.buffer, {
+              contentType: parsed.contentType,
+              upsert: true,
+            });
 
-          if (error) {
-            console.error("evidence upload failed:", error.message);
-            return "";
-          }
+            if (error) {
+              console.error("evidence upload failed:", error.message);
+              return "";
+            }
 
-          return signedUrl(supabase, bucket, path);
-        })
-      );
+            return signedUrl(supabase, bucket, path);
+          })
+        );
 
-      return {
-        ...violation,
-        evidenceImages: evidenceImages.filter(Boolean),
-      };
-    })
-  );
+        return {
+          ...violation,
+          evidenceImages: evidenceImages.filter(Boolean),
+        };
+      })
+    );
+  } catch (err) {
+    console.error("persistEvidenceImages crashed:", err);
+    return violations.map((v) => ({ ...v, evidenceImages: [] }));
+  }
 }
 
 /** Upload per-property frame thumbnails for the results grid. */
@@ -82,40 +87,45 @@ export async function persistPropertyThumbnails(
   inspectionId: string,
   properties: { id: string; image?: string }[]
 ): Promise<Record<string, string>> {
-  const admin = createAdminClient();
-  const supabase = admin ?? (await createClient());
-  if (!supabase) return {};
+  try {
+    const admin = createAdminClient();
+    const supabase = admin ?? (await createClient());
+    if (!supabase) return {};
 
-  const bucket = "inspection-evidence";
-  const urls: Record<string, string> = {};
+    const bucket = "inspection-evidence";
+    const urls: Record<string, string> = {};
 
-  await Promise.all(
-    properties.map(async (property) => {
-      const img = property.image;
-      if (!img?.startsWith("data:")) {
-        if (img) urls[property.id] = img;
-        return;
-      }
+    await Promise.all(
+      properties.map(async (property) => {
+        const img = property.image;
+        if (!img?.startsWith("data:")) {
+          if (img) urls[property.id] = img;
+          return;
+        }
 
-      const parsed = parseDataUrl(img);
-      if (!parsed) return;
+        const parsed = parseDataUrl(img);
+        if (!parsed) return;
 
-      const ext = parsed.contentType.includes("png") ? "png" : "jpg";
-      const path = `${safeStorageSegment(userId)}/${safeStorageSegment(inspectionId)}/thumb-${safeStorageSegment(property.id)}.${ext}`;
+        const ext = parsed.contentType.includes("png") ? "png" : "jpg";
+        const path = `${safeStorageSegment(userId)}/${safeStorageSegment(inspectionId)}/thumb-${safeStorageSegment(property.id)}.${ext}`;
 
-      const { error } = await supabase.storage.from(bucket).upload(path, parsed.buffer, {
-        contentType: parsed.contentType,
-        upsert: true,
-      });
+        const { error } = await supabase.storage.from(bucket).upload(path, parsed.buffer, {
+          contentType: parsed.contentType,
+          upsert: true,
+        });
 
-      if (error) {
-        console.error("thumbnail upload failed:", error.message);
-        return;
-      }
+        if (error) {
+          console.error("thumbnail upload failed:", error.message);
+          return;
+        }
 
-      urls[property.id] = await signedUrl(supabase, bucket, path);
-    })
-  );
+        urls[property.id] = await signedUrl(supabase, bucket, path);
+      })
+    );
 
-  return urls;
+    return urls;
+  } catch (err) {
+    console.error("persistPropertyThumbnails crashed:", err);
+    return {};
+  }
 }

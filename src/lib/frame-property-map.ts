@@ -22,9 +22,15 @@ export interface DiscoveredHome {
 const TEMPORAL_GAP_SEC = 6;
 
 function stablePropertyId(address: string, rosterId?: string): string {
-  if (rosterId && !rosterId.startsWith("found-")) return rosterId;
-  const key = addressDedupeKey(address);
-  return `addr-${key.replace(/\|/g, "-")}`;
+  if (rosterId && !rosterId.startsWith("found-") && !rosterId.includes(" ")) {
+    return rosterId.replace(/[^a-zA-Z0-9._-]+/g, "-");
+  }
+  const key = addressDedupeKey(address)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `addr-${key || "unknown"}`;
 }
 
 function formatVideoTime(seconds: number): string {

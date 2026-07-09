@@ -137,7 +137,11 @@ export default function UploadPage() {
               `${data.error} Visit Pricing to start your free trial.`
             );
           }
-          throw new Error(data.error ?? "Analysis failed");
+          const detail =
+            typeof data.detail === "string" && data.detail !== data.error
+              ? ` (${data.detail})`
+              : "";
+          throw new Error(`${data.error ?? "Analysis failed"}${detail}`);
         }
 
         setCurrentStep(4);
