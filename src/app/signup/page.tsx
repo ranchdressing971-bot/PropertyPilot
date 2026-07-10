@@ -86,6 +86,13 @@ function SignupForm() {
 
       if (authError) throw authError;
 
+      // Ensure metadata is set even if signUp options were ignored
+      if (authData.session) {
+        await supabase.auth.updateUser({
+          data: { hoa_name: trimmedHoa },
+        });
+      }
+
       if (authData.user) {
         await supabase.from("profiles").upsert({
           id: authData.user.id,
