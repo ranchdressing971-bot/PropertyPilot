@@ -19,11 +19,12 @@ export default function OnboardingPage() {
             <Sparkles className="h-6 w-6 text-accent-600" />
           </div>
           <h1 className="mt-4 font-display text-2xl font-semibold text-ink-900">
-            You&apos;re ready to inspect
+            Your free run starts here
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
-            Upload a drive-through video of {hoaName}. AI will read house
-            addresses from mailboxes, signs, and curbs — no spreadsheet needed.
+            Upload one drive-through of {hoaName}. We&apos;ll match house
+            numbers, pull evidence frames, and hand you a review list —
+            you approve before anything is sent.
           </p>
           <ul className="mt-4 space-y-2 text-sm text-ink-600">
             <li className="flex items-start gap-2">
@@ -38,7 +39,7 @@ export default function OnboardingPage() {
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <Link href="/dashboard/inspections/upload">
               <Button>
-                Upload first inspection
+                Start free inspection
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>

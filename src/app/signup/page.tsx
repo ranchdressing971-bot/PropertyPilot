@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -11,12 +11,16 @@ import { createClient, isSupabaseClientConfigured } from "@/lib/supabase/client"
 import { formatSupabaseAuthError } from "@/lib/supabase/config";
 import { postAuthPath } from "@/lib/auth-redirect";
 import { useAppMode } from "@/components/providers/AppModeProvider";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 
 function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setMode } = useAppMode();
 
+  const [fromFreeOffer, setFromFreeOffer] = useState(
+    searchParams.get("offer") === "free-run"
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [hoaName, setHoaName] = useState("");
@@ -26,6 +30,25 @@ function SignupForm() {
   const [success, setSuccess] = useState(false);
 
   const supabaseReady = isSupabaseClientConfigured();
+
+  useEffect(() => {
+    if (searchParams.get("offer") === "free-run") {
+      setFromFreeOffer(true);
+      try {
+        localStorage.setItem("pp-offer", "free-run");
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    try {
+      if (localStorage.getItem("pp-offer") === "free-run") {
+        setFromFreeOffer(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [searchParams]);
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -56,6 +79,7 @@ function SignupForm() {
           data: {
             terms_accepted_at: new Date().toISOString(),
             hoa_name: trimmedHoa,
+            ...(fromFreeOffer ? { offer: "free-run" } : {}),
           },
         },
       });
@@ -71,7 +95,6 @@ function SignupForm() {
         });
       }
 
-      // Claim community trial while session exists (may fail if already used — that's ok at signup)
       if (authData.session) {
         const claimRes = await fetch("/api/community/claim-trial", {
           method: "POST",
@@ -85,8 +108,13 @@ function SignupForm() {
             data.error ??
               "This community already used its free trial. You can still create an account and subscribe."
           );
-          // Still allow account — they can pay
         }
+      }
+
+      try {
+        localStorage.removeItem("pp-offer");
+      } catch {
+        /* ignore */
       }
 
       setSuccess(true);
@@ -108,14 +136,25 @@ function SignupForm() {
 
   return (
     <Card className="w-full max-w-md" padding="lg">
-      <h1 className="font-display text-xl font-semibold text-ink-900">Create account</h1>
+      {fromFreeOffer && (
+        <p className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-800 ring-1 ring-brand-200">
+          <Sparkles className="h-3.5 w-3.5" />
+          Manager invite · free inspection unlocks after signup
+        </p>
+      )}
+      <h1 className="font-display text-xl font-semibold text-ink-900">
+        {fromFreeOffer ? "Claim your free run" : "Create account"}
+      </h1>
       <p className="mt-1 text-sm text-ink-500">
-        3 free inspections per community · plans from $149/mo
+        {fromFreeOffer
+          ? "Create your account, then upload one drive-through of your community — on us."
+          : "3 free inspections per community · plans from $149/mo"}
       </p>
 
       {!supabaseReady && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Configure Supabase first — see <code className="text-xs">docs/SUPABASE_SETUP.md</code>
+          Configure Supabase first — see{" "}
+          <code className="text-xs">docs/SUPABASE_SETUP.md</code>
         </div>
       )}
 
@@ -169,11 +208,19 @@ function SignupForm() {
             />
             <span>
               I agree to the{" "}
-              <Link href="/terms" className="font-medium text-copper-700 hover:underline" target="_blank">
+              <Link
+                href="/terms"
+                className="font-medium text-copper-700 hover:underline"
+                target="_blank"
+              >
                 Terms
               </Link>{" "}
               and{" "}
-              <Link href="/privacy" className="font-medium text-copper-700 hover:underline" target="_blank">
+              <Link
+                href="/privacy"
+                className="font-medium text-copper-700 hover:underline"
+                target="_blank"
+              >
                 Privacy Policy
               </Link>
             </span>
@@ -181,16 +228,23 @@ function SignupForm() {
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <Button type="submit" className="w-full" disabled={loading || !supabaseReady || !agreed}>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={loading || !supabaseReady || !agreed}
+          >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Create account
+            {fromFreeOffer ? "Unlock free inspection" : "Create account"}
           </Button>
         </form>
       )}
 
       <p className="mt-4 text-center text-sm text-ink-500">
         Already have an account?{" "}
-        <Link href="/login" className="font-medium text-copper-700 hover:underline">
+        <Link
+          href="/login"
+          className="font-medium text-copper-700 hover:underline"
+        >
           Sign in
         </Link>
       </p>
@@ -201,7 +255,9 @@ function SignupForm() {
 export default function SignupPage() {
   return (
     <AuthLayout>
-      <Suspense fallback={<Loader2 className="h-8 w-8 animate-spin text-copper-600" />}>
+      <Suspense
+        fallback={<Loader2 className="h-8 w-8 animate-spin text-copper-600" />}
+      >
         <SignupForm />
       </Suspense>
     </AuthLayout>
