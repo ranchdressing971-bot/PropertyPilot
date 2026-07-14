@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 
 export const metadata = {
-  title: "Privacy Policy — Property Pilot",
+  title: "Privacy Policy — RideBy",
 };
 
 export default function PrivacyPage() {
@@ -14,7 +14,7 @@ export default function PrivacyPage() {
 
         <h2>What we collect</h2>
         <p>
-          Property Pilot collects account information (email, name, HOA name),
+          RideBy collects account information (email, name, HOA name),
           property roster data you upload, inspection videos and AI analysis results,
           and usage data needed to operate the service.
         </p>

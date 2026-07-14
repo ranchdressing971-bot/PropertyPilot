@@ -17,5 +17,5 @@ export function getResend(): Resend {
 }
 
 export function getEmailFrom(): string {
-  return process.env.RESEND_FROM_EMAIL ?? "Property Pilot <onboarding@resend.dev>";
+  return process.env.RESEND_FROM_EMAIL ?? "RideBy <onboarding@resend.dev>";
 }

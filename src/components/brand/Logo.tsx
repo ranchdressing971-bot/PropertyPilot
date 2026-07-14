@@ -13,7 +13,7 @@ interface LogoProps {
 const sizes = {
   sm: { text: "text-base", icon: 28 },
   md: { text: "text-lg", icon: 32 },
-  lg: { text: "text-xl", icon: 36 },
+  lg: { text: "text-xl", icon: 40 },
 };
 
 export function Logo({
@@ -28,10 +28,7 @@ export function Logo({
   const content = (
     <div className={clsx("flex items-center gap-2.5", className)}>
       <span
-        className={clsx(
-          "relative inline-flex shrink-0 overflow-hidden rounded-full ring-2 ring-black",
-          variant === "light" && "ring-white"
-        )}
+        className="relative inline-flex shrink-0 overflow-hidden rounded-[22%]"
         style={{ width: icon, height: icon }}
         aria-hidden
       >
@@ -52,7 +49,7 @@ export function Logo({
             text
           )}
         >
-          Property Pilot
+          RideBy
         </span>
       )}
     </div>
@@ -60,7 +57,7 @@ export function Logo({
 
   if (href) {
     return (
-      <Link href={href} className="inline-flex shrink-0" aria-label="Property Pilot home">
+      <Link href={href} className="inline-flex shrink-0" aria-label="RideBy home">
         {content}
       </Link>
     );

@@ -39,7 +39,7 @@ export default function HomePage() {
               Review every home.
             </h1>
             <p className="mt-5 max-w-md text-base leading-relaxed text-ink-500 sm:text-lg">
-              Property Pilot turns a neighborhood drive-through into a manager-ready
+              RideBy turns a neighborhood drive-through into a manager-ready
               inspection — addresses matched, flags prepared, you approve.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">

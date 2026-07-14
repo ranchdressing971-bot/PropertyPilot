@@ -1,6 +1,6 @@
 # Video Processing Pipeline
 
-Property Pilot analyzes **real drive-through footage** in Live mode.
+RideBy analyzes **real drive-through footage** in Live mode.
 
 ## How it works
 

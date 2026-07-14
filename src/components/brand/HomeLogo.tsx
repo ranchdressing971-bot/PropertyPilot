@@ -18,7 +18,6 @@ const sizes = {
 
 /**
  * Marketing / homescreen logo only — not used inside the dashboard app.
- * Uses dual images for reliable iOS Safari dark mode (picture is fallback).
  */
 export function HomeLogo({
   size = "md",
@@ -31,35 +30,26 @@ export function HomeLogo({
   const content = (
     <div className={clsx("flex items-center gap-3", className)}>
       <span
-        className="relative inline-flex shrink-0 overflow-hidden rounded-full ring-2 ring-black dark:ring-white"
+        className="relative inline-flex shrink-0 overflow-hidden rounded-[22%]"
         style={{ width: icon, height: icon }}
       >
         <Image
           src="/logo.png"
-          alt="Property Pilot"
+          alt="RideBy"
           width={icon}
           height={icon}
-          className="h-full w-full object-cover dark:hidden"
+          className="h-full w-full object-cover"
           priority
-        />
-        <Image
-          src="/logo-dark.png"
-          alt=""
-          width={icon}
-          height={icon}
-          className="hidden h-full w-full object-cover dark:block"
-          priority
-          aria-hidden
         />
       </span>
       {showText && (
         <span
           className={clsx(
-            "font-display font-semibold tracking-tight text-ink-900 dark:text-ink-100",
+            "font-display font-semibold tracking-tight text-ink-900",
             text
           )}
         >
-          Property Pilot
+          RideBy
         </span>
       )}
     </div>
@@ -67,7 +57,7 @@ export function HomeLogo({
 
   if (href) {
     return (
-      <Link href={href} className="inline-flex shrink-0" aria-label="Property Pilot home">
+      <Link href={href} className="inline-flex shrink-0" aria-label="RideBy home">
         {content}
       </Link>
     );

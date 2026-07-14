@@ -16,7 +16,7 @@ export async function reverseGeocode(
       `https://nominatim.openstreetmap.org/reverse?${params}`,
       {
         headers: {
-          "User-Agent": "PropertyPilot/1.0 (hoa-inspection-app)",
+          "User-Agent": "RideBy/1.0 (hoa-inspection-app)",
           Accept: "application/json",
         },
         next: { revalidate: 86400 },

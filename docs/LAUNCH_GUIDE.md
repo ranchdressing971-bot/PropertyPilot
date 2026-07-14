@@ -1,4 +1,4 @@
-# Launch Guide — Making Property Pilot Sellable
+# Launch Guide — Making RideBy Sellable
 
 This guide expands on everything beyond the core product code: billing, email,
 legal, reliability, and go-to-market.

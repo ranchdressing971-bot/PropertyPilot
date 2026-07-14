@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 
 export const metadata = {
-  title: "Terms of Service — Property Pilot",
+  title: "Terms of Service — RideBy",
 };
 
 export default function TermsPage() {
@@ -14,7 +14,7 @@ export default function TermsPage() {
 
         <h2>Service description</h2>
         <p>
-          Property Pilot provides AI-assisted tools for HOA community managers to
+          RideBy provides AI-assisted tools for HOA community managers to
           review drive-through inspection footage and draft compliance notices.
           AI outputs require human review before sending to homeowners.
         </p>
@@ -28,7 +28,7 @@ export default function TermsPage() {
 
         <h2>AI disclaimer</h2>
         <p>
-          AI detections are recommendations, not legal determinations. Property Pilot
+          AI detections are recommendations, not legal determinations. RideBy
           is not liable for enforcement actions taken based on AI output. Managers
           are responsible for verifying all notices before delivery.
         </p>

@@ -1,6 +1,6 @@
-# Property Pilot
+# RideBy
 
-AI-powered HOA inspection prototype. Upload a neighborhood drive-through video and review AI-generated property compliance reports.
+AI-powered HOA inspection product. Upload a neighborhood drive-through video and review AI-generated property compliance reports.
 
 ## Modes
 

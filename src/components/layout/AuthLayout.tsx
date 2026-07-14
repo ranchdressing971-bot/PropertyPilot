@@ -14,7 +14,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
         <div className="relative space-y-8">
           <div>
-            <p className="text-sm font-medium text-brand-400">Property Pilot</p>
+            <p className="text-sm font-medium text-brand-400">RideBy</p>
             <h2 className="mt-3 max-w-sm text-3xl font-semibold leading-tight tracking-tight text-white">
               HOA inspections, without the clip-by-clip grind.
             </h2>
@@ -41,7 +41,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         </div>
 
         <p className="relative text-xs text-ink-600">
-          &copy; {new Date().getFullYear()} Property Pilot
+          &copy; {new Date().getFullYear()} RideBy
         </p>
       </div>
 

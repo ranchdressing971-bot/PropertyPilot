@@ -47,7 +47,7 @@ export function PublicLayout({ children, showNavActions = true }: PublicLayoutPr
             <Link href="/terms" className="transition-colors hover:text-ink-900">
               Terms
             </Link>
-            <span className="text-ink-400">&copy; 2026 Property Pilot</span>
+            <span className="text-ink-400">&copy; 2026 RideBy</span>
           </div>
         </div>
       </footer>

@@ -22,7 +22,7 @@ const professionalFeatures = [
 ];
 
 export const metadata = {
-  title: "Pricing — Property Pilot",
+  title: "Pricing — RideBy",
 };
 
 export default function PricingPage() {

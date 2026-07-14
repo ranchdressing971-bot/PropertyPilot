@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { CheckoutPageClient, CheckoutPageFallback } from "./CheckoutPageClient";
 
 export const metadata = {
-  title: "Checkout — Property Pilot",
+  title: "Checkout — RideBy",
 };
 
 export default function CheckoutPage() {

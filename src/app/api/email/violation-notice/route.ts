@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
       <p style="line-height: 1.6;">${safe.violationDescription}</p>
       <p style="margin-top: 24px; font-size: 13px; color: #676774;">
         — ${safe.managerName}<br/>
-        Sent via Property Pilot. Human review is required before enforcement.
+        Sent via RideBy. Human review is required before enforcement.
       </p>
     </div>
   `;

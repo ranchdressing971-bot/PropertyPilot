@@ -1,6 +1,6 @@
 # Supabase Sign-In Setup
 
-Follow these steps to add email/password authentication to Property Pilot.
+Follow these steps to add email/password authentication to RideBy.
 
 ## Overview
 

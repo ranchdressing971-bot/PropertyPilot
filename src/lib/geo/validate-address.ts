@@ -63,7 +63,7 @@ export async function validateStreetAddress(
       `https://nominatim.openstreetmap.org/search?${params}`,
       {
         headers: {
-          "User-Agent": "PropertyPilot/1.0 (hoa-inspection-app)",
+          "User-Agent": "RideBy/1.0 (hoa-inspection-app)",
           Accept: "application/json",
         },
         // Don't cache failed lookups forever

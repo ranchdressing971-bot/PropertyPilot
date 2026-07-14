@@ -1,7 +1,7 @@
 import type Stripe from "stripe";
 import { getCheckoutDisplayName } from "./stripe";
 
-/** Match Property Pilot canvas, ink buttons, and rounded cards. */
+/** Match RideBy canvas, ink buttons, and rounded cards. */
 export function buildCheckoutBranding(
   appUrl: string,
   options?: { embedded?: boolean }

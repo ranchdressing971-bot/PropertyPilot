@@ -76,7 +76,7 @@ New users get **3 free live scans** without a card. After that, they subscribe a
 3. Add to Vercel:
    ```
    RESEND_API_KEY=re_...
-   RESEND_FROM_EMAIL=Property Pilot <notifications@yourdomain.com>
+   RESEND_FROM_EMAIL=RideBy <notifications@yourdomain.com>
    ```
 4. Redeploy
 

@@ -32,14 +32,14 @@ const iosAppleIcons: Metadata["icons"] = {
 };
 
 export const metadata: Metadata = {
-  title: "Property Pilot — HOA Drive-Through Inspections",
+  title: "RideBy — HOA Drive-Through Inspections",
   description:
-    "Upload a neighborhood drive-through. Property Pilot flags homes that need review so managers can approve notices with confidence.",
+    "Upload a neighborhood drive-through. RideBy flags homes that need review so managers can approve notices with confidence.",
   manifest: "/manifest.json",
-  applicationName: "Property Pilot",
+  applicationName: "RideBy",
   appleWebApp: {
     capable: true,
-    title: "Property Pilot",
+    title: "RideBy",
     statusBarStyle: "default",
     startupImage: [
       {
