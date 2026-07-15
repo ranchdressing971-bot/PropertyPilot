@@ -11,13 +11,37 @@ export function normalizeCommunityKey(hoaName: string): string {
     .slice(0, 64);
 }
 
+/**
+ * Dev / demo names must NOT lock a global free-trial bucket.
+ * "Test HOA" → key "test"; real HOAs still first-account-wins.
+ */
+export function isSandboxCommunityKey(hoaNameOrKey: string): boolean {
+  const key = normalizeCommunityKey(hoaNameOrKey);
+  if (!key) return false;
+  const exact = new Set([
+    "test",
+    "testing",
+    "demo",
+    "sandbox",
+    "sample",
+    "example",
+    "playground",
+    "dev",
+    "local",
+  ]);
+  if (exact.has(key)) return true;
+  return /^(test|testing|demo|sandbox|sample|example|playground|dev|local)\d*$/.test(
+    key
+  );
+}
+
 export function isValidCommunityName(hoaName: string): boolean {
   const trimmed = hoaName.trim();
   if (trimmed.length < 3) return false;
   const key = normalizeCommunityKey(trimmed);
   // Too generic after stripping suffixes
   if (key.length < 3) return false;
-  // Only block empty/placeholder junk — "Test HOA" is fine for sandboxing
+  // Only block empty/placeholder junk — sandbox names like "Test HOA" are allowed
   const blocked = new Set(["none", "na", "n/a", "yourcommunity", "myhoa", "hoa"]);
   return !blocked.has(key);
 }

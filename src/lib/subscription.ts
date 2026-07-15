@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { FREE_TRIAL_INSPECTIONS, isStripeConfigured } from "@/lib/stripe";
 import {
+  isSandboxCommunityKey,
   isValidCommunityName,
   normalizeCommunityKey,
 } from "@/lib/community-key";
@@ -206,6 +207,11 @@ export async function getCommunityTrialStatus(
 
   const key = normalizeCommunityKey(name);
 
+  // Sandbox names (Test HOA, Demo, etc.) are shared — never "claimed by another"
+  if (isSandboxCommunityKey(key)) {
+    return { status: "available", communityKey: key };
+  }
+
   const { data: claim } = await admin
     .from("community_trials")
     .select("community_key, claimed_by, hoa_name")
@@ -276,6 +282,11 @@ export async function claimCommunityTrial(
         );
       }
     }
+  }
+
+  // Dev/demo community names skip the global first-account lock
+  if (isSandboxCommunityKey(key)) {
+    return { ok: true, communityKey: key, alreadyOwned: false };
   }
 
   // One free-trial community per account
