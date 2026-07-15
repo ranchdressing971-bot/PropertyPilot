@@ -286,13 +286,13 @@ export async function canRunLiveInspection(userId: string | null): Promise<{
     return { allowed: true };
   }
 
-  // Must have a community before using free scans
-  if (!sub.hoaName?.trim() || !sub.communityKey) {
+  // Must have a community name before free scans (testing names like "Test HOA" are OK)
+  if (!sub.hoaName?.trim()) {
     return {
       allowed: false,
       code: "COMMUNITY_REQUIRED",
       reason:
-        "Add your HOA / community name in Profile setup before running a free inspection.",
+        "Add a community name in Settings → Profile first (e.g. “Test HOA” while you’re trying it out).",
     };
   }
 
@@ -316,12 +316,12 @@ export async function canRunLiveInspection(userId: string | null): Promise<{
       allowed: false,
       code: "COMMUNITY_REQUIRED",
       reason:
-        "Add your HOA / community name in Profile setup before running a free inspection.",
+        "Add a community name in Settings → Profile first (e.g. “Test HOA” while you’re trying it out).",
     };
   }
 
-  // Claimed by you or still available (claim happens at profile setup)
-  if (community.status === "available") {
+  // Claim trial if needed (also writes community_key when missing)
+  if (community.status === "available" || !sub.communityKey) {
     const claim = await claimCommunityTrial(userId, sub.hoaName);
     if (!claim.ok) {
       return {

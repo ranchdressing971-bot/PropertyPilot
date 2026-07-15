@@ -17,16 +17,7 @@ export function isValidCommunityName(hoaName: string): boolean {
   const key = normalizeCommunityKey(trimmed);
   // Too generic after stripping suffixes
   if (key.length < 3) return false;
-  const blocked = new Set([
-    "test",
-    "testing",
-    "demo",
-    "asdf",
-    "none",
-    "na",
-    "yourcommunity",
-    "myhoa",
-    "hoa",
-  ]);
+  // Only block empty/placeholder junk — "Test HOA" is fine for sandboxing
+  const blocked = new Set(["none", "na", "n/a", "yourcommunity", "myhoa", "hoa"]);
   return !blocked.has(key);
 }

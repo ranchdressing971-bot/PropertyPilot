@@ -132,9 +132,14 @@ export default function UploadPage() {
         const data = await res.json();
 
         if (!res.ok) {
-          if (data.code === "SUBSCRIPTION_REQUIRED") {
+          if (data.code === "SUBSCRIPTION_REQUIRED" || data.code === "TRIAL_EXHAUSTED") {
             throw new Error(
-              `${data.error} Visit Pricing to start your free trial.`
+              `${data.error} Visit Pricing to continue.`
+            );
+          }
+          if (data.code === "COMMUNITY_REQUIRED") {
+            throw new Error(
+              `${data.error ?? "Add a community name in Settings first."} Open Settings → Profile and enter something like “Test HOA”.`
             );
           }
           const detail =
