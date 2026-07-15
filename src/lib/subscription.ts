@@ -183,7 +183,7 @@ export async function claimCommunityTrial(
   if (!isValidCommunityName(trimmed)) {
     return {
       ok: false,
-      error: "Enter your real HOA / community name (not “test” or “demo”).",
+      error: "Enter a community name with at least a few letters (e.g. Test HOA).",
       code: "INVALID_COMMUNITY",
     };
   }
@@ -197,17 +197,59 @@ export async function claimCommunityTrial(
     community_key: key,
   });
 
-  // One free-trial community per account (stops farming many HOA names)
+  // One free-trial community per account
   const { data: myClaims } = await admin
     .from("community_trials")
     .select("community_key, hoa_name")
     .eq("claimed_by", userId);
 
-  const otherClaim = (myClaims ?? []).find((c) => c.community_key !== key);
-  if (otherClaim) {
+  const mine = myClaims ?? [];
+  const exactMine = mine.find((c) => c.community_key === key);
+  if (exactMine) {
+    // Same claim — refresh display name
+    await admin
+      .from("community_trials")
+      .update({ hoa_name: trimmed })
+      .eq("community_key", key)
+      .eq("claimed_by", userId);
+    return { ok: true, communityKey: key, alreadyOwned: true };
+  }
+
+  // Allow renaming / moving the single free-trial claim (no subscribe needed)
+  if (mine.length === 1 && mine[0].community_key !== key) {
+    const { data: taken } = await admin
+      .from("community_trials")
+      .select("claimed_by, hoa_name")
+      .eq("community_key", key)
+      .maybeSingle();
+    if (taken && taken.claimed_by !== userId) {
+      return {
+        ok: false,
+        error: `Free trial for “${taken.hoa_name}” was already used. Pick another name or subscribe.`,
+        code: "COMMUNITY_TRIAL_USED",
+      };
+    }
+    await admin.from("community_trials").delete().eq("claimed_by", userId);
+    const { error: moveError } = await admin.from("community_trials").insert({
+      community_key: key,
+      claimed_by: userId,
+      hoa_name: trimmed,
+    });
+    if (moveError) {
+      console.error("claimCommunityTrial move failed:", moveError.message);
+      return {
+        ok: false,
+        error: "Could not update community. Try again.",
+        code: "CLAIM_FAILED",
+      };
+    }
+    return { ok: true, communityKey: key, alreadyOwned: true };
+  }
+
+  if (mine.length > 1) {
     return {
       ok: false,
-      error: `Your free trial is already tied to “${otherClaim.hoa_name}”. Subscribe to add another community.`,
+      error: `Your free trial is already tied to “${mine[0].hoa_name}”. Subscribe to add another community.`,
       code: "ALREADY_CLAIMED_OTHER",
     };
   }

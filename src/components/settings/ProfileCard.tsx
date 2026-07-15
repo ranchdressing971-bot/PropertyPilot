@@ -72,16 +72,19 @@ export function ProfileCard() {
         hoa_name: trimmedHoa,
       });
 
+      // Best-effort trial claim / rename — never block saving your profile
       const claimRes = await fetch("/api/community/claim-trial", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hoaName: trimmedHoa }),
       });
-      const claimData = await claimRes.json();
       if (!claimRes.ok) {
-        throw new Error(
-          claimData.error ?? "Could not update community trial"
+        const claimData = await claimRes.json().catch(() => ({}));
+        // Profile is saved; show a soft warning only
+        setError(
+          claimData.error ??
+            "Profile saved, but the free-trial community could not be updated."
         );
       }
 
