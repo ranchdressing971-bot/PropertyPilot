@@ -8,9 +8,9 @@ import { sanitizeImageDataUrl } from "./image-data-url";
 import { extractHouseNumber } from "./address-normalize";
 import { createChatCompletion, sleep } from "./openai-retry";
 
-/** Smaller batches + pause between calls = stay under new-account TPM caps */
-const FRAMES_PER_MATCH_CALL = 2;
-const PAUSE_BETWEEN_BATCHES_MS = 1200;
+/** Batch size vs TPM: 4 frames/call cuts round-trips; short pause still softens spikes */
+const FRAMES_PER_MATCH_CALL = 4;
+const PAUSE_BETWEEN_BATCHES_MS = 300;
 
 export interface AddressMatchResult {
   frameIndex: number;

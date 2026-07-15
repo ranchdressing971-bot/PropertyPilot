@@ -44,7 +44,8 @@ import { createChatCompletion, isQuotaError, sleep } from "@/lib/openai-retry";
 
 export const maxDuration = 120;
 
-const BATCH_SIZE = 3;
+const BATCH_SIZE = 4;
+const PAUSE_BETWEEN_COMPLIANCE_MS = 300;
 
 interface VideoFrameInput {
   index: number;
@@ -255,24 +256,26 @@ export async function POST(request: NextRequest) {
       const namedHomes = fromGps.filter(
         (p) => !/^Home at /i.test(p.address) && !/^Property at /i.test(p.address)
       );
-      // Expect roughly one home per ~2 frames on a slow drive-through
+      // Enough named hits → skip extra OCR/discovery (big speed win)
       const expectedHomes = Math.max(
-        4,
-        Math.min(12, Math.ceil(extractedFrames.length * 0.75))
+        3,
+        Math.min(8, Math.ceil(extractedFrames.length * 0.5))
       );
 
-      // Don't stop early after 2–3 hits — keep discovering until we cover the drive
       if (namedHomes.length >= expectedHomes) {
         scanProperties = fromGps;
       } else {
-        const detections = await runAddressDetection(imageUrls, roster);
+        // Run OCR + home discovery together to cut wall-clock time
+        const [detections, homes] = await Promise.all([
+          runAddressDetection(imageUrls, roster),
+          runHomeDiscovery(imageUrls),
+        ]);
         const fromOcr = discoverPropertiesFromVideo(
           extractedFrames,
           detections,
           neighborhood,
           roster.length > 0 ? roster : undefined
         );
-        const homes = await runHomeDiscovery(imageUrls);
         const fromHomes = propertiesFromHomeDiscovery(
           extractedFrames,
           homes,
@@ -361,10 +364,10 @@ export async function POST(request: NextRequest) {
       batches.push(verifiedForCompliance.slice(i, i + BATCH_SIZE));
     }
 
-    // Sequential batches — parallel vision calls blow past new-account TPM caps
+    // Sequential batches with a short pause — keeps TPM calmer without dragging demos
     const batchResults: AIPropertyResult[][] = [];
     for (let i = 0; i < batches.length; i++) {
-      if (i > 0) await sleep(1200);
+      if (i > 0) await sleep(PAUSE_BETWEEN_COMPLIANCE_MS);
       batchResults.push(await analyzeBatch(batches[i], ruleMap));
     }
 
