@@ -3,7 +3,7 @@
 export const PRICING_BASE = 99;
 export const PRICING_EXPONENT = 0.7;
 export const MIN_COMMUNITIES = 1;
-export const MAX_COMMUNITIES = 50;
+export const MAX_COMMUNITIES = 300;
 
 /** Free live inspections before subscription is required (when Stripe is configured). */
 export const FREE_TRIAL_INSPECTIONS = 3;
