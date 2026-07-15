@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { CreditCard, Loader2, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/components/providers/ToastProvider";
+import { priceForCommunities, formatPriceMonthly } from "@/lib/stripe-client";
 
 interface SubStatus {
   subscribed: boolean;
@@ -16,6 +17,8 @@ interface SubStatus {
   trialInspectionsRemaining: number;
   trialInspectionsLimit: number;
   price: string;
+  priceMonthly?: number;
+  communityCount?: number;
   hoaName?: string | null;
   communityTrialStatus?: string;
   accessReason?: string;
@@ -69,6 +72,7 @@ export function BillingCard() {
   }
 
   const subscribed = sub?.subscribed;
+  const fromPrice = formatPriceMonthly(priceForCommunities(1));
 
   return (
     <Card>
@@ -78,12 +82,18 @@ export function BillingCard() {
           <h3 className="font-semibold text-ink-900">Billing</h3>
           <p className="text-sm text-ink-500">
             {subscribed
-              ? `${sub?.price ?? "$149/mo"} · ${sub?.status}`
+              ? `${sub?.price ?? fromPrice}${
+                  sub?.communityCount
+                    ? ` · ${sub.communityCount} community${
+                        sub.communityCount === 1 ? "" : "ies"
+                      }`
+                    : ""
+                } · ${sub?.status}`
               : sub
                 ? `${sub.trialInspectionsRemaining} of ${sub.trialInspectionsLimit} free inspections left${
                     sub.hoaName ? ` · ${sub.hoaName}` : ""
                   }`
-                : "3 free inspections per community, then choose a plan"}
+                : `3 free inspections per community, then from ${fromPrice}`}
           </p>
         </div>
       </div>
@@ -117,8 +127,8 @@ export function BillingCard() {
             Manage billing
           </Button>
         ) : (
-          <Link href="/pricing/checkout?plan=starter">
-            <Button size="sm">View plans — from $149/mo</Button>
+          <Link href="/pricing">
+            <Button size="sm">View pricing — from {fromPrice}</Button>
           </Link>
         )}
       </div>

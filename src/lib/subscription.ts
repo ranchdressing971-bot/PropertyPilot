@@ -19,6 +19,8 @@ export interface UserSubscription {
   stripeCustomerId: string | null;
   hoaName: string | null;
   communityKey: string | null;
+  communityCount: number;
+  priceMonthly: number | null;
 }
 
 export async function countCompletedInspections(userId: string): Promise<number> {
@@ -42,13 +44,15 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
       stripeCustomerId: null,
       hoaName: null,
       communityKey: null,
+      communityCount: 1,
+      priceMonthly: null,
     };
   }
 
   const { data } = await admin
     .from("profiles")
     .select(
-      "subscription_status, plan, stripe_customer_id, hoa_name, community_key"
+      "subscription_status, plan, stripe_customer_id, hoa_name, community_key, community_count, price_monthly"
     )
     .eq("id", userId)
     .maybeSingle();
@@ -60,6 +64,8 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
       stripeCustomerId: null,
       hoaName: null,
       communityKey: null,
+      communityCount: 1,
+      priceMonthly: null,
     };
   }
 
@@ -69,6 +75,9 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
     stripeCustomerId: data.stripe_customer_id ?? null,
     hoaName: data.hoa_name ?? null,
     communityKey: data.community_key ?? null,
+    communityCount: Math.max(1, Number(data.community_count) || 1),
+    priceMonthly:
+      data.price_monthly != null ? Number(data.price_monthly) : null,
   };
 }
 

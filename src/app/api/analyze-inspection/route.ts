@@ -344,10 +344,11 @@ export async function POST(request: NextRequest) {
     );
 
     const subscription = userId ? await getUserSubscription(userId) : null;
-    const isPro =
-      hasActiveSubscription(subscription?.status ?? "none") &&
-      subscription?.plan === "professional";
-    const homeLimit = isPro ? 200 : 50;
+    const isPaid = hasActiveSubscription(subscription?.status ?? "none");
+    // Paid seats get a high home cap; free/trial stays at 50
+    const homeLimit = isPaid
+      ? Math.min(500, Math.max(100, (subscription?.communityCount ?? 1) * 100))
+      : 50;
     const capped = newProperties.slice(0, homeLimit);
 
     // Only run compliance AI on verified addresses — placeholders / low-confidence

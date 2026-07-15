@@ -1,12 +1,30 @@
 import Stripe from "stripe";
-import { PLANS, type BillingPlan } from "./stripe-client";
+import {
+  PLANS,
+  FREE_TRIAL_INSPECTIONS,
+  clampCommunities,
+  formatPriceMonthly,
+  priceForCommunities,
+  type BillingPlan,
+} from "./stripe-client";
 
-export { PLANS, type BillingPlan };
+export {
+  PLANS,
+  FREE_TRIAL_INSPECTIONS,
+  clampCommunities,
+  formatPriceMonthly,
+  priceForCommunities,
+  type BillingPlan,
+};
+export {
+  MAX_COMMUNITIES,
+  MIN_COMMUNITIES,
+  PRICING_BASE,
+  PRICING_EXPONENT,
+  pricingSamples,
+} from "./stripe-client";
 
 let stripe: Stripe | null = null;
-
-/** Free live inspections before subscription is required (when Stripe is configured). */
-export const FREE_TRIAL_INSPECTIONS = 3;
 
 /** @deprecated Use FREE_TRIAL_INSPECTIONS */
 export const FREE_TRIAL_SCANS = FREE_TRIAL_INSPECTIONS;
@@ -25,7 +43,15 @@ export function getStripe(): Stripe {
   return stripe;
 }
 
-/** Checkout needs a Price ID (price_...), not a Product ID (prod_...). */
+/**
+ * Optional Stripe Product ID for community pricing (prod_...).
+ * If unset, Checkout creates product_data inline.
+ */
+export function getStripeProductId(): string | null {
+  return process.env.STRIPE_PRODUCT_ID?.trim() || null;
+}
+
+/** @deprecated Fixed Price IDs — community formula uses dynamic price_data. */
 export function getStripePriceId(plan: BillingPlan = "starter"): string | null {
   if (plan === "professional") {
     return (
@@ -56,4 +82,41 @@ export function getAppUrl(): string {
     return `https://${process.env.VERCEL_URL}`;
   }
   return "http://localhost:3000";
+}
+
+/** Build Stripe line item for P(c) = 99 × c^0.7 */
+export function buildCommunitySubscriptionLineItem(communities: number): {
+  lineItem: Stripe.Checkout.SessionCreateParams.LineItem;
+  communityCount: number;
+  priceMonthly: number;
+  priceLabel: string;
+} {
+  const communityCount = clampCommunities(communities);
+  const priceMonthly = priceForCommunities(communityCount);
+  const priceLabel = formatPriceMonthly(priceMonthly);
+  const productId = getStripeProductId();
+
+  const priceData: Stripe.Checkout.SessionCreateParams.LineItem.PriceData = {
+    currency: "usd",
+    unit_amount: priceMonthly * 100,
+    recurring: { interval: "month" },
+    ...(productId
+      ? { product: productId }
+      : {
+          product_data: {
+            name: "RideBy",
+            description:
+              communityCount === 1
+                ? "1 community · monthly"
+                : `${communityCount} communities · monthly`,
+          },
+        }),
+  };
+
+  return {
+    lineItem: { price_data: priceData, quantity: 1 },
+    communityCount,
+    priceMonthly,
+    priceLabel,
+  };
 }

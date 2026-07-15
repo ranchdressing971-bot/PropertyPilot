@@ -16,6 +16,8 @@ create table if not exists public.profiles (
   terms_accepted_at timestamptz,
   owner_email text,
   community_key text,
+  community_count integer default 1,
+  price_monthly integer,
   created_at timestamptz default now()
 );
 
@@ -98,6 +100,8 @@ alter table public.profiles add column if not exists subscription_status text de
 alter table public.profiles add column if not exists plan text default 'starter';
 alter table public.profiles add column if not exists terms_accepted_at timestamptz;
 alter table public.profiles add column if not exists community_key text;
+alter table public.profiles add column if not exists community_count integer default 1;
+alter table public.profiles add column if not exists price_monthly integer;
 alter table public.inspections add column if not exists metadata jsonb default '{}'::jsonb;
 
 create index if not exists profiles_community_key_idx

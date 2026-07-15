@@ -2,23 +2,22 @@
 
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import type { BillingPlan } from "@/lib/stripe-client";
 
 interface PricingCheckoutButtonProps {
   variant?: "primary" | "secondary";
   label: string;
-  plan?: BillingPlan;
+  communities?: number;
 }
 
 export function PricingCheckoutButton({
   variant = "primary",
   label,
-  plan = "starter",
+  communities = 1,
 }: PricingCheckoutButtonProps) {
   const router = useRouter();
 
   function handleClick() {
-    router.push(`/pricing/checkout?plan=${plan}`);
+    router.push(`/pricing/checkout?communities=${communities}`);
   }
 
   return (

@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getStripe,
-  getStripePriceId,
   getAppUrl,
   isStripeConfigured,
-  type BillingPlan,
+  buildCommunitySubscriptionLineItem,
+  clampCommunities,
 } from "@/lib/stripe";
 import { buildCheckoutBranding } from "@/lib/stripe-branding";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import Stripe from "stripe";
-
-function parsePlan(value: unknown): BillingPlan {
-  return value === "professional" ? "professional" : "starter";
-}
 
 function stripeErrorMessage(err: unknown): string {
   if (err instanceof Stripe.errors.StripeError) {
@@ -58,21 +54,13 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const plan = parsePlan(body?.plan);
     const embedded = Boolean(body?.embedded);
-    const priceId = getStripePriceId(plan);
-    if (!priceId) {
-      const envName =
-        plan === "professional"
-          ? "STRIPE_PRICE_PRO"
-          : "STRIPE_PRICE_STARTER or STRIPE_PRICE_ID";
-      return NextResponse.json(
-        {
-          error: `${envName} missing. In Stripe, copy the Price ID (price_...), not the Product ID (prod_...).`,
-        },
-        { status: 503 }
-      );
-    }
+    const communityCount = clampCommunities(
+      Number(body?.communityCount ?? body?.communities ?? 1)
+    );
+
+    const { lineItem, priceMonthly, priceLabel } =
+      buildCommunitySubscriptionLineItem(communityCount);
 
     const stripe = getStripe();
     const admin = createAdminClient();
@@ -102,17 +90,23 @@ export async function POST(req: NextRequest) {
 
     const appUrl = getAppUrl();
     const branding = buildCheckoutBranding(appUrl, { embedded });
+    const meta = {
+      supabase_user_id: user.id,
+      plan: "community",
+      community_count: String(communityCount),
+      price_monthly: String(priceMonthly),
+    };
 
     const baseSession = {
       mode: "subscription" as const,
       customer: customerId ?? undefined,
       customer_email: customerId ? undefined : user.email ?? undefined,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [lineItem],
       branding_settings: branding,
       subscription_data: {
-        metadata: { supabase_user_id: user.id, plan },
+        metadata: meta,
       },
-      metadata: { supabase_user_id: user.id, plan },
+      metadata: meta,
     };
 
     if (embedded) {
@@ -129,7 +123,12 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      return NextResponse.json({ clientSecret: session.client_secret });
+      return NextResponse.json({
+        clientSecret: session.client_secret,
+        communityCount,
+        priceMonthly,
+        priceLabel,
+      });
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -138,7 +137,12 @@ export async function POST(req: NextRequest) {
       cancel_url: `${appUrl}/pricing?billing=canceled`,
     });
 
-    return NextResponse.json({ url: session.url });
+    return NextResponse.json({
+      url: session.url,
+      communityCount,
+      priceMonthly,
+      priceLabel,
+    });
   } catch (err) {
     console.error("Stripe checkout failed:", err);
     return NextResponse.json({ error: stripeErrorMessage(err) }, { status: 500 });

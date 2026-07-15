@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadStripe } from "@stripe/stripe-js";
 import {
@@ -9,24 +9,34 @@ import {
 } from "@stripe/react-stripe-js";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Loader2 } from "lucide-react";
-import { PLANS, type BillingPlan } from "@/lib/stripe-client";
+import {
+  clampCommunities,
+  formatPriceMonthly,
+  priceForCommunities,
+} from "@/lib/stripe-client";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim();
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
 
-function parsePlan(value: string | null): BillingPlan {
-  return value === "professional" ? "professional" : "starter";
-}
-
 export function CheckoutPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const plan = parsePlan(searchParams.get("plan"));
-  const planInfo = PLANS[plan];
+  const communities = useMemo(
+    () =>
+      clampCommunities(
+        Number(
+          searchParams.get("communities") ??
+            searchParams.get("communityCount") ??
+            1
+        )
+      ),
+    [searchParams]
+  );
+  const priceMonthly = priceForCommunities(communities);
+  const priceLabel = formatPriceMonthly(priceMonthly);
   const [error, setError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(!stripePromise);
 
-  // Hosted Stripe Checkout only needs STRIPE_SECRET_KEY (what you had before).
   useEffect(() => {
     if (stripePromise) return;
 
@@ -36,11 +46,11 @@ export function CheckoutPageClient() {
         const res = await fetch("/api/stripe/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ plan, embedded: false }),
+          body: JSON.stringify({ communityCount: communities, embedded: false }),
         });
         const data = await res.json();
         if (res.status === 401) {
-          router.push("/signup");
+          router.push(`/signup?next=${encodeURIComponent(`/pricing/checkout?communities=${communities}`)}`);
           return;
         }
         if (!res.ok) throw new Error(data.error ?? "Checkout unavailable");
@@ -60,18 +70,20 @@ export function CheckoutPageClient() {
     return () => {
       cancelled = true;
     };
-  }, [plan, router]);
+  }, [communities, router]);
 
   const fetchClientSecret = useCallback(async () => {
     const res = await fetch("/api/stripe/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan, embedded: true }),
+      body: JSON.stringify({ communityCount: communities, embedded: true }),
     });
     const data = await res.json();
 
     if (res.status === 401) {
-      router.push("/signup");
+      router.push(
+        `/signup?next=${encodeURIComponent(`/pricing/checkout?communities=${communities}`)}`
+      );
       throw new Error("Sign in required");
     }
     if (!res.ok) {
@@ -84,7 +96,7 @@ export function CheckoutPageClient() {
       throw new Error("Missing client secret");
     }
     return data.clientSecret as string;
-  }, [plan, router]);
+  }, [communities, router]);
 
   if (!stripePromise) {
     return (
@@ -105,11 +117,13 @@ export function CheckoutPageClient() {
       <section className="mx-auto max-w-xl px-5 py-12 sm:py-16">
         <div className="mb-8 text-center">
           <p className="text-sm font-medium text-brand-600">Subscribe</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink-900">
-            {planInfo.label} plan
+          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-ink-900">
+            {communities === 1
+              ? "1 community"
+              : `${communities} communities`}
           </h1>
           <p className="mt-2 text-ink-500">
-            {planInfo.priceLabel} · billed monthly · cancel anytime in Settings
+            {priceLabel} · billed monthly · cancel anytime in Settings
           </p>
         </div>
 
@@ -132,7 +146,7 @@ export function CheckoutPageClient() {
         )}
 
         <p className="mt-6 text-center text-xs text-ink-400">
-          Secure payment by Stripe
+          Secure payment by Stripe · P(c) = 99 × c<sup>0.7</sup>
         </p>
       </section>
     </PublicLayout>

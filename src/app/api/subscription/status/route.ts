@@ -9,16 +9,10 @@ import {
 } from "@/lib/subscription";
 import {
   FREE_TRIAL_INSPECTIONS,
+  formatPriceMonthly,
   isStripeConfigured,
-  PLANS,
-  type BillingPlan,
+  priceForCommunities,
 } from "@/lib/stripe";
-
-function planPriceLabel(plan: string | null): string {
-  if (plan === "professional") return PLANS.professional.priceLabel;
-  if (plan === "starter") return PLANS.starter.priceLabel;
-  return PLANS.starter.priceLabel;
-}
 
 export async function GET() {
   const supabase = await createClient();
@@ -37,14 +31,19 @@ export async function GET() {
   const trial = await getTrialInspectionUsage(user.id);
   const access = await canRunLiveInspection(user.id);
   const community = await getCommunityTrialStatus(user.id, sub.hoaName);
-  const plan = (sub.plan as BillingPlan | null) ?? "starter";
+
+  const communityCount = sub.communityCount || 1;
+  const priceMonthly =
+    sub.priceMonthly ?? priceForCommunities(communityCount);
 
   return NextResponse.json({
     stripeConfigured: isStripeConfigured(),
     subscribed: hasActiveSubscription(sub.status),
     status: sub.status,
     plan: sub.plan,
-    price: planPriceLabel(sub.plan),
+    communityCount,
+    priceMonthly,
+    price: formatPriceMonthly(priceMonthly),
     hoaName: sub.hoaName,
     communityKey: sub.communityKey,
     communityTrialStatus: community.status,

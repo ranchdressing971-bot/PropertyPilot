@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { getStripe, isStripeConfigured, type BillingPlan } from "@/lib/stripe";
+import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-function normalizePlan(raw: string | null | undefined): BillingPlan {
-  return raw === "professional" ? "professional" : "starter";
-}
 
 function mapStripeStatus(status: Stripe.Subscription.Status | string): string {
   switch (status) {
@@ -26,6 +22,20 @@ function mapStripeStatus(status: Stripe.Subscription.Status | string): string {
     default:
       return "inactive";
   }
+}
+
+function parseCommunityCount(raw: string | null | undefined): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1) return null;
+  return Math.round(n);
+}
+
+function parsePriceMonthly(raw: string | null | undefined): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n);
 }
 
 export async function POST(req: NextRequest) {
@@ -59,7 +69,7 @@ export async function POST(req: NextRequest) {
 
   async function updateByCustomer(
     customerId: string,
-    fields: Record<string, string | null>
+    fields: Record<string, string | number | null>
   ): Promise<void> {
     const { error } = await admin!
       .from("profiles")
@@ -70,7 +80,7 @@ export async function POST(req: NextRequest) {
 
   async function updateByUserId(
     userId: string,
-    fields: Record<string, string | null>
+    fields: Record<string, string | number | null>
   ): Promise<void> {
     const { error } = await admin!.from("profiles").update(fields).eq("id", userId);
     if (error) throw new Error(`Profile update failed: ${error.message}`);
@@ -81,18 +91,21 @@ export async function POST(req: NextRequest) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.supabase_user_id;
-        const plan = normalizePlan(session.metadata?.plan);
+        const plan = session.metadata?.plan || "community";
+        const communityCount = parseCommunityCount(session.metadata?.community_count);
+        const priceMonthly = parsePriceMonthly(session.metadata?.price_monthly);
         const customerId =
           typeof session.customer === "string"
             ? session.customer
             : session.customer?.id;
 
-        // Paid checkout → active. Real Stripe trials still arrive via subscription events.
-        const fields = {
+        const fields: Record<string, string | number | null> = {
           subscription_status: "active",
           plan,
           stripe_customer_id: customerId ?? null,
         };
+        if (communityCount != null) fields.community_count = communityCount;
+        if (priceMonthly != null) fields.price_monthly = priceMonthly;
 
         if (userId) await updateByUserId(userId, fields);
         else if (customerId) await updateByCustomer(customerId, fields);
@@ -103,16 +116,22 @@ export async function POST(req: NextRequest) {
         const sub = event.data.object as Stripe.Subscription;
         const customerId =
           typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-        const plan = normalizePlan(sub.metadata?.plan);
+        const plan = sub.metadata?.plan || "community";
         const status =
           event.type === "customer.subscription.deleted"
             ? "canceled"
             : mapStripeStatus(sub.status);
+        const communityCount = parseCommunityCount(sub.metadata?.community_count);
+        const priceMonthly = parsePriceMonthly(sub.metadata?.price_monthly);
 
-        await updateByCustomer(customerId, {
+        const fields: Record<string, string | number | null> = {
           subscription_status: status,
           plan,
-        });
+        };
+        if (communityCount != null) fields.community_count = communityCount;
+        if (priceMonthly != null) fields.price_monthly = priceMonthly;
+
+        await updateByCustomer(customerId, fields);
         break;
       }
       case "invoice.paid": {
@@ -143,7 +162,6 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Webhook handler failed";
     console.error("[stripe webhook]", message);
-    // 5xx so Stripe retries
     return NextResponse.json({ error: message }, { status: 500 });
   }
 

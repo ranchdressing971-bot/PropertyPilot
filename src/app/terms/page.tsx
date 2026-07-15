@@ -35,7 +35,8 @@ export default function TermsPage() {
 
         <h2>Billing</h2>
         <p>
-          Paid plans are billed monthly per community. See our{" "}
+          Paid plans are billed monthly by community count using RideBy&apos;s
+          volume formula. See our{" "}
           <Link href="/pricing">pricing page</Link> for current rates.
         </p>
 
