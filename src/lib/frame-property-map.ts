@@ -19,7 +19,7 @@ export interface DiscoveredHome {
 }
 
 /** Min seconds between distinct homes — keep short so adjacent lots aren't merged. */
-const TEMPORAL_GAP_SEC = 3.5;
+const TEMPORAL_GAP_SEC = 2.5;
 
 function stablePropertyId(address: string, rosterId?: string): string {
   if (rosterId && !rosterId.startsWith("found-") && !rosterId.includes(" ")) {
@@ -328,6 +328,10 @@ export function propertiesFromHomeDiscovery(
       status: "Good Standing",
       lastInspection: "—",
       neighborhood,
+      addressConfidence: home.confidence,
+      needsAddressReview:
+        home.confidence < 70 || !extractHouseNumber(addr),
+      addressMatchReason: home.reasoning,
     });
   }
 

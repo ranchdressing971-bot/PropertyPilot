@@ -23,7 +23,19 @@ export function InspectionResultsView({ id }: { id: string }) {
   const [data, setData] = useState<InspectionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<FilterTab>("violations");
+  const [tab, setTab] = useState<FilterTab>("all");
+
+  useEffect(() => {
+    if (!data) return;
+    const violCount = data.results.filter((r) => r.violation).length;
+    const reviewCount = data.results.filter((r) => r.property.needsAddressReview).length;
+    // Prefer All when homes exist but Violations would look empty/misleading
+    if (reviewCount > 0 || (data.results.length > 1 && violCount <= 1)) {
+      setTab("all");
+    } else if (violCount > 0) {
+      setTab("violations");
+    }
+  }, [data?.id]);
 
   useEffect(() => {
     let cancelled = false;

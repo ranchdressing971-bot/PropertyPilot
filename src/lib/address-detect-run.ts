@@ -10,8 +10,8 @@ import type { Property } from "./mock-data";
 import { sanitizeImageDataUrl } from "./image-data-url";
 import { createChatCompletion, sleep } from "./openai-retry";
 
-const FRAMES_PER_VISION_CALL = 5;
-const PAUSE_BETWEEN_BATCHES_MS = 300;
+const FRAMES_PER_VISION_CALL = 3;
+const PAUSE_BETWEEN_BATCHES_MS = 400;
 
 async function detectBatch(
   imageUrls: string[],
@@ -37,7 +37,7 @@ async function detectBatch(
         { type: "text" as const, text: `Frame ${startIndex + i}:` },
         {
           type: "image_url" as const,
-          image_url: { url: clean, detail: "low" as const },
+          image_url: { url: clean, detail: "high" as const },
         },
       ];
     }),
@@ -117,7 +117,7 @@ export async function runHomeDiscovery(
         { type: "text" as const, text: `Frame ${i}:` },
         {
           type: "image_url" as const,
-          image_url: { url: clean, detail: "low" as const },
+          image_url: { url: clean, detail: "high" as const },
         },
       ];
     }),

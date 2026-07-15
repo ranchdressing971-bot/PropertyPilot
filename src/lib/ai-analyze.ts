@@ -155,9 +155,14 @@ export function buildInspectionPrompt(
 
   return `You are an HOA compliance inspector analyzing drive-through video frames of residential properties.
 
-For EACH property below, examine its image and determine if any of these violations exist:
+For EACH property below, examine ITS image and determine if any of these violations exist on THAT property's lot:
 ${ruleLines}
 - null — property is in good standing, no violations
+
+Important:
+- Judge only the home/lot tied to that address image — not a neighboring yard or roadside strip.
+- Tall grass / landscaping only counts if it clearly belongs to that property's front yard.
+- Most properties should have no violations.
 
 Properties in this batch:
 ${list}

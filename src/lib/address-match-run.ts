@@ -8,9 +8,9 @@ import { sanitizeImageDataUrl } from "./image-data-url";
 import { extractHouseNumber } from "./address-normalize";
 import { createChatCompletion, sleep } from "./openai-retry";
 
-/** Batch size vs TPM: 4 frames/call cuts round-trips; short pause still softens spikes */
-const FRAMES_PER_MATCH_CALL = 4;
-const PAUSE_BETWEEN_BATCHES_MS = 300;
+/** 2 frames/call + high detail = readable mailbox digits; short pause keeps demos snappy */
+const FRAMES_PER_MATCH_CALL = 2;
+const PAUSE_BETWEEN_BATCHES_MS = 400;
 
 export interface AddressMatchResult {
   frameIndex: number;
@@ -99,8 +99,8 @@ async function matchBatch(
             type: "image_url" as const,
             image_url: {
               url,
-              // low detail keeps cost down; house-number logic still works with clear mailbox shots
-              detail: "low" as const,
+              // high detail for house-number OCR — low detail misses mailbox digits
+              detail: "high" as const,
             },
           },
         ];
