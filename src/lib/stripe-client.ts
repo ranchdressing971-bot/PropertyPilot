@@ -6,7 +6,7 @@ export const MIN_COMMUNITIES = 1;
 export const MAX_COMMUNITIES = 300;
 
 /** Free live inspections before subscription is required (when Stripe is configured). */
-export const FREE_TRIAL_INSPECTIONS = 3;
+export const FREE_TRIAL_INSPECTIONS = 1;
 
 /** Monthly price in whole dollars for `c` communities. */
 export function priceForCommunities(communities: number): number {

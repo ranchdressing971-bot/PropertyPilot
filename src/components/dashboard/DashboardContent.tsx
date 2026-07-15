@@ -98,7 +98,7 @@ export function DashboardContent() {
           </Link>
           <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-ink-500">
             <CheckCircle2 className="h-3.5 w-3.5 text-brand-600" />
-            3 free live inspections to start
+            1 free live inspection to start
           </p>
         </div>
       </PageContent>

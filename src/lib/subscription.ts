@@ -35,21 +35,48 @@ export async function countCompletedInspections(userId: string): Promise<number>
   return count ?? 0;
 }
 
+const EMPTY_SUBSCRIPTION: UserSubscription = {
+  status: "none",
+  plan: null,
+  stripeCustomerId: null,
+  hoaName: null,
+  communityKey: null,
+  communityCount: 1,
+  priceMonthly: null,
+};
+
+/** Auth metadata often has hoa_name while profiles lags (RLS / missing columns). */
+async function hoaNameFromAuthMetadata(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  userId: string
+): Promise<string | null> {
+  try {
+    const { data, error } = await admin.auth.admin.getUserById(userId);
+    if (error || !data?.user) return null;
+    const meta = data.user.user_metadata ?? {};
+    const name = String(meta.hoa_name ?? "").trim();
+    return name || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getUserSubscription(userId: string): Promise<UserSubscription> {
   const admin = createAdminClient();
-  if (!admin) {
-    return {
-      status: "none",
-      plan: null,
-      stripeCustomerId: null,
-      hoaName: null,
-      communityKey: null,
-      communityCount: 1,
-      priceMonthly: null,
-    };
-  }
+  if (!admin) return { ...EMPTY_SUBSCRIPTION };
 
-  const { data } = await admin
+  // Prefer full select; if pricing columns aren't migrated yet, fall back
+  let row: {
+    subscription_status?: string | null;
+    plan?: string | null;
+    stripe_customer_id?: string | null;
+    hoa_name?: string | null;
+    community_key?: string | null;
+    community_count?: number | null;
+    price_monthly?: number | null;
+  } | null = null;
+
+  const full = await admin
     .from("profiles")
     .select(
       "subscription_status, plan, stripe_customer_id, hoa_name, community_key, community_count, price_monthly"
@@ -57,27 +84,65 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
     .eq("id", userId)
     .maybeSingle();
 
-  if (!data) {
-    return {
-      status: "none",
-      plan: null,
-      stripeCustomerId: null,
-      hoaName: null,
-      communityKey: null,
-      communityCount: 1,
-      priceMonthly: null,
-    };
+  if (full.error) {
+    console.error("getUserSubscription select failed:", full.error.message);
+    const basic = await admin
+      .from("profiles")
+      .select(
+        "subscription_status, plan, stripe_customer_id, hoa_name, community_key"
+      )
+      .eq("id", userId)
+      .maybeSingle();
+    if (basic.error) {
+      console.error("getUserSubscription basic select failed:", basic.error.message);
+    }
+    row = basic.data;
+  } else {
+    row = full.data;
+  }
+
+  let hoaName = row?.hoa_name?.trim() || null;
+  let communityKey = row?.community_key?.trim() || null;
+
+  // Settings UI saves to auth metadata first — sync if profiles is empty
+  if (!hoaName) {
+    const fromAuth = await hoaNameFromAuthMetadata(admin, userId);
+    if (fromAuth) {
+      hoaName = fromAuth;
+      if (isValidCommunityName(fromAuth)) {
+        communityKey = communityKey || normalizeCommunityKey(fromAuth);
+      }
+      const syncPayload: Record<string, string> = {
+        id: userId,
+        hoa_name: fromAuth,
+      };
+      if (communityKey) syncPayload.community_key = communityKey;
+      const { error: syncError } = await admin
+        .from("profiles")
+        .upsert(syncPayload);
+      if (syncError) {
+        // Retry without community_key (column may not exist yet)
+        await admin.from("profiles").upsert({
+          id: userId,
+          hoa_name: fromAuth,
+        });
+      }
+    }
+  }
+
+  if (!row && !hoaName) {
+    return { ...EMPTY_SUBSCRIPTION };
   }
 
   return {
-    status: (data.subscription_status as SubscriptionStatus) ?? "none",
-    plan: data.plan ?? null,
-    stripeCustomerId: data.stripe_customer_id ?? null,
-    hoaName: data.hoa_name ?? null,
-    communityKey: data.community_key ?? null,
-    communityCount: Math.max(1, Number(data.community_count) || 1),
+    status: (row?.subscription_status as SubscriptionStatus) ?? "none",
+    plan: row?.plan ?? null,
+    stripeCustomerId: row?.stripe_customer_id ?? null,
+    hoaName,
+    communityKey,
+    communityCount: Math.max(1, Number(row?.community_count) || 1),
     priceMonthly:
-      data.price_monthly != null ? Number(data.price_monthly) : null,
+      row?.price_monthly != null ? Number(row.price_monthly) : null,
   };
 }
 
@@ -134,7 +199,8 @@ export async function getCommunityTrialStatus(
   if (!isValidCommunityName(name)) {
     return {
       status: "unavailable",
-      reason: "Enter your real HOA / community name (not “test” or “demo”).",
+      reason:
+        "Enter a community name with at least a few letters (e.g. “Test HOA”).",
     };
   }
 
@@ -190,12 +256,27 @@ export async function claimCommunityTrial(
 
   const key = normalizeCommunityKey(trimmed);
 
-  // Sync profile first
-  await admin.from("profiles").upsert({
-    id: userId,
-    hoa_name: trimmed,
-    community_key: key,
-  });
+  // Sync profile first (retry without community_key if column isn't migrated)
+  {
+    const { error: upsertError } = await admin.from("profiles").upsert({
+      id: userId,
+      hoa_name: trimmed,
+      community_key: key,
+    });
+    if (upsertError) {
+      console.error("claimCommunityTrial profile upsert:", upsertError.message);
+      const { error: retryError } = await admin.from("profiles").upsert({
+        id: userId,
+        hoa_name: trimmed,
+      });
+      if (retryError) {
+        console.error(
+          "claimCommunityTrial profile hoa_name upsert failed:",
+          retryError.message
+        );
+      }
+    }
+  }
 
   // One free-trial community per account
   const { data: myClaims } = await admin
@@ -307,7 +388,7 @@ export async function claimCommunityTrial(
   return { ok: true, communityKey: key, alreadyOwned: false };
 }
 
-/** Live inspections: 3 free per community, then subscription when Stripe is configured. */
+/** Live inspections: 1 free per community, then subscription when Stripe is configured. */
 export async function canRunLiveInspection(userId: string | null): Promise<{
   allowed: boolean;
   reason?: string;

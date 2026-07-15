@@ -32,10 +32,23 @@ export function ProfileCard() {
     }
 
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       const profile = profileFromUser(user);
-      setFullName(profile?.fullName ?? "");
-      setHoaName(profile?.hoaName ?? "");
+      let name = profile?.fullName ?? "";
+      let hoa = profile?.hoaName ?? "";
+
+      if (user) {
+        const { data: row } = await supabase
+          .from("profiles")
+          .select("hoa_name, full_name")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (row?.hoa_name?.trim()) hoa = row.hoa_name.trim();
+        if (row?.full_name?.trim()) name = row.full_name.trim();
+      }
+
+      setFullName(name);
+      setHoaName(hoa);
       setLoading(false);
     });
   }, [isDemo]);
@@ -65,14 +78,17 @@ export function ProfileCard() {
       });
       if (updateError) throw updateError;
 
-      await supabase.from("profiles").upsert({
+      const { error: profileError } = await supabase.from("profiles").upsert({
         id: user.id,
         email: user.email,
         full_name: trimmedName,
         hoa_name: trimmedHoa,
       });
+      if (profileError) {
+        console.warn("profiles upsert (client):", profileError.message);
+      }
 
-      // Best-effort trial claim / rename — never block saving your profile
+      // Server claim writes hoa_name via service role — this is what unlocks scans
       const claimRes = await fetch("/api/community/claim-trial", {
         method: "POST",
         credentials: "include",
@@ -81,13 +97,14 @@ export function ProfileCard() {
       });
       if (!claimRes.ok) {
         const claimData = await claimRes.json().catch(() => ({}));
-        // Profile is saved; show a soft warning only
-        setError(
+        throw new Error(
           claimData.error ??
-            "Profile saved, but the free-trial community could not be updated."
+            "Could not save community name for inspections. Try again."
         );
       }
 
+      setHoaName(trimmedHoa);
+      setFullName(trimmedName);
       setEditing(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save profile");

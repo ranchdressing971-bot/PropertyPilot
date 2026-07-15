@@ -93,7 +93,7 @@ export function BillingCard() {
                 ? `${sub.trialInspectionsRemaining} of ${sub.trialInspectionsLimit} free inspections left${
                     sub.hoaName ? ` · ${sub.hoaName}` : ""
                   }`
-                : `3 free inspections per community, then from ${fromPrice}`}
+                : `1 free inspection per community, then from ${fromPrice}`}
           </p>
         </div>
       </div>
