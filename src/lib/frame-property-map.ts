@@ -19,7 +19,7 @@ export interface DiscoveredHome {
 }
 
 /** Min seconds between distinct homes — keep short so adjacent lots aren't merged. */
-const TEMPORAL_GAP_SEC = 2.5;
+const TEMPORAL_GAP_SEC = 3.5;
 
 function stablePropertyId(address: string, rosterId?: string): string {
   if (rosterId && !rosterId.startsWith("found-") && !rosterId.includes(" ")) {
@@ -65,6 +65,12 @@ function candidateToProperty(
   neighborhood: string,
   id: string
 ): Property {
+  const confidence =
+    candidate.addressConfidence ?? candidate.confidence ?? 0;
+  const needsReview =
+    candidate.needsAddressReview ??
+    (confidence < 70 || !extractHouseNumber(candidate.address));
+
   return {
     id: candidate.id ?? id,
     address: formatAddressTitle(candidate.address),
@@ -72,8 +78,8 @@ function candidateToProperty(
     status: "Good Standing",
     lastInspection: "—",
     neighborhood,
-    addressConfidence: candidate.addressConfidence,
-    needsAddressReview: candidate.needsAddressReview,
+    addressConfidence: confidence,
+    needsAddressReview: needsReview,
     addressMatchReason: candidate.addressMatchReason,
   };
 }
@@ -208,7 +214,15 @@ export function discoverPropertiesFromVideo(
     const key = addressDedupeKey(address);
     const existing = groups.get(key);
     if (!existing || det.confidence > existing.confidence) {
-      groups.set(key, { address, confidence: det.confidence, frame });
+      groups.set(key, {
+        address,
+        confidence: det.confidence,
+        frame,
+        addressConfidence: det.confidence,
+        needsAddressReview:
+          det.confidence < 70 || !extractHouseNumber(address),
+        addressMatchReason: det.reasoning,
+      });
     }
   }
 
@@ -321,6 +335,7 @@ export function propertiesFromHomeDiscovery(
     if (!addr || home.confidence < 35) continue;
 
     const frame = frames[home.frameIndex] ?? frames[0];
+    const confidence = Math.min(99, Math.max(0, home.confidence));
     props.push({
       id: `found-${props.length + 1}`,
       address: formatAddressTitle(addr),
@@ -328,9 +343,9 @@ export function propertiesFromHomeDiscovery(
       status: "Good Standing",
       lastInspection: "—",
       neighborhood,
-      addressConfidence: home.confidence,
+      addressConfidence: confidence,
       needsAddressReview:
-        home.confidence < 70 || !extractHouseNumber(addr),
+        confidence < 70 || !extractHouseNumber(addr),
       addressMatchReason: home.reasoning,
     });
   }

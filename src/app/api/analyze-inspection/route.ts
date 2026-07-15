@@ -70,7 +70,7 @@ async function analyzeBatch(
                 type: "image_url" as const,
                 image_url: {
                   url: cleanImage,
-                  detail: "low" as const,
+                  detail: "high" as const,
                 },
               },
             ]
@@ -110,21 +110,16 @@ async function analyzeBatch(
 }
 
 function isAddressVerified(prop: Property): boolean {
-  if (!canAnalyzeProperty(prop)) return false;
-  if (prop.needsAddressReview) return false;
-  if (prop.addressConfidence != null && prop.addressConfidence < 70) {
-    return false;
-  }
-  return true;
-}
-
-/** Enough identity to run vision compliance (house # present) — may still need address review */
-function canAnalyzeProperty(prop: Property): boolean {
   if (/^Home at /i.test(prop.address) || /^Property at /i.test(prop.address)) {
     return false;
   }
-  if (/^unknown$/i.test(prop.address.trim())) return false;
-  return Boolean(extractHouseNumber(prop.address));
+  // Must see a house number before we invent compliance flags
+  if (!extractHouseNumber(prop.address)) return false;
+  if (prop.needsAddressReview) return false;
+  // Missing confidence = untrusted (was previously treated as verified — bad)
+  if (prop.addressConfidence == null) return false;
+  if (prop.addressConfidence < 70) return false;
+  return true;
 }
 
 function demoResponse(videoName: string) {
@@ -265,20 +260,18 @@ export async function POST(request: NextRequest) {
         (p) =>
           !/^Home at /i.test(p.address) &&
           !/^Property at /i.test(p.address) &&
-          Boolean(extractHouseNumber(p.address)) &&
-          !p.needsAddressReview &&
-          (p.addressConfidence ?? 0) >= 70
+          Boolean(extractHouseNumber(p.address))
       );
-      // Need solid mailbox reads before skipping OCR — weak matches were dropping homes
+      // Need solid numbered hits before skipping OCR — 4-house drives need enrichment
       const expectedHomes = Math.max(
-        3,
+        4,
         Math.min(10, Math.ceil(extractedFrames.length * 0.6))
       );
 
       if (namedHomes.length >= expectedHomes) {
         scanProperties = fromGps;
       } else {
-        // Run OCR + home discovery together to cut wall-clock time
+        // Always enrich when we don't have enough numbered addresses yet
         const [detections, homes] = await Promise.all([
           runAddressDetection(imageUrls, roster),
           runHomeDiscovery(imageUrls),
@@ -367,13 +360,14 @@ export async function POST(request: NextRequest) {
       : 50;
     const capped = newProperties.slice(0, homeLimit);
 
-    // Run compliance on any home with a readable house number (even if address still needs a tap-confirm)
-    const forCompliance = capped.filter(canAnalyzeProperty);
-    const skippedHomes = capped.filter((p) => !canAnalyzeProperty(p));
+    // Only run compliance AI on verified addresses — placeholders / low-confidence
+    // homes stay in results as needs-review without enforceable violations.
+    const verifiedForCompliance = capped.filter(isAddressVerified);
+    const unverifiedHomes = capped.filter((p) => !isAddressVerified(p));
 
     const batches: Property[][] = [];
-    for (let i = 0; i < forCompliance.length; i += BATCH_SIZE) {
-      batches.push(forCompliance.slice(i, i + BATCH_SIZE));
+    for (let i = 0; i < verifiedForCompliance.length; i += BATCH_SIZE) {
+      batches.push(verifiedForCompliance.slice(i, i + BATCH_SIZE));
     }
 
     // Sequential batches with a short pause — keeps TPM calmer without dragging demos
@@ -383,14 +377,14 @@ export async function POST(request: NextRequest) {
       batchResults.push(await analyzeBatch(batches[i], ruleMap));
     }
 
-    const unverifiedResults: AIPropertyResult[] = skippedHomes.map((prop) => ({
+    const unverifiedResults: AIPropertyResult[] = unverifiedHomes.map((prop) => ({
       propertyId: prop.id,
       address: prop.address,
       violationType: null,
       confidence: 0,
       recommendation: "",
       reasoning:
-        "Could not read a house number on this frame yet. Confirm the address or re-drive with the mailbox in view.",
+        "Address needs human confirmation before compliance analysis. No violation created.",
       rule: "",
     }));
 
@@ -421,8 +415,8 @@ export async function POST(request: NextRequest) {
       ruleMap
     );
 
-    // Mark homes that still need address confirmation
-    for (const prop of capped.filter((p) => !isAddressVerified(p))) {
+    // Mark unverified homes in addressReviews
+    for (const prop of unverifiedHomes) {
       if (!addressReviews.some((r) => r.propertyId === prop.id)) {
         addressReviews.push({
           propertyId: prop.id,

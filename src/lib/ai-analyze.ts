@@ -155,14 +155,9 @@ export function buildInspectionPrompt(
 
   return `You are an HOA compliance inspector analyzing drive-through video frames of residential properties.
 
-For EACH property below, examine ITS image and determine if any of these violations exist on THAT property's lot:
+For EACH property below, examine its image and determine if any of these violations exist:
 ${ruleLines}
 - null — property is in good standing, no violations
-
-Important:
-- Judge only the home/lot tied to that address image — not a neighboring yard or roadside strip.
-- Tall grass / landscaping only counts if it clearly belongs to that property's front yard.
-- Most properties should have no violations.
 
 Properties in this batch:
 ${list}
@@ -179,5 +174,10 @@ Respond with JSON only:
   ]
 }
 
-Include one entry per property. Be realistic — most properties should have no violations.`;
+Be strict:
+- Only flag a violation if it is clearly visible ON THAT property's lot / curb / driveway.
+- Do NOT invent addresses. Use the propertyId and Address given.
+- Tall grass only if lawn is clearly overgrown on that lot (not a distant median or roadside strip).
+- Prefer null (good standing) when unsure. Most homes should be null.
+- confidence below 70 means you should return null instead.`;
 }

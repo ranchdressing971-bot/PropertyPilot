@@ -8,7 +8,7 @@ import { sanitizeImageDataUrl } from "./image-data-url";
 import { extractHouseNumber } from "./address-normalize";
 import { createChatCompletion, sleep } from "./openai-retry";
 
-/** 2 frames/call + high detail = readable mailbox digits; short pause keeps demos snappy */
+/** Smaller batches + high detail = readable mailbox digits (speed is secondary here) */
 const FRAMES_PER_MATCH_CALL = 2;
 const PAUSE_BETWEEN_BATCHES_MS = 400;
 
@@ -99,7 +99,7 @@ async function matchBatch(
             type: "image_url" as const,
             image_url: {
               url,
-              // high detail for house-number OCR — low detail misses mailbox digits
+              // high detail — house numbers disappear at "low"
               detail: "high" as const,
             },
           },
