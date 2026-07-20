@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
 import { PageContent } from "@/components/layout/PageContent";
@@ -19,6 +19,7 @@ import {
   loadCollectionDays,
   shouldEnforceTrashBins,
 } from "@/lib/trash-collection";
+import { fadeUp, popIn } from "@/lib/motion";
 
 type FilterTab = "violations" | "all" | "clean" | "review" | "prior";
 
@@ -32,6 +33,17 @@ export function InspectionResultsView({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<FilterTab>("violations");
   const [scheduleNote, setScheduleNote] = useState<string | null>(null);
+  /** Brief beat after load so entrance motion is visible (not a hard flash). */
+  const [reveal, setReveal] = useState(false);
+
+  useEffect(() => {
+    if (loading || !data) {
+      setReveal(false);
+      return;
+    }
+    const t = window.setTimeout(() => setReveal(true), 40);
+    return () => window.clearTimeout(t);
+  }, [loading, data?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,11 +207,19 @@ export function InspectionResultsView({ id }: { id: string }) {
         subtitle={`${data.date} · ${withViolations.length} violations · ${clean.length} clean`}
       />
       <PageContent>
+        {!reveal ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        ) : (
+          <>
         {scheduleNote && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ type: "spring", stiffness: 400, damping: 28 }}
+            initial={fadeUp.initial}
+            animate={fadeUp.animate}
+            transition={fadeUp.transition(0)}
             className="mb-4 flex items-start gap-2.5 rounded-xl border border-ink-200 bg-white px-4 py-3 text-sm text-ink-700 shadow-sm"
           >
             <Trash2 className="mt-0.5 h-4 w-4 shrink-0 text-ink-500" />
@@ -209,9 +229,9 @@ export function InspectionResultsView({ id }: { id: string }) {
 
         {addressReviewItems.length > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05, type: "spring", stiffness: 400, damping: 28 }}
+            initial={fadeUp.initial}
+            animate={fadeUp.animate}
+            transition={fadeUp.transition(0.08)}
             className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
           >
             <div className="flex items-start gap-2">
@@ -231,9 +251,9 @@ export function InspectionResultsView({ id }: { id: string }) {
         )}
 
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08, type: "spring", stiffness: 360, damping: 28 }}
+          initial={popIn.initial}
+          animate={popIn.animate}
+          transition={popIn.transition(0.1)}
           className="grid grid-cols-2 gap-3 sm:max-w-md sm:gap-4"
         >
           <Card padding="sm" className="flex items-center gap-3">
@@ -253,9 +273,9 @@ export function InspectionResultsView({ id }: { id: string }) {
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.12 }}
+          initial={fadeUp.initial}
+          animate={fadeUp.animate}
+          transition={fadeUp.transition(0.18)}
           className="mt-5 flex gap-1.5 overflow-x-auto pb-1"
         >
           {tabs.map((t) => (
@@ -263,7 +283,8 @@ export function InspectionResultsView({ id }: { id: string }) {
               key={t.id}
               type="button"
               layout
-              whileTap={{ scale: 0.96 }}
+              whileTap={{ scale: 0.9 }}
+              whileHover={{ scale: 1.05 }}
               onClick={() => setTab(t.id)}
               className={clsx(
                 "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
@@ -286,25 +307,32 @@ export function InspectionResultsView({ id }: { id: string }) {
         )}
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filtered.length === 0 ? (
-            <p className="col-span-full py-10 text-center text-sm text-ink-500">
-              Nothing in this filter.
-            </p>
-          ) : (
-            filtered.map((result, i) => {
-              if (!result.property) return null;
-              return (
-                <InspectionResultCard
-                  key={result.propertyId}
-                  inspectionId={data.id}
-                  property={result.property}
-                  violation={result.violation}
-                  index={i}
-                  onAddressConfirmed={handleAddressConfirmed}
-                />
-              );
-            })
-          )}
+          <AnimatePresence mode="popLayout">
+            {filtered.length === 0 ? (
+              <motion.p
+                key="empty"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="col-span-full py-10 text-center text-sm text-ink-500"
+              >
+                Nothing in this filter.
+              </motion.p>
+            ) : (
+              filtered.map((result, i) => {
+                if (!result.property) return null;
+                return (
+                  <InspectionResultCard
+                    key={`${tab}-${result.propertyId}`}
+                    inspectionId={data.id}
+                    property={result.property}
+                    violation={result.violation}
+                    index={i}
+                    onAddressConfirmed={handleAddressConfirmed}
+                  />
+                );
+              })
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="mt-6 text-center">
@@ -312,6 +340,8 @@ export function InspectionResultsView({ id }: { id: string }) {
             ← All inspections
           </Link>
         </div>
+          </>
+        )}
       </PageContent>
     </DashboardLayout>
   );

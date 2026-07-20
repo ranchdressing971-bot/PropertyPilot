@@ -9,6 +9,7 @@ import { MediaImage } from "@/components/ui/MediaImage";
 import { AddressConfirmPanel } from "@/components/inspections/AddressConfirmPanel";
 import { Property, Violation } from "@/lib/mock-data";
 import { CheckCircle2, ArrowRight, FileText, MapPin } from "lucide-react";
+import { popIn } from "@/lib/motion";
 
 interface InspectionResultCardProps {
   property: Property;
@@ -27,15 +28,11 @@ export function InspectionResultCard({
 }: InspectionResultCardProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 28, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{
-        delay: Math.min(index * 0.06, 0.45),
-        type: "spring",
-        stiffness: 380,
-        damping: 26,
-      }}
-      whileHover={{ y: -3, transition: { duration: 0.2 } }}
+      initial={popIn.initial}
+      animate={popIn.animate}
+      transition={popIn.transition(Math.min(0.08 + index * 0.1, 0.9))}
+      whileHover={{ y: -6, scale: 1.015, transition: { duration: 0.22 } }}
+      style={{ transformOrigin: "center top" }}
     >
       <Card hover className="overflow-hidden">
         <div className="relative h-32 w-full overflow-hidden rounded-xl sm:h-40">

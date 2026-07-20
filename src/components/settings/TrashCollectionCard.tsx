@@ -84,8 +84,9 @@ export function TrashCollectionCard() {
               type="button"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: i * 0.03, type: "spring", stiffness: 420, damping: 22 }}
-              whileTap={{ scale: 0.94 }}
+              transition={{ delay: i * 0.05, type: "spring", stiffness: 320, damping: 16 }}
+              whileTap={{ scale: 0.9 }}
+              whileHover={{ scale: 1.06 }}
               onClick={() => toggle(d.id)}
               className={clsx(
                 "relative rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors",

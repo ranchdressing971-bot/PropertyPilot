@@ -7,6 +7,7 @@ import { Logo } from "@/components/brand/Logo";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { Play, CheckCircle2, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { popIn, staggerContainer, staggerItem } from "@/lib/motion";
 
 export default function HomePage() {
   const router = useRouter();
@@ -28,9 +29,9 @@ export default function HomePage() {
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_70%_20%,rgba(79,127,95,0.14),transparent_55%)]" />
         <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-5 pb-16 pt-12 sm:px-8 sm:pb-20 sm:pt-16 lg:grid-cols-[0.95fr_1.05fr] lg:gap-14">
           <motion.div
-            initial={{ opacity: 0, y: 22, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ type: "spring", stiffness: 320, damping: 28 }}
+            initial={popIn.initial}
+            animate={popIn.animate}
+            transition={popIn.transition(0)}
           >
             <Logo size="lg" className="mb-8" />
             <h1 className="font-display text-balance text-4xl font-semibold leading-[1.08] tracking-tight text-ink-900 sm:text-5xl lg:text-[3.4rem]">
@@ -61,9 +62,9 @@ export default function HomePage() {
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 28, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ type: "spring", stiffness: 300, damping: 26, delay: 0.1 }}
+            initial={popIn.initial}
+            animate={popIn.animate}
+            transition={popIn.transition(0.15)}
             className="relative"
           >
             <div className="surface overflow-hidden p-3 sm:p-4">
@@ -81,7 +82,12 @@ export default function HomePage() {
                     2 need review
                   </span>
                 </div>
-                <div className="divide-y divide-ink-100">
+                <motion.div
+                  className="divide-y divide-ink-100"
+                  variants={staggerContainer}
+                  initial="initial"
+                  animate="animate"
+                >
                   {[
                     {
                       addr: "123 Maple Lane",
@@ -104,17 +110,10 @@ export default function HomePage() {
                       conf: "62%",
                       img: "/demo/demo-tall-grass.jpg",
                     },
-                  ].map((row, i) => (
+                  ].map((row) => (
                     <motion.div
                       key={row.addr}
-                      initial={{ opacity: 0, x: 12 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{
-                        delay: 0.22 + i * 0.07,
-                        type: "spring",
-                        stiffness: 400,
-                        damping: 28,
-                      }}
+                      variants={staggerItem}
                       className="flex items-center gap-3 px-4 py-3.5"
                     >
                       <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-ink-100 ring-1 ring-ink-200/60">
@@ -144,7 +143,7 @@ export default function HomePage() {
                       <span className="text-[11px] text-ink-400">{row.conf}</span>
                     </motion.div>
                   ))}
-                </div>
+                </motion.div>
                 <div className="border-t border-ink-100 bg-ink-50/80 px-4 py-3">
                   <div className="flex items-center gap-2 text-xs text-ink-600">
                     <CheckCircle2 className="h-3.5 w-3.5 text-brand-600" />
