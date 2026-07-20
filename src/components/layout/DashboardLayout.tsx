@@ -1,19 +1,9 @@
 "use client";
 
-import { Sidebar } from "./Sidebar";
-import { MobileBottomNav } from "./MobileBottomNav";
-import { MobileNavProvider } from "./MobileNavContext";
-
+/**
+ * Shell lives in `app/dashboard/layout.tsx` so route transitions stay mounted.
+ * This wrapper remains for existing page imports — pass-through only.
+ */
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <MobileNavProvider>
-      <div className="min-h-screen bg-canvas">
-        <Sidebar />
-        <main className="min-h-screen pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:ml-[252px] lg:pb-0">
-          {children}
-        </main>
-        <MobileBottomNav />
-      </div>
-    </MobileNavProvider>
-  );
+  return <>{children}</>;
 }

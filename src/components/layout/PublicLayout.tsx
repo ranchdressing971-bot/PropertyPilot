@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
 import { Button } from "@/components/ui/Button";
+import { PageTransition } from "./PageTransition";
 
 interface PublicLayoutProps {
   children: React.ReactNode;
@@ -33,7 +36,7 @@ export function PublicLayout({ children, showNavActions = true }: PublicLayoutPr
           )}
         </div>
       </nav>
-      {children}
+      <PageTransition>{children}</PageTransition>
       <footer className="border-t border-ink-200/60 bg-white py-10">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 sm:flex-row sm:px-8">
           <Logo size="sm" href="/" />
