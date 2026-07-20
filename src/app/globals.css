@@ -35,6 +35,15 @@
 }
 
 @layer utilities {
+  /*
+   * Default paint state for PageTransition panels. Framer Motion overrides via
+   * inline styles once it mounts; until then content stays invisible so soft
+   * navigations never flash final content before the enter spring.
+   */
+  .page-transition {
+    opacity: 0;
+  }
+
   .surface {
     @apply rounded-2xl border border-ink-200/70 bg-white/90 shadow-card backdrop-blur-sm;
   }
