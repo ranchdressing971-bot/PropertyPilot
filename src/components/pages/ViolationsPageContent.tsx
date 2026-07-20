@@ -1,11 +1,13 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { PageContent } from "@/components/layout/PageContent";
 import { ViolationCard } from "@/components/violations/ViolationCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useLiveDashboard } from "@/hooks/useLiveDashboard";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { violations as demoViolations } from "@/lib/mock-data";
+import { staggerContainer } from "@/lib/motion";
 import { AlertTriangle, Loader2 } from "lucide-react";
 
 export function ViolationsPageContent() {
@@ -45,11 +47,16 @@ export function ViolationsPageContent() {
           <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-400">
             Pending review
           </h2>
-          <div className="space-y-3">
+          <motion.div
+            className="space-y-3"
+            variants={staggerContainer}
+            initial="initial"
+            animate="animate"
+          >
             {pending.map((v, i) => (
               <ViolationCard key={v.id} violation={v} index={i} />
             ))}
-          </div>
+          </motion.div>
         </section>
       )}
 
@@ -58,11 +65,16 @@ export function ViolationsPageContent() {
           <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-400">
             Reviewed
           </h2>
-          <div className="space-y-3">
+          <motion.div
+            className="space-y-3"
+            variants={staggerContainer}
+            initial="initial"
+            animate="animate"
+          >
             {reviewed.map((v, i) => (
               <ViolationCard key={v.id} violation={v} index={i} />
             ))}
-          </div>
+          </motion.div>
         </section>
       )}
     </PageContent>

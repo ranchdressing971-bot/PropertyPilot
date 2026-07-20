@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -7,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { useLiveDashboard } from "@/hooks/useLiveDashboard";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { aiInsights, inspections, properties } from "@/lib/mock-data";
+import { staggerContainer, staggerItem } from "@/lib/motion";
 import { Download, FileText, BarChart3, Award, Loader2 } from "lucide-react";
 import { downloadComplianceReportPdf } from "@/lib/pdf-notice";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -70,52 +72,63 @@ export function ReportsPageContent() {
 
   return (
     <PageContent>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <ReportCard
-          icon={BarChart3}
-          title="Compliance report"
-          description={`Neighborhood score: ${compliance}%. ${inspectionCount} inspection${inspectionCount === 1 ? "" : "s"} on record.`}
-          onExport={() =>
-            exportPdf({
-              hoaName: displayHoaName(profile, demoProfile),
-              complianceScore: compliance,
-              inspectionCount,
-              violationCount: isDemo
-                ? 3
-                : (live?.violations.filter((v) => v.status === "pending").length ?? 0),
-              topViolation,
-            })
-          }
-        />
-        <ReportCard
-          icon={Award}
-          title="Good standing"
-          description={`${cleanCount} properties compliant. Generate recognition reports for homeowners.`}
-          onExport={() =>
-            exportPdf({
-              hoaName: displayHoaName(profile, demoProfile),
-              complianceScore: compliance,
-              inspectionCount,
-              violationCount: 0,
-              topViolation: "Good standing report",
-            })
-          }
-        />
-        <ReportCard
-          icon={FileText}
-          title="Violation summary"
-          description={`Most common: ${topViolation}. ${repeatCount} repeat address${repeatCount === 1 ? "" : "es"}.`}
-          onExport={() =>
-            exportPdf({
-              hoaName: displayHoaName(profile, demoProfile),
-              complianceScore: compliance,
-              inspectionCount,
-              violationCount: repeatCount,
-              topViolation,
-            })
-          }
-        />
-      </div>
+      <motion.div
+        className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+      >
+        <motion.div variants={staggerItem}>
+          <ReportCard
+            icon={BarChart3}
+            title="Compliance report"
+            description={`Neighborhood score: ${compliance}%. ${inspectionCount} inspection${inspectionCount === 1 ? "" : "s"} on record.`}
+            onExport={() =>
+              exportPdf({
+                hoaName: displayHoaName(profile, demoProfile),
+                complianceScore: compliance,
+                inspectionCount,
+                violationCount: isDemo
+                  ? 3
+                  : (live?.violations.filter((v) => v.status === "pending").length ?? 0),
+                topViolation,
+              })
+            }
+          />
+        </motion.div>
+        <motion.div variants={staggerItem}>
+          <ReportCard
+            icon={Award}
+            title="Good standing"
+            description={`${cleanCount} properties compliant. Generate recognition reports for homeowners.`}
+            onExport={() =>
+              exportPdf({
+                hoaName: displayHoaName(profile, demoProfile),
+                complianceScore: compliance,
+                inspectionCount,
+                violationCount: 0,
+                topViolation: "Good standing report",
+              })
+            }
+          />
+        </motion.div>
+        <motion.div variants={staggerItem}>
+          <ReportCard
+            icon={FileText}
+            title="Violation summary"
+            description={`Most common: ${topViolation}. ${repeatCount} repeat address${repeatCount === 1 ? "" : "es"}.`}
+            onExport={() =>
+              exportPdf({
+                hoaName: displayHoaName(profile, demoProfile),
+                complianceScore: compliance,
+                inspectionCount,
+                violationCount: repeatCount,
+                topViolation,
+              })
+            }
+          />
+        </motion.div>
+      </motion.div>
     </PageContent>
   );
 }

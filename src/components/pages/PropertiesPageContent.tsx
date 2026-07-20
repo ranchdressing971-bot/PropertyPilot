@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -12,6 +13,7 @@ import { useRoster } from "@/hooks/useRoster";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { properties as demoProperties } from "@/lib/mock-data";
+import { staggerContainer, staggerItem } from "@/lib/motion";
 import { ArrowRight, Calendar, ChevronDown, Home, Loader2 } from "lucide-react";
 
 function PropertyThumb({ address, image }: { address: string; image: string }) {
@@ -100,33 +102,40 @@ export function PropertiesPageContent() {
           actionHref="/dashboard/inspections/upload"
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <motion.div
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+        >
           {list.map((property) => (
-            <Link key={property.id} href={`/dashboard/properties/${property.id}`}>
-              <Card hover className="h-full">
-                <PropertyThumb address={property.address} image={property.image} />
-                <div className="mt-4 space-y-3">
-                  <div>
-                    <h3 className="font-display text-base font-semibold text-ink-900">
-                      {property.address}
-                    </h3>
-                    <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-500">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {property.lastInspection}
-                    </p>
+            <motion.div key={property.id} variants={staggerItem}>
+              <Link href={`/dashboard/properties/${property.id}`}>
+                <Card hover className="h-full">
+                  <PropertyThumb address={property.address} image={property.image} />
+                  <div className="mt-4 space-y-3">
+                    <div>
+                      <h3 className="font-display text-base font-semibold text-ink-900">
+                        {property.address}
+                      </h3>
+                      <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-500">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {property.lastInspection}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Badge status={property.status} />
+                      <span className="flex items-center text-sm font-medium text-ink-600">
+                        View
+                        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <Badge status={property.status} />
-                    <span className="flex items-center text-sm font-medium text-ink-600">
-                      View
-                      <ArrowRight className="ml-1 h-3.5 w-3.5" />
-                    </span>
-                  </div>
-                </div>
-              </Card>
-            </Link>
+                </Card>
+              </Link>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
     </PageContent>
   );

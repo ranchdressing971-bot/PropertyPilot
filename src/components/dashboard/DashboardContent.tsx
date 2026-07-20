@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { AIInsights } from "@/components/dashboard/AIInsights";
@@ -14,6 +15,7 @@ import {
   aiInsights,
   dashboardStats,
 } from "@/lib/mock-data";
+import { staggerContainer, staggerItem } from "@/lib/motion";
 import {
   MapPin,
   Video,
@@ -118,28 +120,41 @@ export function DashboardContent() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-        <StatCard
-          title="Neighborhoods"
-          value={stats.neighborhoodsInspected}
-          icon={MapPin}
-        />
-        <StatCard
-          title="Videos"
-          value={stats.videosProcessed}
-          icon={Video}
-        />
-        <StatCard
-          title="Pending flags"
-          value={stats.potentialViolations}
-          icon={AlertTriangle}
-        />
-        <StatCard
-          title="Hours saved"
-          value={`${stats.timeSavedHours}h`}
-          icon={Clock}
-        />
-      </div>
+      <motion.div
+        className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4"
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+      >
+        <motion.div variants={staggerItem}>
+          <StatCard
+            title="Neighborhoods"
+            value={stats.neighborhoodsInspected}
+            icon={MapPin}
+          />
+        </motion.div>
+        <motion.div variants={staggerItem}>
+          <StatCard
+            title="Videos"
+            value={stats.videosProcessed}
+            icon={Video}
+          />
+        </motion.div>
+        <motion.div variants={staggerItem}>
+          <StatCard
+            title="Pending flags"
+            value={stats.potentialViolations}
+            icon={AlertTriangle}
+          />
+        </motion.div>
+        <motion.div variants={staggerItem}>
+          <StatCard
+            title="Hours saved"
+            value={`${stats.timeSavedHours}h`}
+            icon={Clock}
+          />
+        </motion.div>
+      </motion.div>
 
       <div className="grid gap-5 lg:grid-cols-5 lg:gap-6">
         <div className="lg:col-span-3">
