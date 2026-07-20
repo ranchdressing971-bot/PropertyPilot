@@ -11,7 +11,7 @@ import { sanitizeImageDataUrl } from "./image-data-url";
 import { createChatCompletion, sleep } from "./openai-retry";
 
 const FRAMES_PER_VISION_CALL = 3;
-const PAUSE_BETWEEN_BATCHES_MS = 400;
+const PAUSE_BETWEEN_BATCHES_MS = 1000;
 
 async function detectBatch(
   imageUrls: string[],

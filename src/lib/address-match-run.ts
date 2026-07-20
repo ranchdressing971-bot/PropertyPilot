@@ -10,7 +10,7 @@ import { createChatCompletion, sleep } from "./openai-retry";
 
 /** Smaller batches + high detail = readable mailbox digits (speed is secondary here) */
 const FRAMES_PER_MATCH_CALL = 2;
-const PAUSE_BETWEEN_BATCHES_MS = 400;
+const PAUSE_BETWEEN_BATCHES_MS = 1000;
 
 export interface AddressMatchResult {
   frameIndex: number;

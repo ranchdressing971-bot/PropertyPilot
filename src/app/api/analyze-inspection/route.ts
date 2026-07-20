@@ -46,7 +46,8 @@ import { createChatCompletion, isQuotaError, sleep } from "@/lib/openai-retry";
 export const maxDuration = 120;
 
 const BATCH_SIZE = 4;
-const PAUSE_BETWEEN_COMPLIANCE_MS = 300;
+/** Space compliance calls — high-detail address pass already used most TPM. */
+const PAUSE_BETWEEN_COMPLIANCE_MS = 800;
 
 interface VideoFrameInput {
   index: number;
@@ -70,7 +71,8 @@ async function analyzeBatch(
                 type: "image_url" as const,
                 image_url: {
                   url: cleanImage,
-                  detail: "high" as const,
+                  // low: trash/grass/debris don't need mailbox-level tiles (saves TPM)
+                  detail: "low" as const,
                 },
               },
             ]
@@ -271,29 +273,43 @@ export async function POST(request: NextRequest) {
       if (namedHomes.length >= expectedHomes) {
         scanProperties = fromGps;
       } else {
-        // Always enrich when we don't have enough numbered addresses yet
-        const [detections, homes] = await Promise.all([
-          runAddressDetection(imageUrls, roster),
-          runHomeDiscovery(imageUrls),
-        ]);
+        // Enrich sequentially (never parallel) — parallel vision doubles TPM and
+        // triggers OpenAI's per-minute token limit after a few scans.
+        const detections = await runAddressDetection(imageUrls, roster);
         const fromOcr = discoverPropertiesFromVideo(
           extractedFrames,
           detections,
           neighborhood,
           roster.length > 0 ? roster : undefined
         );
-        const fromHomes = propertiesFromHomeDiscovery(
-          extractedFrames,
-          homes,
-          neighborhood
-        );
         scanProperties = mergePropertyLists(
           neighborhood,
           extractedFrames,
           fromGps,
-          fromOcr,
-          fromHomes
+          fromOcr
         );
+
+        const stillShort =
+          scanProperties.filter(
+            (p) =>
+              !/^Home at /i.test(p.address) &&
+              Boolean(extractHouseNumber(p.address))
+          ).length < expectedHomes;
+
+        if (stillShort) {
+          const homes = await runHomeDiscovery(imageUrls);
+          const fromHomes = propertiesFromHomeDiscovery(
+            extractedFrames,
+            homes,
+            neighborhood
+          );
+          scanProperties = mergePropertyLists(
+            neighborhood,
+            extractedFrames,
+            scanProperties,
+            fromHomes
+          );
+        }
       }
 
       addressMatches = scanProperties.filter(
@@ -526,9 +542,14 @@ export async function POST(request: NextRequest) {
       userMessage =
         "OpenAI credits ran out. Add $5–10 at platform.openai.com/settings/organization/billing — then wait ~2 min and try again.";
       code = "NO_CREDITS";
-    } else if (msg.includes("429") || msg.toLowerCase().includes("rate limit")) {
+    } else if (
+      msg.includes("429") ||
+      msg.toLowerCase().includes("rate limit") ||
+      msg.toLowerCase().includes("tokens per min") ||
+      msg.toLowerCase().includes("requests per min")
+    ) {
       userMessage =
-        "OpenAI hit its per-minute speed limit (not your dollar balance — $0.04 spend is normal). Wait 60 seconds and upload again. Scans now go slower on purpose so this happens less.";
+        "OpenAI’s per-minute token limit was hit (speed limit, not dollar credits). Wait about 60 seconds, then upload again — scans are paced so this happens less often.";
       code = "RATE_LIMIT";
     }
 
