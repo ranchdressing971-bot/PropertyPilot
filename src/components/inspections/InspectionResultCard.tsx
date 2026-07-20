@@ -9,7 +9,7 @@ import { MediaImage } from "@/components/ui/MediaImage";
 import { AddressConfirmPanel } from "@/components/inspections/AddressConfirmPanel";
 import { Property, Violation } from "@/lib/mock-data";
 import { CheckCircle2, ArrowRight, FileText, MapPin } from "lucide-react";
-import { popIn } from "@/lib/motion";
+import { staggerItem } from "@/lib/motion";
 
 interface InspectionResultCardProps {
   property: Property;
@@ -23,14 +23,12 @@ export function InspectionResultCard({
   property,
   violation,
   inspectionId,
-  index,
   onAddressConfirmed,
 }: InspectionResultCardProps) {
   return (
     <motion.div
-      initial={popIn.initial}
-      animate={popIn.animate}
-      transition={popIn.transition(Math.min(0.08 + index * 0.1, 0.9))}
+      variants={staggerItem}
+      layout={false}
       whileHover={{ y: -6, scale: 1.015, transition: { duration: 0.22 } }}
       style={{ transformOrigin: "center top" }}
     >

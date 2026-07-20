@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
 import { PageContent } from "@/components/layout/PageContent";
@@ -19,7 +19,7 @@ import {
   loadCollectionDays,
   shouldEnforceTrashBins,
 } from "@/lib/trash-collection";
-import { fadeUp, popIn } from "@/lib/motion";
+import { fadeUp, popIn, staggerContainer } from "@/lib/motion";
 
 type FilterTab = "violations" | "all" | "clean" | "review" | "prior";
 
@@ -306,34 +306,38 @@ export function InspectionResultsView({ id }: { id: string }) {
           </p>
         )}
 
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <AnimatePresence mode="popLayout">
-            {filtered.length === 0 ? (
-              <motion.p
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="col-span-full py-10 text-center text-sm text-ink-500"
-              >
-                Nothing in this filter.
-              </motion.p>
-            ) : (
-              filtered.map((result, i) => {
-                if (!result.property) return null;
-                return (
-                  <InspectionResultCard
-                    key={`${tab}-${result.propertyId}`}
-                    inspectionId={data.id}
-                    property={result.property}
-                    violation={result.violation}
-                    index={i}
-                    onAddressConfirmed={handleAddressConfirmed}
-                  />
-                );
-              })
-            )}
-          </AnimatePresence>
-        </div>
+        {filtered.length === 0 ? (
+          <motion.p
+            key={`empty-${tab}`}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 col-span-full py-10 text-center text-sm text-ink-500"
+          >
+            Nothing in this filter.
+          </motion.p>
+        ) : (
+          <motion.div
+            key={tab}
+            className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+            variants={staggerContainer}
+            initial="initial"
+            animate="animate"
+          >
+            {filtered.map((result, i) => {
+              if (!result.property) return null;
+              return (
+                <InspectionResultCard
+                  key={result.propertyId}
+                  inspectionId={data.id}
+                  property={result.property}
+                  violation={result.violation}
+                  index={i}
+                  onAddressConfirmed={handleAddressConfirmed}
+                />
+              );
+            })}
+          </motion.div>
+        )}
 
         <div className="mt-6 text-center">
           <Link href="/dashboard/inspections" className="text-sm text-brand-700 hover:underline">

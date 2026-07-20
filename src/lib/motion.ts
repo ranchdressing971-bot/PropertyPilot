@@ -32,22 +32,43 @@ export const fadeUp = {
   }),
 };
 
+/**
+ * Result / list cards: clear vertical rise into place (not a soft fade).
+ * Prefer with staggerContainer, or pass delay via transition(delay).
+ */
+export const cardFlyUp = {
+  initial: { opacity: 0, y: 56 },
+  animate: { opacity: 1, y: 0 },
+  transition: (delay = 0) => ({
+    delay,
+    type: "spring" as const,
+    stiffness: 340,
+    damping: 22,
+    mass: 0.8,
+  }),
+};
+
 export const staggerContainer = {
   initial: {},
   animate: {
     transition: {
-      staggerChildren: 0.1,
-      delayChildren: 0.12,
+      staggerChildren: 0.08,
+      delayChildren: 0.04,
     },
   },
 };
 
+/** Child of staggerContainer — same fly-up as cardFlyUp. */
 export const staggerItem = {
-  initial: { opacity: 0, y: 28, scale: 0.92 },
+  initial: { opacity: 0, y: 56 },
   animate: {
     opacity: 1,
     y: 0,
-    scale: 1,
-    transition: { type: "spring" as const, stiffness: 280, damping: 18 },
+    transition: {
+      type: "spring" as const,
+      stiffness: 340,
+      damping: 22,
+      mass: 0.8,
+    },
   },
 };
