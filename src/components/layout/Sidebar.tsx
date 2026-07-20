@@ -68,7 +68,7 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[252px] flex-col border-r border-ink-800/50 bg-ink-950 lg:flex">
+      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[288px] flex-col border-r border-ink-800/50 bg-ink-950 lg:flex">
         <SidebarContent isDemo={isDemo} />
       </aside>
 
@@ -87,7 +87,7 @@ export function Sidebar() {
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 32, stiffness: 380 }}
-              className="fixed left-0 top-0 z-50 flex h-screen w-[min(85vw,280px)] flex-col bg-ink-950 lg:hidden"
+              className="fixed left-0 top-0 z-50 flex h-screen w-[min(85vw,288px)] flex-col bg-ink-950 lg:hidden"
             >
               <div className="flex items-center justify-between border-b border-ink-800/80 px-5 py-4">
                 <Logo size="md" href="/dashboard" variant="light" />

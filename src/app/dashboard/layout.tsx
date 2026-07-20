@@ -18,7 +18,7 @@ export default function DashboardRootLayout({
     <MobileNavProvider>
       <div className="min-h-screen bg-canvas">
         <Sidebar />
-        <main className="min-h-screen pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:ml-[252px] lg:pb-0">
+        <main className="min-h-screen pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:ml-[288px] lg:pb-0">
           <PageTransition>{children}</PageTransition>
         </main>
         <MobileBottomNav />
