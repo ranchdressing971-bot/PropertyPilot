@@ -10,7 +10,6 @@ import { useAppMode } from "@/components/providers/AppModeProvider";
 import {
   ArrowRight,
   Check,
-  MapPin,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
