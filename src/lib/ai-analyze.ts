@@ -103,10 +103,12 @@ export function buildViolationsFromAI(
 export function normalizeAIResults(
   raw: RawAIResult[],
   properties: Property[],
-  ruleMap?: Record<string, string>
+  ruleMap?: Record<string, string>,
+  opts?: { enforceTrashBins?: boolean }
 ): AIPropertyResult[] {
   const rules = ruleMap ?? VIOLATION_RULES;
   const enabledTypes = new Set(Object.keys(rules));
+  const enforceTrash = opts?.enforceTrashBins !== false;
 
   return properties.map((prop) => {
     const match = raw.find((r) => r.propertyId === prop.id);
@@ -117,6 +119,20 @@ export function normalizeAIResults(
     // Only keep violation types that are enabled in the HOA's CCR rules
     if (type && !enabledTypes.has(type)) {
       type = null;
+    }
+
+    // Pickup day — bins allowed at curb; don't create enforceable flags
+    if (type === "Trash Bin Visible" && !enforceTrash) {
+      return {
+        propertyId: prop.id,
+        address: prop.address,
+        violationType: null,
+        confidence: 0,
+        recommendation: "",
+        reasoning:
+          "Trash bin visible, but today is a scheduled collection day — not flagged per HOA schedule.",
+        rule: "",
+      };
     }
 
     // Honest confidence — no artificial 60 floor
@@ -142,7 +158,8 @@ export function normalizeAIResults(
 
 export function buildInspectionPrompt(
   batch: Property[],
-  ruleMap?: Record<string, string>
+  ruleMap?: Record<string, string>,
+  opts?: { collectionDaysLabel?: string; isCollectionDay?: boolean }
 ): string {
   const rules = ruleMap ?? VIOLATION_RULES;
   const ruleLines = Object.entries(rules)
@@ -153,11 +170,19 @@ export function buildInspectionPrompt(
     .map((p) => `- ID: ${p.id}, Address: ${p.address}`)
     .join("\n");
 
+  const trashNote =
+    opts?.isCollectionDay === true
+      ? `\nIMPORTANT — Today IS a trash collection day (${opts.collectionDaysLabel ?? "scheduled"}). Do NOT flag "Trash Bin Visible" — bins are allowed at the curb. Prefer null for bins-only findings.`
+      : opts?.isCollectionDay === false
+        ? `\nTrash schedule: collection days are ${opts.collectionDaysLabel ?? "configured"}. Today is NOT a collection day — visible curb bins may be flagged as "Trash Bin Visible".`
+        : "";
+
   return `You are an HOA compliance inspector analyzing drive-through video frames of residential properties.
 
 For EACH property below, examine its image and determine if any of these violations exist:
 ${ruleLines}
 - null — property is in good standing, no violations
+${trashNote}
 
 Properties in this batch:
 ${list}

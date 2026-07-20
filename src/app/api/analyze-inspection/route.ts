@@ -42,6 +42,12 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { sanitizeImageDataUrl } from "@/lib/image-data-url";
 import { extractHouseNumber } from "@/lib/address-normalize";
 import { createChatCompletion, isQuotaError, mapPool } from "@/lib/openai-retry";
+import {
+  formatCollectionDays,
+  isCollectionDay,
+  shouldEnforceTrashBins,
+  type Weekday,
+} from "@/lib/trash-collection";
 
 export const maxDuration = 120;
 
@@ -53,12 +59,25 @@ interface VideoFrameInput {
   dataUrl: string;
 }
 
+interface TrashScheduleOpts {
+  enforceTrashBins: boolean;
+  collectionDaysLabel: string;
+  isCollectionDay: boolean;
+}
+
 async function analyzeBatch(
   batch: Property[],
-  ruleMap: Record<string, string>
+  ruleMap: Record<string, string>,
+  trash: TrashScheduleOpts
 ): Promise<AIPropertyResult[]> {
   const content: ChatCompletionContentPart[] = [
-    { type: "text", text: buildInspectionPrompt(batch, ruleMap) },
+    {
+      type: "text",
+      text: buildInspectionPrompt(batch, ruleMap, {
+        collectionDaysLabel: trash.collectionDaysLabel,
+        isCollectionDay: trash.isCollectionDay,
+      }),
+    },
     ...batch.flatMap((prop) => {
       const cleanImage = sanitizeImageDataUrl(prop.image);
       return [
@@ -106,7 +125,9 @@ async function analyzeBatch(
     reasoning: string;
   }[];
 
-  return normalizeAIResults(raw, batch, ruleMap);
+  return normalizeAIResults(raw, batch, ruleMap, {
+    enforceTrashBins: trash.enforceTrashBins,
+  });
 }
 
 function isAddressVerified(prop: Property): boolean {
@@ -142,6 +163,15 @@ export async function POST(request: NextRequest) {
     const ccrRules = body.ccrRules as typeof DEFAULT_CCR_RULES | undefined;
     const ruleMap = rulesToMap(ccrRules ?? DEFAULT_CCR_RULES);
     const frames = body.frames as VideoFrameInput[] | undefined;
+    const collectionDays = (Array.isArray(body.trashCollectionDays)
+      ? body.trashCollectionDays
+      : []) as Weekday[];
+    const scanDate = new Date();
+    const trashOpts: TrashScheduleOpts = {
+      enforceTrashBins: shouldEnforceTrashBins(collectionDays, scanDate),
+      collectionDaysLabel: formatCollectionDays(collectionDays),
+      isCollectionDay: isCollectionDay(collectionDays, scanDate),
+    };
 
     if (mode === "demo") {
       return demoResponse(videoName);
@@ -386,7 +416,7 @@ export async function POST(request: NextRequest) {
 
     // Parallel compliance batches (2 at a time) — low-detail so TPM stays calm
     const batchResults = await mapPool(batches, 2, (batch) =>
-      analyzeBatch(batch, ruleMap)
+      analyzeBatch(batch, ruleMap, trashOpts)
     );
 
     const unverifiedResults: AIPropertyResult[] = unverifiedHomes.map((prop) => ({

@@ -28,9 +28,9 @@ export default function HomePage() {
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_70%_20%,rgba(79,127,95,0.14),transparent_55%)]" />
         <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-5 pb-16 pt-12 sm:px-8 sm:pb-20 sm:pt-16 lg:grid-cols-[0.95fr_1.05fr] lg:gap-14">
           <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
+            initial={{ opacity: 0, y: 22, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: "spring", stiffness: 320, damping: 28 }}
           >
             <Logo size="lg" className="mb-8" />
             <h1 className="font-display text-balance text-4xl font-semibold leading-[1.08] tracking-tight text-ink-900 sm:text-5xl lg:text-[3.4rem]">
@@ -61,9 +61,9 @@ export default function HomePage() {
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.08 }}
+            initial={{ opacity: 0, y: 28, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: "spring", stiffness: 300, damping: 26, delay: 0.1 }}
             className="relative"
           >
             <div className="surface overflow-hidden p-3 sm:p-4">
@@ -104,9 +104,17 @@ export default function HomePage() {
                       conf: "62%",
                       img: "/demo/demo-tall-grass.jpg",
                     },
-                  ].map((row) => (
-                    <div
+                  ].map((row, i) => (
+                    <motion.div
                       key={row.addr}
+                      initial={{ opacity: 0, x: 12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{
+                        delay: 0.22 + i * 0.07,
+                        type: "spring",
+                        stiffness: 400,
+                        damping: 28,
+                      }}
                       className="flex items-center gap-3 px-4 py-3.5"
                     >
                       <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-ink-100 ring-1 ring-ink-200/60">
@@ -134,7 +142,7 @@ export default function HomePage() {
                         </p>
                       </div>
                       <span className="text-[11px] text-ink-400">{row.conf}</span>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
                 <div className="border-t border-ink-100 bg-ink-50/80 px-4 py-3">

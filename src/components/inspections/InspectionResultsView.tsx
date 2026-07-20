@@ -12,30 +12,26 @@ import { CardSkeleton } from "@/components/ui/Skeleton";
 import { InspectionResultCard } from "@/components/inspections/InspectionResultCard";
 import type { InspectionDisplayData } from "@/lib/inspection-display";
 import { getCachedInspectionClient } from "@/lib/inspection-cache";
-import { CheckCircle2, AlertTriangle, MapPin, History } from "lucide-react";
+import { CheckCircle2, AlertTriangle, MapPin, History, Trash2 } from "lucide-react";
 import clsx from "clsx";
+import {
+  formatCollectionDays,
+  loadCollectionDays,
+  shouldEnforceTrashBins,
+} from "@/lib/trash-collection";
 
 type FilterTab = "violations" | "all" | "clean" | "review" | "prior";
 
-interface InspectionData extends InspectionDisplayData {}
+interface InspectionData extends InspectionDisplayData {
+  trashScheduleNote?: string;
+}
 
 export function InspectionResultsView({ id }: { id: string }) {
   const [data, setData] = useState<InspectionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<FilterTab>("all");
-
-  useEffect(() => {
-    if (!data) return;
-    const violCount = data.results.filter((r) => r.violation).length;
-    const reviewCount = data.results.filter((r) => r.property.needsAddressReview).length;
-    // Prefer All when homes exist but Violations would look empty/misleading
-    if (reviewCount > 0 || (data.results.length > 1 && violCount <= 1)) {
-      setTab("all");
-    } else if (violCount > 0) {
-      setTab("violations");
-    }
-  }, [data?.id]);
+  const [tab, setTab] = useState<FilterTab>("violations");
+  const [scheduleNote, setScheduleNote] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,13 +44,25 @@ export function InspectionResultsView({ id }: { id: string }) {
       }
 
       try {
-        const r = await fetch(`/api/inspection/${id}`, { credentials: "include" });
+        const days = loadCollectionDays();
+        const qs = `?collectionDays=${encodeURIComponent(days.join(","))}`;
+        const r = await fetch(`/api/inspection/${id}${qs}`, {
+          credentials: "include",
+        });
         if (!r.ok) {
           if (cached) return;
           throw new Error("Inspection not found");
         }
         const json = await r.json();
-        if (!cancelled) setData(json);
+        if (!cancelled) {
+          setData(json);
+          setScheduleNote(
+            json.trashScheduleNote ??
+              (shouldEnforceTrashBins(days)
+                ? `Trash bins can be flagged today (pickup: ${formatCollectionDays(days)}).`
+                : `Today is a pickup day (${formatCollectionDays(days)}) — trash bins not flagged.`)
+          );
+        }
       } catch (e) {
         if (!cached && !cancelled) {
           setError(e instanceof Error ? e.message : "Inspection not found");
@@ -187,10 +195,23 @@ export function InspectionResultsView({ id }: { id: string }) {
         subtitle={`${data.date} · ${withViolations.length} violations · ${clean.length} clean`}
       />
       <PageContent>
+        {scheduleNote && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 28 }}
+            className="mb-4 flex items-start gap-2.5 rounded-xl border border-ink-200 bg-white px-4 py-3 text-sm text-ink-700 shadow-sm"
+          >
+            <Trash2 className="mt-0.5 h-4 w-4 shrink-0 text-ink-500" />
+            <p className="text-xs leading-relaxed sm:text-sm">{scheduleNote}</p>
+          </motion.div>
+        )}
+
         {addressReviewItems.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05, type: "spring", stiffness: 400, damping: 28 }}
             className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
           >
             <div className="flex items-start gap-2">
@@ -209,7 +230,12 @@ export function InspectionResultsView({ id }: { id: string }) {
           </motion.div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 sm:max-w-md sm:gap-4">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08, type: "spring", stiffness: 360, damping: 28 }}
+          className="grid grid-cols-2 gap-3 sm:max-w-md sm:gap-4"
+        >
           <Card padding="sm" className="flex items-center gap-3">
             <CheckCircle2 className="h-5 w-5 shrink-0 text-brand-600" />
             <div>
@@ -224,26 +250,33 @@ export function InspectionResultsView({ id }: { id: string }) {
               <p className="text-xl font-semibold text-ink-900">{withViolations.length}</p>
             </div>
           </Card>
-        </div>
+        </motion.div>
 
-        <div className="mt-5 flex gap-1.5 overflow-x-auto pb-1">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.12 }}
+          className="mt-5 flex gap-1.5 overflow-x-auto pb-1"
+        >
           {tabs.map((t) => (
-            <button
+            <motion.button
               key={t.id}
               type="button"
+              layout
+              whileTap={{ scale: 0.96 }}
               onClick={() => setTab(t.id)}
               className={clsx(
                 "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
                 tab === t.id
-                  ? "bg-ink-900 text-white"
+                  ? "bg-ink-900 text-white shadow-sm"
                   : "bg-white text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50"
               )}
             >
               {t.label}
               <span className="ml-1.5 opacity-70">{t.count}</span>
-            </button>
+            </motion.button>
           ))}
-        </div>
+        </motion.div>
 
         {prior.length > 0 && tab === "all" && (
           <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-500">

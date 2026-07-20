@@ -7,6 +7,7 @@ import { ProfileCard } from "@/components/settings/ProfileCard";
 import { CcrRulesCard } from "@/components/settings/CcrRulesCard";
 import { NotificationsCard } from "@/components/settings/NotificationsCard";
 import { BillingCard } from "@/components/settings/BillingCard";
+import { TrashCollectionCard } from "@/components/settings/TrashCollectionCard";
 
 export default function SettingsPage() {
   return (
@@ -18,6 +19,7 @@ export default function SettingsPage() {
           <Suspense fallback={null}>
             <BillingCard />
           </Suspense>
+          <TrashCollectionCard />
           <NotificationsCard />
           <CcrRulesCard />
         </div>

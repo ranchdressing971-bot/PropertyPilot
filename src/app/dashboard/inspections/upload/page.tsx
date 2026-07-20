@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { loadCcrRules } from "@/lib/ccr-rules";
+import { loadCollectionDays } from "@/lib/trash-collection";
 import {
   extractVideoFrames,
   estimateFramesPayloadKb,
@@ -105,6 +106,7 @@ export default function UploadPage() {
 
         setCurrentStep(2);
         const ccrRules = loadCcrRules();
+        const trashCollectionDays = loadCollectionDays();
 
         setCurrentStep(3);
         setStatusDetail("AI matching addresses from mailbox & curb numbers...");
@@ -124,6 +126,7 @@ export default function UploadPage() {
             })),
             neighborhood: profile?.hoaName || "Your Community",
             ccrRules,
+            trashCollectionDays,
           }),
         });
 

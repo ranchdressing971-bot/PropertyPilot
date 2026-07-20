@@ -13,6 +13,7 @@ export interface InspectionDisplayData {
   usedGpsPipeline?: boolean;
   addressReviews?: AddressReviewItem[];
   previouslyInspectedCount?: number;
+  trashScheduleNote?: string;
   results: {
     propertyId: string;
     property: Property;
