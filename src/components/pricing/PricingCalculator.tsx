@@ -26,6 +26,8 @@ const FEATURES = [
 export function PricingCalculator() {
   const router = useRouter();
   const [communities, setCommunities] = useState(1);
+  /** While typing, allow empty / partial digits so the leading 1 gets replaced. */
+  const [draft, setDraft] = useState<string | null>(null);
   const price = useMemo(
     () => priceForCommunities(communities),
     [communities]
@@ -33,7 +35,15 @@ export function PricingCalculator() {
   const samples = useMemo(() => pricingSamples([1, 2, 3, 5, 10]), []);
 
   function setCount(next: number) {
-    setCommunities(clampCommunities(next));
+    const clamped = clampCommunities(next);
+    setCommunities(clamped);
+    setDraft(null);
+  }
+
+  function commitDraft() {
+    if (draft === null) return;
+    const parsed = Number(draft);
+    setCount(Number.isFinite(parsed) && draft.trim() !== "" ? parsed : communities);
   }
 
   return (
@@ -72,10 +82,34 @@ export function PricingCalculator() {
             </button>
             <input
               type="number"
+              inputMode="numeric"
               min={MIN_COMMUNITIES}
               max={MAX_COMMUNITIES}
-              value={communities}
-              onChange={(e) => setCount(Number(e.target.value))}
+              value={draft ?? communities}
+              onFocus={(e) => {
+                setDraft(String(communities));
+                e.target.select();
+              }}
+              onChange={(e) => {
+                const raw = e.target.value;
+                // Allow clearing so the next digit replaces 1 instead of becoming 15
+                if (raw === "") {
+                  setDraft("");
+                  return;
+                }
+                if (!/^\d+$/.test(raw)) return;
+                setDraft(raw);
+                const n = Number(raw);
+                if (Number.isFinite(n) && n >= MIN_COMMUNITIES) {
+                  setCommunities(clampCommunities(n));
+                }
+              }}
+              onBlur={commitDraft}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
               className="h-10 w-16 rounded-xl border border-ink-200 bg-white text-center text-base font-semibold text-ink-900 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
             />
             <button
