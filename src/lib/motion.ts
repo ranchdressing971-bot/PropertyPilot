@@ -1,13 +1,10 @@
-/** Soft route transitions (dashboard / public shell). */
+/** Soft route transitions (dashboard / public shell) — enter only, no exit. */
 export const pageTransition = {
-  initial: { opacity: 0, y: 22, scale: 0.97 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: -12, scale: 0.985 },
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
   transition: {
-    type: "spring" as const,
-    stiffness: 300,
-    damping: 26,
-    mass: 0.85,
+    duration: 0.25,
+    ease: [0.25, 0.1, 0.25, 1] as const,
   },
 };
 
