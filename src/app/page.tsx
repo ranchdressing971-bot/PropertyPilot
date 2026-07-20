@@ -88,25 +88,35 @@ export default function HomePage() {
                       status: "Trash bin visible",
                       tone: "flag" as const,
                       conf: "88%",
+                      img: "/demo/demo-trash-bin.jpg",
                     },
                     {
                       addr: "456 Oak Drive",
                       status: "Clean",
                       tone: "ok" as const,
                       conf: "—",
+                      img: "/demo/demo-clean-home.jpg",
                     },
                     {
                       addr: "789 Pine Court",
                       status: "Confirm address",
                       tone: "review" as const,
                       conf: "62%",
+                      img: "/demo/demo-tall-grass.jpg",
                     },
                   ].map((row) => (
                     <div
                       key={row.addr}
                       className="flex items-center gap-3 px-4 py-3.5"
                     >
-                      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-brand-100 to-ink-100 ring-1 ring-ink-200/60" />
+                      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-ink-100 ring-1 ring-ink-200/60">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={row.img}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-ink-900">
                           {row.addr}

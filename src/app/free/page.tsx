@@ -16,11 +16,36 @@ import {
 } from "lucide-react";
 
 const HOMES = [
-  { addr: "214 Maple Lane", result: "Clean", tone: "ok" as const },
-  { addr: "218 Maple Lane", result: "Trash bin visible", tone: "flag" as const },
-  { addr: "222 Maple Lane", result: "Clean", tone: "ok" as const },
-  { addr: "230 Maple Lane", result: "Confirm address", tone: "review" as const },
-  { addr: "236 Maple Lane", result: "Tall grass", tone: "flag" as const },
+  {
+    addr: "214 Maple Lane",
+    result: "Clean",
+    tone: "ok" as const,
+    img: "/demo/demo-clean-home.jpg",
+  },
+  {
+    addr: "218 Maple Lane",
+    result: "Trash bin visible",
+    tone: "flag" as const,
+    img: "/demo/demo-trash-bin.jpg",
+  },
+  {
+    addr: "222 Maple Lane",
+    result: "Clean",
+    tone: "ok" as const,
+    img: "/demo/demo-clean-home.jpg",
+  },
+  {
+    addr: "230 Maple Lane",
+    result: "Confirm address",
+    tone: "review" as const,
+    img: "/demo/demo-dead-landscaping.jpg",
+  },
+  {
+    addr: "236 Maple Lane",
+    result: "Tall grass",
+    tone: "flag" as const,
+    img: "/demo/demo-tall-grass.jpg",
+  },
 ];
 
 export default function FreeRunPage() {
@@ -204,8 +229,13 @@ export default function FreeRunPage() {
                         transition={{ type: "spring", stiffness: 380, damping: 28 }}
                         className="flex items-center gap-3 px-4 py-3"
                       >
-                        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-brand-100 to-ink-100 ring-1 ring-ink-200/70">
-                          <MapPin className="h-4 w-4 text-brand-700/70" />
+                        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-ink-100 ring-1 ring-ink-200/70">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={home.img}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
                           <AnimatePresence>
                             {visible && home.tone === "ok" && (
                               <motion.span

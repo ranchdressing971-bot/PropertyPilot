@@ -69,7 +69,7 @@ export interface ActivityItem {
 }
 
 const houseImages = [
-  "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=600&h=400&fit=crop",
+  "/demo/demo-clean-home.jpg",
   "https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=600&h=400&fit=crop",
   "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=600&h=400&fit=crop",
   "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&h=400&fit=crop",
@@ -81,12 +81,32 @@ const houseImages = [
   "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=600&h=400&fit=crop",
 ];
 
-const evidenceImages = [
-  "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop",
-  "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&h=300&fit=crop",
-  "https://images.unsplash.com/photo-1558904541-efa843a96f01?w=400&h=300&fit=crop",
-  "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=400&h=300&fit=crop",
-];
+/** Evidence frames that actually match each violation type */
+const evidenceByType: Record<Exclude<ViolationType, null>, string[]> = {
+  "Trash Bin Visible": [
+    "/demo/demo-trash-bin.jpg",
+    "/demo/demo-trash-bin.jpg",
+  ],
+  "Tall Grass": [
+    "/demo/demo-tall-grass.jpg",
+    "/demo/demo-tall-grass.jpg",
+  ],
+  Debris: [
+    "/demo/demo-debris.jpg",
+    "/demo/demo-debris.jpg",
+  ],
+  "Dead Landscaping": [
+    "/demo/demo-dead-landscaping.jpg",
+    "/demo/demo-dead-landscaping.jpg",
+  ],
+};
+
+const propertyImageByType: Record<Exclude<ViolationType, null>, string> = {
+  "Trash Bin Visible": "/demo/demo-trash-bin.jpg",
+  "Tall Grass": "/demo/demo-tall-grass.jpg",
+  Debris: "/demo/demo-debris.jpg",
+  "Dead Landscaping": "/demo/demo-dead-landscaping.jpg",
+};
 
 const streets = [
   "123 Main St",
@@ -183,7 +203,9 @@ export const properties: Property[] = streets.map((address, i) => {
   return {
     id: `prop-${i + 1}`,
     address,
-    image: houseImages[i % houseImages.length],
+    image: type
+      ? propertyImageByType[type]
+      : houseImages[i % houseImages.length],
     status,
     lastInspection: "2026-06-25",
     neighborhood: "Willow Creek Estates",
@@ -200,6 +222,7 @@ export const violations: Violation[] = properties.flatMap((prop, i) => {
     i === 0 ? "Issue Warning" : i === 2 ? "Manager Review" : recommendations[type];
   const status: ViolationStatus =
     i === 0 || i === 2 ? "pending" : statuses[Math.floor(rand() * statuses.length)];
+  const evidence = evidenceByType[type];
   return [
     {
       id: `viol-${i + 1}`,
@@ -209,10 +232,7 @@ export const violations: Violation[] = properties.flatMap((prop, i) => {
       recommendation,
       rule: rules[type],
       reasoning: reasoning[type],
-      evidenceImages: [
-        evidenceImages[i % evidenceImages.length],
-        evidenceImages[(i + 1) % evidenceImages.length],
-      ],
+      evidenceImages: [evidence[0], evidence[1]],
       status,
       inspectionId: "insp-1",
       detectedAt: "2026-06-25T14:32:00",
