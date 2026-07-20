@@ -6,11 +6,11 @@ import type { ExtractedFrame } from "./video-frames";
 import { ADDRESS_REVIEW_THRESHOLD } from "./geo/types";
 import { sanitizeImageDataUrl } from "./image-data-url";
 import { extractHouseNumber } from "./address-normalize";
-import { createChatCompletion, sleep } from "./openai-retry";
+import { createChatCompletion, mapPool } from "./openai-retry";
 
-/** Smaller batches + high detail = readable mailbox digits (speed is secondary here) */
-const FRAMES_PER_MATCH_CALL = 2;
-const PAUSE_BETWEEN_BATCHES_MS = 1000;
+/** 3 frames per API call + 2 calls in flight ≈ faster without TPM blowups */
+const FRAMES_PER_MATCH_CALL = 3;
+const BATCH_CONCURRENCY = 2;
 
 export interface AddressMatchResult {
   frameIndex: number;
@@ -201,20 +201,24 @@ async function matchBatch(
 
 /**
  * GPS + roster assisted address matching (crop mailbox → pick best candidate).
+ * Runs up to 2 frame-batches at once for speed.
  */
 export async function runAddressMatchPipeline(
   frames: ExtractedFrame[],
   ctx: AddressCandidateContext,
   roster: Property[] = []
 ): Promise<AddressMatchResult[]> {
-  const all: AddressMatchResult[] = [];
-
+  const batches: { start: number; frames: ExtractedFrame[] }[] = [];
   for (let i = 0; i < frames.length; i += FRAMES_PER_MATCH_CALL) {
-    if (i > 0) await sleep(PAUSE_BETWEEN_BATCHES_MS);
-    const batch = frames.slice(i, i + FRAMES_PER_MATCH_CALL);
-    const matches = await matchBatch(batch, i, ctx, roster);
-    all.push(...matches);
+    batches.push({
+      start: i,
+      frames: frames.slice(i, i + FRAMES_PER_MATCH_CALL),
+    });
   }
 
-  return all;
+  const results = await mapPool(batches, BATCH_CONCURRENCY, (batch) =>
+    matchBatch(batch.frames, batch.start, ctx, roster)
+  );
+
+  return results.flat();
 }

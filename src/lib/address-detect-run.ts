@@ -8,10 +8,10 @@ import {
 import type { DiscoveredHome } from "./frame-property-map";
 import type { Property } from "./mock-data";
 import { sanitizeImageDataUrl } from "./image-data-url";
-import { createChatCompletion, sleep } from "./openai-retry";
+import { createChatCompletion, mapPool } from "./openai-retry";
 
-const FRAMES_PER_VISION_CALL = 3;
-const PAUSE_BETWEEN_BATCHES_MS = 1000;
+const FRAMES_PER_VISION_CALL = 4;
+const BATCH_CONCURRENCY = 2;
 
 async function detectBatch(
   imageUrls: string[],
@@ -78,21 +78,24 @@ async function detectBatch(
     : raw.map((d) => ({ ...d, matchedPropertyId: null }));
 }
 
-/** Per-frame address OCR across the video */
+/** Per-frame address OCR across the video — up to 2 batches at once. */
 export async function runAddressDetection(
   imageUrls: string[],
   roster: Property[] = []
 ): Promise<AddressDetection[]> {
-  const all: AddressDetection[] = [];
-
+  const batches: { start: number; urls: string[] }[] = [];
   for (let i = 0; i < imageUrls.length; i += FRAMES_PER_VISION_CALL) {
-    if (i > 0) await sleep(PAUSE_BETWEEN_BATCHES_MS);
-    const batch = imageUrls.slice(i, i + FRAMES_PER_VISION_CALL);
-    const detections = await detectBatch(batch, i, roster);
-    all.push(...detections);
+    batches.push({
+      start: i,
+      urls: imageUrls.slice(i, i + FRAMES_PER_VISION_CALL),
+    });
   }
 
-  return all;
+  const results = await mapPool(batches, BATCH_CONCURRENCY, (batch) =>
+    detectBatch(batch.urls, batch.start, roster)
+  );
+
+  return results.flat();
 }
 
 /** Holistic pass: find distinct homes and addresses across all frames */

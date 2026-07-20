@@ -2,24 +2,71 @@ import { getOpenAI } from "./openai";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Min gap between OpenAI calls — prevents TPM spikes on free/low tiers. */
-const MIN_GAP_MS = 900;
-let lastCallAt = 0;
-let queue: Promise<void> = Promise.resolve();
+/**
+ * Allow a few overlapping OpenAI calls (faster), but space starts so
+ * free-tier TPM doesn't spike like a full Promise.all burst.
+ */
+const MAX_IN_FLIGHT = 2;
+const MIN_START_GAP_MS = 350;
+
+let inFlight = 0;
+let lastStartAt = 0;
+const waiters: Array<() => void> = [];
+
+function wakeNext() {
+  while (waiters.length > 0 && inFlight < MAX_IN_FLIGHT) {
+    const next = waiters.shift();
+    next?.();
+  }
+}
+
+/** Acquire a slot; resolves when a call may start. */
+async function acquireOpenAISlot(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const tryStart = () => {
+      if (inFlight >= MAX_IN_FLIGHT) {
+        waiters.push(tryStart);
+        return;
+      }
+      const gap = Math.max(0, MIN_START_GAP_MS - (Date.now() - lastStartAt));
+      if (gap > 0) {
+        setTimeout(tryStart, gap);
+        return;
+      }
+      inFlight += 1;
+      lastStartAt = Date.now();
+      resolve();
+    };
+    tryStart();
+  });
+}
+
+function releaseOpenAISlot() {
+  inFlight = Math.max(0, inFlight - 1);
+  wakeNext();
+}
 
 /**
- * Serialize OpenAI calls with a minimum gap so parallel pipelines
- * don't dump 10+ vision requests into the same second.
+ * Run async work over items with limited concurrency (e.g. 2 frame batches at once).
  */
-async function throttleOpenAI(): Promise<void> {
-  const run = queue.then(async () => {
-    const wait = Math.max(0, MIN_GAP_MS - (Date.now() - lastCallAt));
-    if (wait > 0) await sleep(wait);
-    lastCallAt = Date.now();
-  });
-  // Don't let one failure block the whole queue
-  queue = run.catch(() => undefined);
-  await run;
+export async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+
+  const n = Math.max(1, Math.min(concurrency, items.length));
+  await Promise.all(Array.from({ length: n }, () => worker()));
+  return results;
 }
 
 function isRateLimitError(err: unknown): boolean {
@@ -70,14 +117,12 @@ function retryWaitMs(err: unknown, attempt: number): number {
   const retryAfterSec = Number(e.headers?.get?.("retry-after") || 0);
   if (retryAfterSec > 0) return Math.min(retryAfterSec * 1000 + 250, 60_000);
 
-  // OpenAI often embeds "Please try again in 20.5s"
   const msg = e.message || "";
   const secMatch = msg.match(/try again in ([\d.]+)\s*s/i);
   if (secMatch) {
     return Math.min(Math.ceil(parseFloat(secMatch[1]) * 1000) + 500, 60_000);
   }
 
-  // TPM resets on a rolling minute — back off harder than 2s * 2^n
   return Math.min(4000 * Math.pow(2, attempt), 45_000);
 }
 
@@ -93,8 +138,8 @@ export async function withOpenAIRetry<T>(
   let lastErr: unknown;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
+    await acquireOpenAISlot();
     try {
-      await throttleOpenAI();
       return await fn();
     } catch (err) {
       lastErr = err;
@@ -106,6 +151,8 @@ export async function withOpenAIRetry<T>(
         `OpenAI rate limit${opts?.label ? ` (${opts.label})` : ""} — retry ${attempt + 1}/${retries} in ${Math.round(wait)}ms`
       );
       await sleep(wait);
+    } finally {
+      releaseOpenAISlot();
     }
   }
 

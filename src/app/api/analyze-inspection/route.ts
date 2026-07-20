@@ -41,13 +41,11 @@ import {
 import { checkRateLimit } from "@/lib/rate-limit";
 import { sanitizeImageDataUrl } from "@/lib/image-data-url";
 import { extractHouseNumber } from "@/lib/address-normalize";
-import { createChatCompletion, isQuotaError, sleep } from "@/lib/openai-retry";
+import { createChatCompletion, isQuotaError, mapPool } from "@/lib/openai-retry";
 
 export const maxDuration = 120;
 
 const BATCH_SIZE = 4;
-/** Space compliance calls — high-detail address pass already used most TPM. */
-const PAUSE_BETWEEN_COMPLIANCE_MS = 800;
 
 interface VideoFrameInput {
   index: number;
@@ -386,12 +384,10 @@ export async function POST(request: NextRequest) {
       batches.push(verifiedForCompliance.slice(i, i + BATCH_SIZE));
     }
 
-    // Sequential batches with a short pause — keeps TPM calmer without dragging demos
-    const batchResults: AIPropertyResult[][] = [];
-    for (let i = 0; i < batches.length; i++) {
-      if (i > 0) await sleep(PAUSE_BETWEEN_COMPLIANCE_MS);
-      batchResults.push(await analyzeBatch(batches[i], ruleMap));
-    }
+    // Parallel compliance batches (2 at a time) — low-detail so TPM stays calm
+    const batchResults = await mapPool(batches, 2, (batch) =>
+      analyzeBatch(batch, ruleMap)
+    );
 
     const unverifiedResults: AIPropertyResult[] = unverifiedHomes.map((prop) => ({
       propertyId: prop.id,
