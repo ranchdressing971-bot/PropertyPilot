@@ -76,18 +76,21 @@ export function Sidebar() {
         {isOpen && (
           <>
             <motion.div
+              key="mobile-nav-backdrop"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
               className="fixed inset-0 z-50 bg-ink-950/70 backdrop-blur-sm lg:hidden"
               onClick={close}
             />
             <motion.aside
+              key="mobile-nav-drawer"
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
-              transition={{ type: "spring", damping: 32, stiffness: 380 }}
-              className="fixed left-0 top-0 z-50 flex h-screen w-[min(85vw,288px)] flex-col bg-ink-950 lg:hidden"
+              transition={{ type: "tween", duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+              className="fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(92vw,22.5rem)] flex-col overflow-hidden bg-ink-950 shadow-2xl lg:hidden"
             >
               <div className="flex items-center justify-between border-b border-ink-800/80 px-5 py-4">
                 <Logo size="md" href="/dashboard" variant="light" />
