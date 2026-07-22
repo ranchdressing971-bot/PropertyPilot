@@ -111,7 +111,7 @@ export function FreeLanding({ variant = "free" }: FreeLandingProps) {
               className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-800 ring-1 ring-brand-200"
             >
               <Sparkles className="h-3.5 w-3.5" />
-              Manager invite · 1 free inspection
+              1 free inspection
             </motion.p>
 
             <motion.h1
