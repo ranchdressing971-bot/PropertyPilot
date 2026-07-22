@@ -399,7 +399,7 @@ export async function claimCommunityTrial(
   return { ok: true, communityKey: key, alreadyOwned: false };
 }
 
-/** Live inspections: 1 free per community, then subscription when Stripe is configured. */
+/** Live inspections: 1 free per account, then subscription when Stripe is configured. */
 export async function canRunLiveInspection(userId: string | null): Promise<{
   allowed: boolean;
   reason?: string;
@@ -466,14 +466,19 @@ export async function canRunLiveInspection(userId: string | null): Promise<{
     }
   }
 
+  // Account-level quota: completed live inspections count toward the free limit
   const { used, remaining } = await getTrialInspectionUsage(userId);
   if (used < FREE_TRIAL_INSPECTIONS) {
     return { allowed: true, inspectionsRemaining: remaining };
   }
 
+  const limitLabel =
+    FREE_TRIAL_INSPECTIONS === 1
+      ? "your free inspection"
+      : `all ${FREE_TRIAL_INSPECTIONS} free inspections`;
   return {
     allowed: false,
     code: "TRIAL_EXHAUSTED",
-    reason: `You've used all ${FREE_TRIAL_INSPECTIONS} free inspections. Subscribe to continue.`,
+    reason: `You've used ${limitLabel}. Subscribe to continue.`,
   };
 }

@@ -149,7 +149,7 @@ export default function ProfileSetupPage() {
           <p className="mt-2 text-sm text-ink-500">
             {hoaLocked
               ? `You’ll inspect as ${hoaName}. Just add your name for notices.`
-              : "Your community name locks the free trial to this HOA — one trial per community."}
+              : "Add your community name to unlock your one free live inspection (per account)."}
           </p>
 
           {loadingUser ? (

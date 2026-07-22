@@ -14,9 +14,12 @@ export default function PricingPage() {
           Pricing that shrinks as you grow
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-ink-500">
-          Live AI starts with {FREE_TRIAL_INSPECTIONS} free inspections per
-          community. Then pay monthly by how many communities you manage —
-          not a one-size sticker price.
+          Live AI starts with{" "}
+          {FREE_TRIAL_INSPECTIONS === 1
+            ? "1 free inspection per account"
+            : `${FREE_TRIAL_INSPECTIONS} free inspections per account`}
+          . Then pay monthly by how many communities you manage — not a
+          one-size sticker price.
         </p>
 
         <div className="mt-14">

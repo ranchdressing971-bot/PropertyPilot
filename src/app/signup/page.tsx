@@ -155,7 +155,7 @@ function SignupForm() {
       <p className="mt-1 text-sm text-ink-500">
         {fromFreeOffer
           ? "Create your account, then upload one drive-through of your community — on us."
-          : "1 free inspection per community · from $99/mo"}
+          : "1 free inspection per account · from $99/mo"}
       </p>
 
       {!supabaseReady && (
@@ -202,7 +202,7 @@ function SignupForm() {
               placeholder="Oak Ridge Village HOA"
             />
             <p className="mt-1 text-xs text-ink-400">
-              One free trial per community — use your real HOA name.
+              One free inspection per account — use your real HOA name.
             </p>
           </div>
 

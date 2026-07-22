@@ -50,7 +50,9 @@ export function PricingCalculator() {
     <div className="mx-auto max-w-xl">
       <div className="surface p-8 text-left">
         <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 ring-1 ring-brand-100">
-          {FREE_TRIAL_INSPECTIONS} free inspections per community
+          {FREE_TRIAL_INSPECTIONS === 1
+            ? "1 free inspection per account"
+            : `${FREE_TRIAL_INSPECTIONS} free inspections per account`}
         </span>
 
         <h2 className="mt-4 font-display text-2xl font-semibold text-ink-900">

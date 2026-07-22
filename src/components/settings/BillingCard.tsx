@@ -90,10 +90,10 @@ export function BillingCard() {
                     : ""
                 } · ${sub?.status}`
               : sub
-                ? `${sub.trialInspectionsRemaining} of ${sub.trialInspectionsLimit} free inspections left${
-                    sub.hoaName ? ` · ${sub.hoaName}` : ""
-                  }`
-                : `1 free inspection per community, then from ${fromPrice}`}
+                ? `${sub.trialInspectionsRemaining} of ${sub.trialInspectionsLimit} free inspection${
+                    sub.trialInspectionsLimit === 1 ? "" : "s"
+                  } left${sub.hoaName ? ` · ${sub.hoaName}` : ""}`
+                : `1 free inspection per account, then from ${fromPrice}`}
           </p>
         </div>
       </div>

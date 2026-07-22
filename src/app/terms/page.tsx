@@ -51,8 +51,9 @@ export default function TermsPage() {
         <h2>3. Accounts and communities</h2>
         <p>
           You are responsible for your account credentials and for activity under
-          your account. Free trials may be limited per community. Misrepresenting
-          community identity to obtain additional free trials is prohibited.
+          your account. Free access is limited to one live inspection per account.
+          Misrepresenting community identity to obtain additional free trials is
+          prohibited.
         </p>
 
         <h2>4. AI disclaimer</h2>
