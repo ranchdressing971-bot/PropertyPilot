@@ -11,7 +11,7 @@ import { createClient, isSupabaseClientConfigured } from "@/lib/supabase/client"
 import { formatSupabaseAuthError } from "@/lib/supabase/config";
 import { postAuthPath } from "@/lib/auth-redirect";
 import { useAppMode } from "@/components/providers/AppModeProvider";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 function SignupForm() {
   const router = useRouter();
@@ -143,12 +143,6 @@ function SignupForm() {
 
   return (
     <Card className="w-full max-w-md" padding="lg">
-      {fromFreeOffer && (
-        <p className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-800 ring-1 ring-brand-200">
-          <Sparkles className="h-3.5 w-3.5" />
-          Free inspection unlocks after signup
-        </p>
-      )}
       <h1 className="font-display text-xl font-semibold text-ink-900">
         {fromFreeOffer ? "Claim your free run" : "Create account"}
       </h1>

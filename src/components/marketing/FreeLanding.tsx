@@ -11,7 +11,6 @@ import {
   ArrowRight,
   Check,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 
 const HOMES = [
@@ -105,20 +104,10 @@ export function FreeLanding({ variant = "free" }: FreeLandingProps) {
           <div>
             <Logo size="lg" className="mb-8" />
 
-            <motion.p
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-800 ring-1 ring-brand-200"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              1 free inspection
-            </motion.p>
-
             <motion.h1
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 }}
-              className="mt-5 font-display text-balance text-4xl font-semibold leading-[1.08] tracking-tight text-ink-900 sm:text-5xl"
+              className="font-display text-balance text-4xl font-semibold leading-[1.08] tracking-tight text-ink-900 sm:text-5xl"
             >
               One drive.
               <br />
