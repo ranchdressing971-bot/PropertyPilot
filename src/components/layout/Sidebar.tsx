@@ -68,7 +68,7 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[288px] flex-col border-r border-ink-800/50 bg-ink-950 lg:flex">
+      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[252px] flex-col border-r border-ink-800/50 bg-ink-950 lg:flex">
         <SidebarContent isDemo={isDemo} />
       </aside>
 
