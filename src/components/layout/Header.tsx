@@ -16,7 +16,7 @@ export function Header({ title, subtitle }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-ink-200/60 bg-white/80 shadow-nav backdrop-blur-md">
-      <div className="mx-auto max-w-6xl px-5 py-4 sm:px-8 sm:py-5 lg:mx-0 lg:pl-0 lg:pr-8">
+      <div className="mx-auto max-w-6xl px-5 py-4 sm:px-8 sm:py-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-start gap-3">
             <button
