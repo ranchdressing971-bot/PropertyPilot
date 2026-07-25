@@ -21,7 +21,7 @@ import { Logo } from "@/components/brand/Logo";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { MediaImage } from "@/components/ui/MediaImage";
-import { fadeUp, popIn, staggerContainer, staggerItem } from "@/lib/motion";
+import { fadeUp, popIn } from "@/lib/motion";
 import type { Property, Violation } from "@/lib/mock-data";
 import clsx from "clsx";
 
@@ -156,40 +156,45 @@ const DETAIL_ROW = DEMO_ROWS[0]!;
 const VIOLATION_COUNT = DEMO_ROWS.filter((r) => r.violation).length;
 const CLEAN_COUNT = DEMO_ROWS.filter((r) => !r.violation).length;
 
-/**
- * Post-recording results tour (~12.5s). Starts on inspection results.
- * Times are cumulative ms from tour start.
- */
-const SCENE_START: Record<Scene, number> = {
-  results: 0,
-  detail: 8200,
-};
-
-const CYCLE_MS = 12500;
-
-const SCENE_ORDER: Scene[] = ["results", "detail"];
-
-function sceneAt(elapsed: number): Scene {
-  let current: Scene = "results";
-  for (const id of SCENE_ORDER) {
-    if (elapsed >= SCENE_START[id]) current = id;
-  }
-  // Brief return to results before loop (~1s)
-  if (elapsed >= 11200) return "results";
-  return current;
-}
+/** Post-recording results tour (~10s). Starts on inspection results. */
+const CYCLE_MS = 9800;
 
 const panelEnter = {
-  initial: { opacity: 0, y: 28 },
+  initial: { opacity: 0, y: 24 },
   animate: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] as const },
+    transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] as const },
   },
   exit: {
     opacity: 0,
-    y: -12,
-    transition: { duration: 0.4, ease: [0.4, 0, 1, 1] as const },
+    y: -10,
+    transition: { duration: 0.25, ease: [0.4, 0, 1, 1] as const },
+  },
+};
+
+/** Snappier reel-local stagger (the shared app variants feel slow on video). */
+const reelStagger = {
+  initial: {},
+  animate: {
+    transition: {
+      staggerChildren: 0.055,
+      delayChildren: 0.02,
+    },
+  },
+};
+
+const reelItem = {
+  initial: { opacity: 0, y: 44 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 430,
+      damping: 27,
+      mass: 0.7,
+    },
   },
 };
 
@@ -242,7 +247,7 @@ function DemoResultCard({
 
   return (
     <motion.div
-      variants={staggerItem}
+      variants={reelItem}
       layout={false}
       animate={highlighted ? { y: -8, scale: 1.03 } : { y: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 320, damping: 24 }}
@@ -377,7 +382,7 @@ function ResultsScene({
         <motion.div
           key={tab}
           className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-          variants={staggerContainer}
+          variants={reelStagger}
           initial="initial"
           animate="animate"
         >
@@ -401,7 +406,7 @@ function DetailScene() {
   if (!violation) return null;
 
   return (
-    <DemoChrome title={violation.type} subtitle={property.address}>
+    <DemoChrome title={violation.type ?? "Violation"} subtitle={property.address}>
       <motion.p
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: 1, x: 0 }}
@@ -498,18 +503,16 @@ export function DemoReel() {
 
   const [runId, setRunId] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
+  const [scene, setScene] = useState<Scene>("results");
+  const [returning, setReturning] = useState(false);
   const [tab, setTab] = useState<Tab>("violations");
   const [showCards, setShowCards] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
   const pausedRef = useRef(false);
   const resultsScrollRef = useRef<HTMLDivElement>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
   const scrollCleanups = useRef<Array<() => void>>([]);
-  const beatFired = useRef<Set<string>>(new Set());
-
-  const scene = sceneAt(elapsed);
-  const returningToResults = elapsed >= 11200;
 
   const clearScrolls = useCallback(() => {
     scrollCleanups.current.forEach((fn) => fn());
@@ -530,16 +533,65 @@ export function DemoReel() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Master clock
+  // Master clock: React state only changes at beats; the progress bar is
+  // driven directly through the DOM so nothing re-renders per frame.
   useEffect(() => {
-    setElapsed(0);
+    setScene("results");
+    setReturning(false);
     setTab("violations");
     setShowCards(false);
     setHighlightId(null);
-    beatFired.current = new Set();
     clearScrolls();
     if (resultsScrollRef.current) resultsScrollRef.current.scrollTop = 0;
+    if (progressRef.current) progressRef.current.style.width = "0%";
 
+    const resetScroll = () => {
+      clearScrolls();
+      if (resultsScrollRef.current) resultsScrollRef.current.scrollTop = 0;
+    };
+    const autoScroll = (fraction: number, durationMs: number) => {
+      const el = resultsScrollRef.current;
+      if (!el) return;
+      const max = el.scrollHeight - el.clientHeight;
+      if (max > 8) {
+        scrollCleanups.current.push(smoothScrollTo(el, max * fraction, durationMs));
+      }
+    };
+
+    const beats: Array<{ at: number; run: () => void }> = [
+      { at: 150, run: () => setShowCards(true) },
+      { at: 1600, run: () => setHighlightId("demo-prop-1") },
+      { at: 2400, run: () => autoScroll(0.7, 1400) },
+      {
+        at: 4100,
+        run: () => {
+          setHighlightId(null);
+          setTab("all");
+          resetScroll();
+        },
+      },
+      { at: 4700, run: () => autoScroll(0.45, 1200) },
+      {
+        at: 6100,
+        run: () => {
+          clearScrolls();
+          setScene("detail");
+        },
+      },
+      {
+        at: 8600,
+        run: () => {
+          setScene("results");
+          setReturning(true);
+          setTab("violations");
+          setShowCards(true);
+          setHighlightId(null);
+          resetScroll();
+        },
+      },
+    ];
+
+    let nextBeat = 0;
     let raf = 0;
     let last = performance.now();
     let acc = 0;
@@ -550,16 +602,22 @@ export function DemoReel() {
       last = now;
       if (!pausedRef.current && !finished) {
         acc += dt;
+        while (nextBeat < beats.length && acc >= beats[nextBeat]!.at) {
+          beats[nextBeat]!.run();
+          nextBeat += 1;
+        }
+        if (progressRef.current) {
+          progressRef.current.style.width = `${Math.min(
+            100,
+            (acc / CYCLE_MS) * 100
+          )}%`;
+        }
         if (acc >= CYCLE_MS) {
           if (loop) {
             setRunId((n) => n + 1);
             return;
           }
-          acc = CYCLE_MS;
           finished = true;
-          setElapsed(CYCLE_MS);
-        } else {
-          setElapsed(acc);
         }
       }
       raf = requestAnimationFrame(tick);
@@ -571,61 +629,6 @@ export function DemoReel() {
       clearScrolls();
     };
   }, [runId, loop, clearScrolls]);
-
-  // Results-local beats
-  useEffect(() => {
-    const fire = (key: string, fn: () => void) => {
-      if (beatFired.current.has(key)) return;
-      beatFired.current.add(key);
-      fn();
-    };
-
-    if (elapsed >= 350) {
-      fire("show-cards", () => setShowCards(true));
-    }
-    if (elapsed >= 2600) {
-      fire("highlight", () => setHighlightId("demo-prop-1"));
-    }
-    if (elapsed >= 3800) {
-      fire("results-scroll", () => {
-        const el = resultsScrollRef.current;
-        if (!el) return;
-        const max = el.scrollHeight - el.clientHeight;
-        if (max > 8) {
-          scrollCleanups.current.push(smoothScrollTo(el, max * 0.7, 2000));
-        }
-      });
-    }
-    if (elapsed >= 6000) {
-      fire("tab-all", () => {
-        setHighlightId(null);
-        setTab("all");
-        if (resultsScrollRef.current) {
-          resultsScrollRef.current.scrollTop = 0;
-        }
-      });
-    }
-    if (elapsed >= 6800) {
-      fire("all-scroll", () => {
-        const el = resultsScrollRef.current;
-        if (!el) return;
-        const max = el.scrollHeight - el.clientHeight;
-        if (max > 8) {
-          scrollCleanups.current.push(smoothScrollTo(el, max * 0.45, 1600));
-        }
-      });
-    }
-    if (elapsed >= 11200) {
-      fire("reset-tab", () => {
-        setTab("violations");
-        setShowCards(true);
-        setHighlightId(null);
-        if (resultsScrollRef.current) {
-          resultsScrollRef.current.scrollTop = 0;
-        }
-      });
-    }
-  }, [elapsed]);
 
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-canvas">
@@ -640,7 +643,7 @@ export function DemoReel() {
       <AnimatePresence mode="sync">
         {scene === "results" && (
           <motion.div
-            key={`results-${runId}-${returningToResults ? "back" : "main"}`}
+            key={`results-${runId}-${returning ? "back" : "main"}`}
             className="absolute inset-0 overflow-hidden bg-canvas"
             {...panelEnter}
           >
@@ -649,7 +652,7 @@ export function DemoReel() {
               tab={tab}
               highlightId={highlightId}
               scrollRef={resultsScrollRef}
-              returning={returningToResults}
+              returning={returning}
             />
           </motion.div>
         )}
@@ -667,10 +670,9 @@ export function DemoReel() {
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 h-0.5 bg-ink-200/40">
         <div
-          className="h-full bg-brand-600/70 transition-[width] duration-100 ease-linear"
-          style={{
-            width: `${Math.min(100, (elapsed / CYCLE_MS) * 100)}%`,
-          }}
+          ref={progressRef}
+          className="h-full bg-brand-600/70"
+          style={{ width: "0%" }}
         />
       </div>
     </div>
