@@ -1,33 +1,20 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-  type RefObject,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, animate, motion } from "framer-motion";
 import {
   AlertTriangle,
-  ArrowLeft,
   CheckCircle2,
+  Home,
   XCircle,
 } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { MediaImage } from "@/components/ui/MediaImage";
-import { fadeUp, popIn } from "@/lib/motion";
 import type { Property, Violation } from "@/lib/mock-data";
 import clsx from "clsx";
-
-type Scene = "results" | "detail";
-
-type Tab = "violations" | "all";
 
 interface DemoRow {
   property: Property;
@@ -152,349 +139,246 @@ const DEMO_ROWS: DemoRow[] = [
   },
 ];
 
-const DETAIL_ROW = DEMO_ROWS[0]!;
+const FOCUS_ROW = DEMO_ROWS[0]!;
 const VIOLATION_COUNT = DEMO_ROWS.filter((r) => r.violation).length;
 const CLEAN_COUNT = DEMO_ROWS.filter((r) => !r.violation).length;
 
-/** Post-recording results tour (~10s). Starts on inspection results. */
-const CYCLE_MS = 9800;
+/**
+ * One continuous ~11s take: stats count up, cards cascade in and float,
+ * one card morphs into focus, gets approved, morphs back, outro.
+ */
+const CYCLE_MS = 11200;
 
-const panelEnter = {
-  initial: { opacity: 0, y: 24 },
-  animate: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] as const },
-  },
-  exit: {
-    opacity: 0,
-    y: -10,
-    transition: { duration: 0.25, ease: [0.4, 0, 1, 1] as const },
-  },
+const morphSpring = {
+  type: "spring" as const,
+  stiffness: 300,
+  damping: 30,
 };
 
-/** Snappier reel-local stagger (the shared app variants feel slow on video). */
-const reelStagger = {
+const gridContainer = {
   initial: {},
   animate: {
     transition: {
-      staggerChildren: 0.055,
-      delayChildren: 0.02,
+      staggerChildren: 0.09,
+      delayChildren: 0.55,
     },
   },
 };
 
-const reelItem = {
-  initial: { opacity: 0, y: 44 },
+const gridItem = {
+  initial: { opacity: 0, y: 48, scale: 0.96 },
   animate: {
     opacity: 1,
     y: 0,
+    scale: 1,
     transition: {
       type: "spring" as const,
-      stiffness: 430,
-      damping: 27,
-      mass: 0.7,
+      stiffness: 380,
+      damping: 25,
+      mass: 0.75,
     },
   },
 };
 
-function DemoChrome({
-  title,
-  subtitle,
-  children,
-  scrollRef,
+function StatChip({
+  icon,
+  label,
+  value,
+  delay,
+  tone,
 }: {
-  title: string;
-  subtitle?: string;
-  children: ReactNode;
-  scrollRef?: RefObject<HTMLDivElement | null>;
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  delay: number;
+  tone: "brand" | "amber" | "ink";
 }) {
-  return (
-    <div className="flex h-full min-h-[100dvh] flex-col">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-5 sm:px-8">
-        <Logo size="md" href={undefined} />
-        <p className="text-xs font-medium tracking-wide text-ink-500">
-          Willow Creek Estates
-        </p>
-      </div>
-      <div
-        ref={scrollRef}
-        className="mx-auto w-full max-w-6xl flex-1 overflow-y-auto px-5 pb-16 sm:px-8"
-        style={{ scrollbarWidth: "none" }}
-      >
-        <div className="mb-5">
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-ink-900 sm:text-3xl">
-            {title}
-          </h1>
-          {subtitle ? (
-            <p className="mt-1.5 text-sm text-ink-600">{subtitle}</p>
-          ) : null}
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
+  const countRef = useRef<HTMLSpanElement>(null);
 
-function DemoResultCard({
-  row,
-  highlighted,
-}: {
-  row: DemoRow;
-  highlighted: boolean;
-}) {
-  const { property, violation } = row;
+  useEffect(() => {
+    const controls = animate(0, value, {
+      delay: delay + 0.25,
+      duration: 0.9,
+      ease: "easeOut",
+      onUpdate: (v) => {
+        if (countRef.current) countRef.current.textContent = String(Math.round(v));
+      },
+    });
+    return () => controls.stop();
+  }, [value, delay]);
 
   return (
     <motion.div
-      variants={reelItem}
-      layout={false}
-      animate={highlighted ? { y: -8, scale: 1.03 } : { y: 0, scale: 1 }}
-      transition={{ type: "spring", stiffness: 320, damping: 24 }}
-      className={clsx(
-        "rounded-2xl transition-[box-shadow,ring] duration-500",
-        highlighted && "ring-2 ring-brand-500/50 shadow-card-hover"
-      )}
-      style={{ transformOrigin: "center top" }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, type: "spring", stiffness: 320, damping: 24 }}
+      className="flex items-center gap-2.5 rounded-full bg-white px-4 py-2 shadow-sm ring-1 ring-ink-200/80"
     >
-      <Card className="overflow-hidden">
-        <div className="relative h-36 w-full overflow-hidden rounded-xl sm:h-40">
-          <MediaImage
-            src={property.image}
-            alt={property.address}
-            fill
-            className="object-cover"
-          />
-        </div>
-
-        <div className="mt-4 space-y-3">
-          <div className="space-y-1.5">
-            <h3 className="text-sm font-semibold leading-snug text-ink-900 sm:text-base">
-              {property.address}
-            </h3>
-            <Badge status={property.status} />
-          </div>
-
-          {violation ? (
-            <div className="rounded-xl bg-amber-50 px-3 py-3">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-amber-800">
-                Possible violation
-              </p>
-              <p className="mt-1 text-sm font-semibold leading-snug text-amber-900">
-                {violation.type}
-              </p>
-              <p className="mt-2 text-xs text-amber-900/80">
-                {violation.confidence}% confidence · {violation.recommendation}
-              </p>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 rounded-xl bg-brand-50 px-3 py-3">
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-brand-600" />
-              <p className="text-sm font-medium text-brand-800">No violations</p>
-            </div>
-          )}
-        </div>
-      </Card>
+      <span
+        className={clsx(
+          "flex h-6 w-6 items-center justify-center rounded-full",
+          tone === "brand" && "bg-brand-50 text-brand-600",
+          tone === "amber" && "bg-amber-50 text-amber-600",
+          tone === "ink" && "bg-ink-100 text-ink-600"
+        )}
+      >
+        {icon}
+      </span>
+      <span className="text-lg font-semibold tabular-nums text-ink-900" ref={countRef}>
+        0
+      </span>
+      <span className="text-sm text-ink-500">{label}</span>
     </motion.div>
   );
 }
 
-function ResultsScene({
-  showCards,
-  tab,
-  highlightId,
-  scrollRef,
-  returning,
-}: {
-  showCards: boolean;
-  tab: Tab;
-  highlightId: string | null;
-  scrollRef: RefObject<HTMLDivElement | null>;
-  returning?: boolean;
-}) {
-  const visibleRows = useMemo(() => {
-    if (tab === "violations") return DEMO_ROWS.filter((r) => r.violation);
-    return DEMO_ROWS;
-  }, [tab]);
+function CardShell({ row, resolved }: { row: DemoRow; resolved: boolean }) {
+  const { property, violation } = row;
 
   return (
-    <DemoChrome
-      title="Inspection results"
-      subtitle={`June 25, 2026 · ${VIOLATION_COUNT} violations · ${CLEAN_COUNT} clean`}
-      scrollRef={scrollRef}
-    >
-      <motion.div
-        initial={returning ? false : popIn.initial}
-        animate={popIn.animate}
-        transition={popIn.transition(0.05)}
-        className="grid max-w-md grid-cols-2 gap-3"
-      >
-        <Card padding="sm" className="flex items-center gap-3">
-          <CheckCircle2 className="h-5 w-5 shrink-0 text-brand-600" />
-          <div>
-            <p className="text-xs font-medium text-ink-500">Clean</p>
-            <p className="text-xl font-semibold text-ink-900">{CLEAN_COUNT}</p>
-          </div>
-        </Card>
-        <Card padding="sm" className="flex items-center gap-3">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" />
-          <div>
-            <p className="text-xs font-medium text-ink-500">Violations</p>
-            <p className="text-xl font-semibold text-ink-900">
-              {VIOLATION_COUNT}
-            </p>
-          </div>
-        </Card>
-      </motion.div>
+    <Card padding="sm" className="overflow-hidden">
+      <div className="relative h-32 w-full overflow-hidden rounded-xl">
+        <MediaImage
+          src={property.image}
+          alt={property.address}
+          fill
+          className="object-cover"
+        />
+      </div>
 
-      <motion.div
-        initial={returning ? false : fadeUp.initial}
-        animate={fadeUp.animate}
-        transition={fadeUp.transition(0.1)}
-        className="mt-5 flex gap-1.5"
-      >
-        {(
-          [
-            {
-              id: "violations" as const,
-              label: "Violations",
-              count: VIOLATION_COUNT,
-            },
-            { id: "all" as const, label: "All", count: DEMO_ROWS.length },
-          ] as const
-        ).map((t) => (
-          <span
-            key={t.id}
-            className={clsx(
-              "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-300",
-              tab === t.id
-                ? "bg-ink-900 text-white shadow-sm"
-                : "bg-white text-ink-600 ring-1 ring-ink-200"
-            )}
-          >
-            {t.label}
-            <span className="ml-1.5 opacity-70">{t.count}</span>
-          </span>
-        ))}
-      </motion.div>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <h3 className="truncate text-sm font-semibold text-ink-900">
+          {property.address}
+        </h3>
+        <Badge status={resolved ? "Resolved" : property.status} />
+      </div>
 
-      {showCards ? (
-        <motion.div
-          key={tab}
-          className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-          variants={reelStagger}
-          initial="initial"
-          animate="animate"
-        >
-          {visibleRows.map((row) => (
-            <DemoResultCard
-              key={row.property.id}
-              row={row}
-              highlighted={highlightId === row.property.id}
-            />
-          ))}
-        </motion.div>
-      ) : null}
-      {/* Room for auto-scroll */}
-      <div className="h-24" aria-hidden />
-    </DemoChrome>
+      {violation && !resolved ? (
+        <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-2">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+          <p className="truncate text-xs font-medium text-amber-900">
+            {violation.type}
+            <span className="ml-1.5 font-normal text-amber-800/70">
+              {violation.confidence}%
+            </span>
+          </p>
+        </div>
+      ) : violation && resolved ? (
+        <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-emerald-50 px-2.5 py-2">
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+          <p className="truncate text-xs font-medium text-emerald-800">
+            Warning issued
+          </p>
+        </div>
+      ) : (
+        <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-brand-50 px-2.5 py-2">
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-brand-600" />
+          <p className="truncate text-xs font-medium text-brand-800">
+            No violations
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }
 
-function DetailScene() {
-  const { property, violation } = DETAIL_ROW;
+function FocusCard({ approved }: { approved: boolean }) {
+  const { property, violation } = FOCUS_ROW;
   if (!violation) return null;
 
   return (
-    <DemoChrome title={violation.type ?? "Violation"} subtitle={property.address}>
-      <motion.p
-        initial={{ opacity: 0, x: -8 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.35 }}
-        className="mb-5 inline-flex items-center gap-1.5 text-sm text-ink-500"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to results
-      </motion.p>
-
-      <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45 }}
-        >
-          <Card className="overflow-hidden">
-            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl">
-              <MediaImage
-                src={property.image}
-                alt={property.address}
-                fill
-                className="object-cover"
-              />
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Badge status="pending" />
-              <span className="text-xs text-ink-500">
-                {violation.confidence}% confidence
-              </span>
-            </div>
-            <p className="mt-3 text-sm leading-relaxed text-ink-700">
-              {violation.reasoning}
-            </p>
-            <p className="mt-2 text-xs text-ink-500">{violation.rule}</p>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12, duration: 0.45 }}
-          className="space-y-3"
-        >
-          <Card padding="sm">
-            <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
-              Recommendation
-            </p>
-            <p className="mt-1.5 text-base font-semibold text-ink-900">
-              {violation.recommendation}
-            </p>
-          </Card>
-
-          <div className="flex gap-2.5">
-            <div className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white">
-              <CheckCircle2 className="h-4 w-4" />
-              Approve
-            </div>
-            <div className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-ink-700 ring-1 ring-ink-200">
-              <XCircle className="h-4 w-4" />
-              Dismiss
-            </div>
-          </div>
-        </motion.div>
+    <Card padding="md" className="overflow-hidden shadow-card-hover">
+      <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl">
+        <MediaImage
+          src={property.image}
+          alt={property.address}
+          fill
+          className="object-cover"
+        />
       </div>
-    </DemoChrome>
+
+      <div className="mt-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-ink-900">
+            {violation.type}
+          </h3>
+          <p className="mt-0.5 text-sm text-ink-500">{property.address}</p>
+        </div>
+        <Badge status={approved ? "approved" : "pending"} />
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3, duration: 0.3 }}
+      >
+        <div className="mt-3.5 flex items-center gap-3">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink-100">
+            <motion.div
+              className="h-full rounded-full bg-brand-600"
+              initial={{ width: "0%" }}
+              animate={{ width: `${violation.confidence}%` }}
+              transition={{ delay: 0.45, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            />
+          </div>
+          <span className="text-sm font-semibold tabular-nums text-ink-900">
+            {violation.confidence}%
+          </span>
+        </div>
+
+        <p className="mt-3.5 text-sm leading-relaxed text-ink-700">
+          {violation.reasoning}
+        </p>
+        <p className="mt-1.5 text-xs text-ink-500">{violation.rule}</p>
+
+        <div className="mt-4 flex gap-2.5">
+          <motion.div
+            animate={
+              approved
+                ? { backgroundColor: "rgb(5 150 105)", scale: [1, 1.04, 1] }
+                : { scale: 1 }
+            }
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white"
+          >
+            {approved ? (
+              <>
+                <motion.svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <motion.path
+                    d="M5 13l4 4L19 7"
+                    initial={{ pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 0.35, ease: "easeOut" }}
+                  />
+                </motion.svg>
+                Warning issued
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-4 w-4" />
+                Approve
+              </>
+            )}
+          </motion.div>
+          <motion.div
+            animate={{ opacity: approved ? 0.45 : 1 }}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-ink-700 ring-1 ring-ink-200"
+          >
+            <XCircle className="h-4 w-4" />
+            Dismiss
+          </motion.div>
+        </div>
+      </motion.div>
+    </Card>
   );
-}
-
-function smoothScrollTo(
-  el: HTMLElement,
-  target: number,
-  durationMs: number
-): () => void {
-  const start = el.scrollTop;
-  const delta = target - start;
-  if (Math.abs(delta) < 1) return () => undefined;
-
-  let raf = 0;
-  const t0 = performance.now();
-  const tick = (now: number) => {
-    const t = Math.min(1, (now - t0) / durationMs);
-    const eased = 1 - Math.pow(1 - t, 3);
-    el.scrollTop = start + delta * eased;
-    if (t < 1) raf = requestAnimationFrame(tick);
-  };
-  raf = requestAnimationFrame(tick);
-  return () => cancelAnimationFrame(raf);
 }
 
 export function DemoReel() {
@@ -503,21 +387,13 @@ export function DemoReel() {
 
   const [runId, setRunId] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [scene, setScene] = useState<Scene>("results");
-  const [returning, setReturning] = useState(false);
-  const [tab, setTab] = useState<Tab>("violations");
-  const [showCards, setShowCards] = useState(false);
-  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [cascadeDone, setCascadeDone] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [approved, setApproved] = useState(false);
+  const [outro, setOutro] = useState(false);
 
   const pausedRef = useRef(false);
-  const resultsScrollRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
-  const scrollCleanups = useRef<Array<() => void>>([]);
-
-  const clearScrolls = useCallback(() => {
-    scrollCleanups.current.forEach((fn) => fn());
-    scrollCleanups.current = [];
-  }, []);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -533,62 +409,21 @@ export function DemoReel() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Master clock: React state only changes at beats; the progress bar is
-  // driven directly through the DOM so nothing re-renders per frame.
+  // Ref-driven clock: React state changes only at beats, the progress bar
+  // is written straight to the DOM, so nothing re-renders per frame.
   useEffect(() => {
-    setScene("results");
-    setReturning(false);
-    setTab("violations");
-    setShowCards(false);
-    setHighlightId(null);
-    clearScrolls();
-    if (resultsScrollRef.current) resultsScrollRef.current.scrollTop = 0;
+    setCascadeDone(false);
+    setFocused(false);
+    setApproved(false);
+    setOutro(false);
     if (progressRef.current) progressRef.current.style.width = "0%";
 
-    const resetScroll = () => {
-      clearScrolls();
-      if (resultsScrollRef.current) resultsScrollRef.current.scrollTop = 0;
-    };
-    const autoScroll = (fraction: number, durationMs: number) => {
-      const el = resultsScrollRef.current;
-      if (!el) return;
-      const max = el.scrollHeight - el.clientHeight;
-      if (max > 8) {
-        scrollCleanups.current.push(smoothScrollTo(el, max * fraction, durationMs));
-      }
-    };
-
     const beats: Array<{ at: number; run: () => void }> = [
-      { at: 150, run: () => setShowCards(true) },
-      { at: 1600, run: () => setHighlightId("demo-prop-1") },
-      { at: 2400, run: () => autoScroll(0.7, 1400) },
-      {
-        at: 4100,
-        run: () => {
-          setHighlightId(null);
-          setTab("all");
-          resetScroll();
-        },
-      },
-      { at: 4700, run: () => autoScroll(0.45, 1200) },
-      {
-        at: 6100,
-        run: () => {
-          clearScrolls();
-          setScene("detail");
-        },
-      },
-      {
-        at: 8600,
-        run: () => {
-          setScene("results");
-          setReturning(true);
-          setTab("violations");
-          setShowCards(true);
-          setHighlightId(null);
-          resetScroll();
-        },
-      },
+      { at: 3300, run: () => setCascadeDone(true) },
+      { at: 3700, run: () => setFocused(true) },
+      { at: 5600, run: () => setApproved(true) },
+      { at: 7200, run: () => setFocused(false) },
+      { at: 9000, run: () => setOutro(true) },
     ];
 
     let nextBeat = 0;
@@ -624,15 +459,22 @@ export function DemoReel() {
     };
     raf = requestAnimationFrame(tick);
 
-    return () => {
-      cancelAnimationFrame(raf);
-      clearScrolls();
-    };
-  }, [runId, loop, clearScrolls]);
+    return () => cancelAnimationFrame(raf);
+  }, [runId, loop]);
 
   return (
     <div className="relative min-h-[100dvh] overflow-hidden bg-canvas">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(79,127,95,0.1),transparent_55%)]" />
+      {/* Slow-drifting background so the frame is never fully static */}
+      <motion.div
+        className="pointer-events-none absolute -top-1/4 left-1/4 h-[70vh] w-[70vh] rounded-full bg-[radial-gradient(circle,rgba(79,127,95,0.12),transparent_65%)]"
+        animate={{ x: [0, 60, 0], y: [0, 30, 0] }}
+        transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div
+        className="pointer-events-none absolute -bottom-1/3 right-1/5 h-[60vh] w-[60vh] rounded-full bg-[radial-gradient(circle,rgba(120,113,108,0.08),transparent_65%)]"
+        animate={{ x: [0, -50, 0], y: [0, -25, 0] }}
+        transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
+      />
 
       {paused ? (
         <div className="absolute right-4 top-4 z-50 rounded-full bg-ink-900/80 px-3 py-1 text-xs font-medium text-white backdrop-blur">
@@ -641,39 +483,164 @@ export function DemoReel() {
       ) : null}
 
       <AnimatePresence mode="sync">
-        {scene === "results" && (
-          <motion.div
-            key={`results-${runId}-${returning ? "back" : "main"}`}
-            className="absolute inset-0 overflow-hidden bg-canvas"
-            {...panelEnter}
-          >
-            <ResultsScene
-              showCards={showCards}
-              tab={tab}
-              highlightId={highlightId}
-              scrollRef={resultsScrollRef}
-              returning={returning}
-            />
-          </motion.div>
-        )}
+        <motion.div
+          key={runId}
+          className="absolute inset-0"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { duration: 0.35 } }}
+          exit={{ opacity: 0, transition: { duration: 0.35 } }}
+        >
+          <div className="mx-auto flex h-full min-h-[100dvh] w-full max-w-5xl flex-col px-5 py-6 sm:px-8">
+            {/* Header */}
+            <motion.div
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              className="flex items-center justify-between"
+            >
+              <Logo size="md" href={undefined} />
+              <p className="text-xs font-medium tracking-wide text-ink-500">
+                Willow Creek Estates · June 25, 2026
+              </p>
+            </motion.div>
 
-        {scene === "detail" && (
-          <motion.div
-            key={`detail-${runId}`}
-            className="absolute inset-0 overflow-hidden bg-canvas"
-            {...panelEnter}
-          >
-            <DetailScene />
-          </motion.div>
-        )}
+            {/* Stat chips */}
+            <div className="mt-7 flex flex-wrap items-center gap-2.5">
+              <StatChip
+                icon={<Home className="h-3.5 w-3.5" />}
+                label="homes reviewed"
+                value={DEMO_ROWS.length}
+                delay={0.15}
+                tone="ink"
+              />
+              <StatChip
+                icon={<AlertTriangle className="h-3.5 w-3.5" />}
+                label="violations"
+                value={VIOLATION_COUNT}
+                delay={0.28}
+                tone="amber"
+              />
+              <StatChip
+                icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+                label="clean"
+                value={CLEAN_COUNT}
+                delay={0.41}
+                tone="brand"
+              />
+            </div>
+
+            {/* Card grid */}
+            <motion.div
+              variants={gridContainer}
+              initial="initial"
+              animate="animate"
+              className="mt-7 grid flex-1 grid-cols-2 content-start gap-4 lg:grid-cols-3"
+              style={{ perspective: 1200 }}
+            >
+              {DEMO_ROWS.map((row, i) => {
+                const isFocused = focused && row.property.id === FOCUS_ROW.property.id;
+                const resolved = approved && row.property.id === FOCUS_ROW.property.id;
+                return (
+                  <motion.div
+                    key={row.property.id}
+                    className="relative"
+                    animate={{
+                      opacity: outro ? 0.35 : focused && !isFocused ? 0.55 : 1,
+                      scale: outro ? 0.97 : 1,
+                    }}
+                    transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    {/* Invisible copy keeps the grid cell's size while the
+                        real card is morphed into the focus overlay */}
+                    <div className="invisible" aria-hidden>
+                      <CardShell row={row} resolved={false} />
+                    </div>
+                    {!isFocused && (
+                      <motion.div
+                        layoutId={`reel-card-${row.property.id}`}
+                        variants={gridItem}
+                        initial={cascadeDone ? false : "initial"}
+                        animate="animate"
+                        transition={morphSpring}
+                        className="absolute inset-0"
+                      >
+                        <motion.div
+                          animate={{ y: [0, -4, 0] }}
+                          transition={{
+                            duration: 4.5 + i * 0.4,
+                            repeat: Infinity,
+                            ease: "easeInOut",
+                            delay: 2 + i * 0.3,
+                          }}
+                          className="h-full"
+                        >
+                          <CardShell row={row} resolved={resolved} />
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </div>
+
+          {/* Focus overlay — same layoutId, so the grid card morphs into it */}
+          <AnimatePresence>
+            {focused && (
+              <motion.div
+                key="backdrop"
+                className="absolute inset-0 z-30 bg-ink-900/20 backdrop-blur-[2px]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.35 }}
+              />
+            )}
+          </AnimatePresence>
+          {focused && (
+            <div className="absolute inset-0 z-40 grid place-items-center p-6">
+              <motion.div
+                layoutId={`reel-card-${FOCUS_ROW.property.id}`}
+                transition={morphSpring}
+                className="w-full max-w-lg"
+              >
+                <FocusCard approved={approved} />
+              </motion.div>
+            </div>
+          )}
+
+          {/* Outro */}
+          <AnimatePresence>
+            {outro && (
+              <motion.div
+                key="outro"
+                className="absolute inset-0 z-40 grid place-items-center"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4 }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, y: 24, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 280, damping: 24 }}
+                  className="rounded-3xl bg-white/90 px-10 py-8 text-center shadow-card-hover ring-1 ring-ink-200/60 backdrop-blur"
+                >
+                  <Logo size="lg" href={undefined} className="justify-center" />
+                  <p className="mt-4 font-display text-2xl font-semibold tracking-tight text-ink-900">
+                    One drive. Every home reviewed.
+                  </p>
+                  <p className="mt-2 text-sm text-ink-600">
+                    Violations flagged with photo evidence in minutes.
+                  </p>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       </AnimatePresence>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 h-0.5 bg-ink-200/40">
-        <div
-          ref={progressRef}
-          className="h-full bg-brand-600/70"
-          style={{ width: "0%" }}
-        />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 h-0.5 bg-ink-200/40">
+        <div ref={progressRef} className="h-full bg-brand-600/70" style={{ width: "0%" }} />
       </div>
     </div>
   );
