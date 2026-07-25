@@ -1,20 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, animate, motion } from "framer-motion";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Home,
-  XCircle,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, Home, XCircle } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { MediaImage } from "@/components/ui/MediaImage";
 import type { Property, Violation } from "@/lib/mock-data";
-import clsx from "clsx";
 
 interface DemoRow {
   property: Property;
@@ -62,7 +53,7 @@ const DEMO_ROWS: DemoRow[] = [
       confidence: 84,
       recommendation: "Manager Review",
       rule: "CC&R Section 6.1",
-      reasoning: "",
+      reasoning: "Lawn height well above the community standard.",
       evidenceImages: ["/demo/demo-tall-grass.jpg"],
       status: "pending",
       inspectionId: "demo-reel",
@@ -85,7 +76,7 @@ const DEMO_ROWS: DemoRow[] = [
       confidence: 91,
       recommendation: "Issue Warning",
       rule: "CC&R Section 5.3",
-      reasoning: "",
+      reasoning: "Construction debris visible in the driveway.",
       evidenceImages: ["/demo/demo-debris.jpg"],
       status: "pending",
       inspectionId: "demo-reel",
@@ -108,7 +99,7 @@ const DEMO_ROWS: DemoRow[] = [
       confidence: 88,
       recommendation: "Manager Review",
       rule: "CC&R Section 6.4",
-      reasoning: "",
+      reasoning: "Front yard landscaping is dead or dying.",
       evidenceImages: ["/demo/demo-dead-landscaping.jpg"],
       status: "pending",
       inspectionId: "demo-reel",
@@ -139,186 +130,198 @@ const DEMO_ROWS: DemoRow[] = [
   },
 ];
 
-const FOCUS_ROW = DEMO_ROWS[0]!;
 const VIOLATION_COUNT = DEMO_ROWS.filter((r) => r.violation).length;
 const CLEAN_COUNT = DEMO_ROWS.filter((r) => !r.violation).length;
 
 /**
- * One continuous ~11s take: stats count up, cards cascade in and float,
- * one card morphs into focus, gets approved, morphs back, outro.
+ * Vertical (9:16) story-style reel, ~11.4s. Full-screen panels swipe up:
+ * intro -> three quick violations -> flagged home approved -> outro.
+ * Transform/opacity only so it stays smooth on phones.
  */
-const CYCLE_MS = 11200;
+const TIMELINE = [
+  { id: "intro", at: 0 },
+  { id: "v1", at: 2700 },
+  { id: "v2", at: 4000 },
+  { id: "v3", at: 5300 },
+  { id: "focus", at: 6600 },
+  { id: "outro", at: 9500 },
+] as const;
 
-const morphSpring = {
-  type: "spring" as const,
-  stiffness: 300,
-  damping: 30,
-};
+type SceneId = (typeof TIMELINE)[number]["id"];
 
-const gridContainer = {
-  initial: {},
-  animate: {
-    transition: {
-      staggerChildren: 0.09,
-      delayChildren: 0.55,
-    },
-  },
-};
+const APPROVE_AT = 8000;
+const CYCLE_MS = 11400;
 
-const gridItem = {
-  initial: { opacity: 0, y: 48, scale: 0.96 },
-  animate: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      type: "spring" as const,
-      stiffness: 380,
-      damping: 25,
-      mass: 0.75,
-    },
-  },
-};
+function ReelImage({ src, alt }: { src: string; alt: string }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt={alt} className="h-full w-full object-cover" />;
+}
 
-function StatChip({
-  icon,
-  label,
+function CountUp({
   value,
   delay,
-  tone,
+  className,
 }: {
-  icon: React.ReactNode;
-  label: string;
   value: number;
   delay: number;
-  tone: "brand" | "amber" | "ink";
+  className?: string;
 }) {
-  const countRef = useRef<HTMLSpanElement>(null);
+  const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     const controls = animate(0, value, {
-      delay: delay + 0.25,
-      duration: 0.9,
+      delay,
+      duration: 0.8,
       ease: "easeOut",
       onUpdate: (v) => {
-        if (countRef.current) countRef.current.textContent = String(Math.round(v));
+        if (ref.current) ref.current.textContent = String(Math.round(v));
       },
     });
     return () => controls.stop();
   }, [value, delay]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, type: "spring", stiffness: 320, damping: 24 }}
-      className="flex items-center gap-2.5 rounded-full bg-white px-4 py-2 shadow-sm ring-1 ring-ink-200/80"
-    >
-      <span
-        className={clsx(
-          "flex h-6 w-6 items-center justify-center rounded-full",
-          tone === "brand" && "bg-brand-50 text-brand-600",
-          tone === "amber" && "bg-amber-50 text-amber-600",
-          tone === "ink" && "bg-ink-100 text-ink-600"
-        )}
-      >
-        {icon}
-      </span>
-      <span className="text-lg font-semibold tabular-nums text-ink-900" ref={countRef}>
-        0
-      </span>
-      <span className="text-sm text-ink-500">{label}</span>
-    </motion.div>
+    <span ref={ref} className={className}>
+      0
+    </span>
   );
 }
 
-function CardShell({ row, resolved }: { row: DemoRow; resolved: boolean }) {
-  const { property, violation } = row;
-
+function IntroScene() {
   return (
-    <Card padding="sm" className="overflow-hidden">
-      <div className="relative h-32 w-full overflow-hidden rounded-xl">
-        <MediaImage
-          src={property.image}
-          alt={property.address}
-          fill
-          className="object-cover"
-        />
-      </div>
+    <div className="flex h-full flex-col items-center justify-center px-7 pb-16 text-center">
+      <motion.p
+        initial={{ opacity: 0, y: 26 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 24 }}
+        className="text-sm font-medium uppercase tracking-[0.2em] text-brand-700"
+      >
+        Drive-through inspection
+      </motion.p>
 
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <h3 className="truncate text-sm font-semibold text-ink-900">
-          {property.address}
-        </h3>
-        <Badge status={resolved ? "Resolved" : property.status} />
-      </div>
+      <motion.h1
+        initial={{ opacity: 0, y: 34 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25, type: "spring", stiffness: 280, damping: 24 }}
+        className="mt-4 font-display text-[2.7rem] font-semibold leading-[1.04] tracking-tight text-ink-900"
+      >
+        One drive.
+      </motion.h1>
+      <motion.h1
+        initial={{ opacity: 0, y: 34 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.42, type: "spring", stiffness: 280, damping: 24 }}
+        className="font-display text-[2.7rem] font-semibold leading-[1.04] tracking-tight text-ink-900"
+      >
+        Every home reviewed.
+      </motion.h1>
 
-      {violation && !resolved ? (
-        <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-2">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-          <p className="truncate text-xs font-medium text-amber-900">
-            {violation.type}
-            <span className="ml-1.5 font-normal text-amber-800/70">
-              {violation.confidence}%
-            </span>
-          </p>
-        </div>
-      ) : violation && resolved ? (
-        <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-emerald-50 px-2.5 py-2">
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-          <p className="truncate text-xs font-medium text-emerald-800">
-            Warning issued
-          </p>
-        </div>
-      ) : (
-        <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-brand-50 px-2.5 py-2">
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-brand-600" />
-          <p className="truncate text-xs font-medium text-brand-800">
-            No violations
-          </p>
-        </div>
-      )}
-    </Card>
+      <motion.div
+        initial={{ opacity: 0, y: 22, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ delay: 1.0, type: "spring", stiffness: 300, damping: 24 }}
+        className="mt-9 flex items-center gap-2"
+      >
+        {(
+          [
+            {
+              icon: <Home className="h-3.5 w-3.5 text-ink-500" />,
+              value: DEMO_ROWS.length,
+              label: "homes",
+            },
+            {
+              icon: <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />,
+              value: VIOLATION_COUNT,
+              label: "flagged",
+            },
+            {
+              icon: <CheckCircle2 className="h-3.5 w-3.5 text-brand-600" />,
+              value: CLEAN_COUNT,
+              label: "clean",
+            },
+          ] as const
+        ).map((chip, i) => (
+          <div
+            key={chip.label}
+            className="flex items-center gap-1.5 rounded-full bg-white px-3.5 py-2 shadow-sm ring-1 ring-ink-200/70"
+          >
+            {chip.icon}
+            <CountUp
+              value={chip.value}
+              delay={1.15 + i * 0.12}
+              className="text-sm font-semibold tabular-nums text-ink-900"
+            />
+            <span className="text-sm text-ink-500">{chip.label}</span>
+          </div>
+        ))}
+      </motion.div>
+    </div>
   );
 }
 
-function FocusCard({ approved }: { approved: boolean }) {
-  const { property, violation } = FOCUS_ROW;
+function ViolationScene({
+  row,
+  step,
+  holdMs,
+  focus = false,
+  approved = false,
+}: {
+  row: DemoRow;
+  step: string;
+  holdMs: number;
+  focus?: boolean;
+  approved?: boolean;
+}) {
+  const { property, violation } = row;
   if (!violation) return null;
 
   return (
-    <Card padding="md" className="overflow-hidden shadow-card-hover">
-      <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl">
-        <MediaImage
-          src={property.image}
-          alt={property.address}
-          fill
-          className="object-cover"
-        />
-      </div>
+    <div className="flex h-full flex-col px-5 pb-8 pt-[92px]">
+      <div className="relative w-full shrink-0 basis-[46%] overflow-hidden rounded-3xl shadow-card">
+        <motion.div
+          className="absolute inset-0"
+          initial={{ scale: 1.14 }}
+          animate={{ scale: 1.03 }}
+          transition={{ duration: holdMs / 1000 + 0.5, ease: "easeOut" }}
+        >
+          <ReelImage src={property.image ?? ""} alt={property.address} />
+        </motion.div>
 
-      <div className="mt-4 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-semibold text-ink-900">
-            {violation.type}
-          </h3>
-          <p className="mt-0.5 text-sm text-ink-500">{property.address}</p>
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.22, duration: 0.3 }}
+          className="absolute left-4 top-4 flex items-center gap-1.5 rounded-full bg-amber-50/95 px-3 py-1.5 text-xs font-semibold text-amber-900 shadow-sm"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+          Possible violation
+        </motion.div>
+
+        <div className="absolute bottom-3.5 right-3.5 rounded-full bg-ink-900/75 px-2.5 py-1 text-[11px] font-medium tabular-nums text-white">
+          {step}
         </div>
-        <Badge status={approved ? "approved" : "pending"} />
       </div>
 
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3, duration: 0.3 }}
+        initial={{ opacity: 0, y: 26 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.14, type: "spring", stiffness: 300, damping: 26 }}
+        className="mt-6"
       >
-        <div className="mt-3.5 flex items-center gap-3">
+        <h2 className="font-display text-3xl font-semibold tracking-tight text-ink-900">
+          {violation.type}
+        </h2>
+        <p className="mt-1.5 text-sm text-ink-500">
+          {property.address} · {property.neighborhood}
+        </p>
+
+        <div className="mt-5 flex items-center gap-3">
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink-100">
             <motion.div
               className="h-full rounded-full bg-brand-600"
               initial={{ width: "0%" }}
               animate={{ width: `${violation.confidence}%` }}
-              transition={{ delay: 0.45, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ delay: 0.35, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
             />
           </div>
           <span className="text-sm font-semibold tabular-nums text-ink-900">
@@ -326,26 +329,35 @@ function FocusCard({ approved }: { approved: boolean }) {
           </span>
         </div>
 
-        <p className="mt-3.5 text-sm leading-relaxed text-ink-700">
+        <p className="mt-4 text-[15px] leading-relaxed text-ink-700">
           {violation.reasoning}
         </p>
-        <p className="mt-1.5 text-xs text-ink-500">{violation.rule}</p>
+        <p className="mt-1.5 text-xs text-ink-500">
+          {violation.rule} · {violation.recommendation}
+        </p>
+      </motion.div>
 
-        <div className="mt-4 flex gap-2.5">
+      {focus ? (
+        <motion.div
+          initial={{ opacity: 0, y: 26 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, type: "spring", stiffness: 300, damping: 26 }}
+          className="mt-auto flex gap-2.5"
+        >
           <motion.div
             animate={
               approved
-                ? { backgroundColor: "rgb(5 150 105)", scale: [1, 1.04, 1] }
-                : { scale: 1 }
+                ? { backgroundColor: "rgb(5 150 105)", scale: [1, 1.05, 1] }
+                : {}
             }
-            transition={{ duration: 0.35, ease: "easeOut" }}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white"
+            transition={{ duration: 0.32, ease: "easeOut" }}
+            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-brand-700 px-4 py-3.5 text-[15px] font-semibold text-white"
           >
             {approved ? (
               <>
                 <motion.svg
                   viewBox="0 0 24 24"
-                  className="h-4 w-4"
+                  className="h-[18px] w-[18px]"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth={3}
@@ -363,21 +375,64 @@ function FocusCard({ approved }: { approved: boolean }) {
               </>
             ) : (
               <>
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="h-[18px] w-[18px]" />
                 Approve
               </>
             )}
           </motion.div>
           <motion.div
-            animate={{ opacity: approved ? 0.45 : 1 }}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-ink-700 ring-1 ring-ink-200"
+            animate={{ opacity: approved ? 0.4 : 1 }}
+            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3.5 text-[15px] font-semibold text-ink-700 ring-1 ring-ink-200"
           >
-            <XCircle className="h-4 w-4" />
+            <XCircle className="h-[18px] w-[18px]" />
             Dismiss
           </motion.div>
-        </div>
+        </motion.div>
+      ) : null}
+    </div>
+  );
+}
+
+function OutroScene() {
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-7 pb-16 text-center">
+      <motion.div
+        initial={{ opacity: 0, y: 26, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ delay: 0.1, type: "spring", stiffness: 280, damping: 22 }}
+      >
+        <Logo size="lg" href={undefined} className="justify-center" />
       </motion.div>
-    </Card>
+
+      <motion.p
+        initial={{ opacity: 0, y: 26 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, type: "spring", stiffness: 280, damping: 24 }}
+        className="mt-6 font-display text-3xl font-semibold leading-tight tracking-tight text-ink-900"
+      >
+        Review in minutes,
+        <br />
+        not weekends.
+      </motion.p>
+
+      <motion.p
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5, type: "spring", stiffness: 280, damping: 24 }}
+        className="mt-3 text-[15px] text-ink-600"
+      >
+        Violations flagged with photo evidence.
+      </motion.p>
+
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.85, duration: 0.4 }}
+        className="mt-8 text-sm font-medium text-ink-500"
+      >
+        {DEMO_ROWS.length} homes · {VIOLATION_COUNT} flagged · {CLEAN_COUNT} clean
+      </motion.p>
+    </div>
   );
 }
 
@@ -387,17 +442,25 @@ export function DemoReel() {
 
   const [runId, setRunId] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [cascadeDone, setCascadeDone] = useState(false);
-  const [focused, setFocused] = useState(false);
+  const [scene, setScene] = useState<SceneId>("intro");
   const [approved, setApproved] = useState(false);
-  const [outro, setOutro] = useState(false);
 
   const pausedRef = useRef(false);
-  const progressRef = useRef<HTMLDivElement>(null);
+  const segRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+
+  // Warm the image cache so panels never pop in with a gray frame
+  useEffect(() => {
+    DEMO_ROWS.forEach((r) => {
+      if (r.property.image) {
+        const img = new window.Image();
+        img.src = r.property.image;
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -409,24 +472,17 @@ export function DemoReel() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Ref-driven clock: React state changes only at beats, the progress bar
-  // is written straight to the DOM, so nothing re-renders per frame.
+  // Ref-driven clock: scene changes at beats; the story progress segments
+  // are written straight to the DOM so nothing re-renders per frame.
   useEffect(() => {
-    setCascadeDone(false);
-    setFocused(false);
+    setScene("intro");
     setApproved(false);
-    setOutro(false);
-    if (progressRef.current) progressRef.current.style.width = "0%";
+    segRefs.current.forEach((el) => {
+      if (el) el.style.width = "0%";
+    });
 
-    const beats: Array<{ at: number; run: () => void }> = [
-      { at: 3300, run: () => setCascadeDone(true) },
-      { at: 3700, run: () => setFocused(true) },
-      { at: 5600, run: () => setApproved(true) },
-      { at: 7200, run: () => setFocused(false) },
-      { at: 9000, run: () => setOutro(true) },
-    ];
-
-    let nextBeat = 0;
+    let nextScene = 1;
+    let approveFired = false;
     let raf = 0;
     let last = performance.now();
     let acc = 0;
@@ -437,16 +493,25 @@ export function DemoReel() {
       last = now;
       if (!pausedRef.current && !finished) {
         acc += dt;
-        while (nextBeat < beats.length && acc >= beats[nextBeat]!.at) {
-          beats[nextBeat]!.run();
-          nextBeat += 1;
+
+        while (nextScene < TIMELINE.length && acc >= TIMELINE[nextScene]!.at) {
+          setScene(TIMELINE[nextScene]!.id);
+          nextScene += 1;
         }
-        if (progressRef.current) {
-          progressRef.current.style.width = `${Math.min(
-            100,
-            (acc / CYCLE_MS) * 100
-          )}%`;
+        if (!approveFired && acc >= APPROVE_AT) {
+          approveFired = true;
+          setApproved(true);
         }
+
+        for (let i = 0; i < TIMELINE.length; i += 1) {
+          const el = segRefs.current[i];
+          if (!el) continue;
+          const start = TIMELINE[i]!.at;
+          const end = TIMELINE[i + 1]?.at ?? CYCLE_MS;
+          const f = Math.max(0, Math.min(1, (acc - start) / (end - start)));
+          el.style.width = `${f * 100}%`;
+        }
+
         if (acc >= CYCLE_MS) {
           if (loop) {
             setRunId((n) => n + 1);
@@ -462,185 +527,98 @@ export function DemoReel() {
     return () => cancelAnimationFrame(raf);
   }, [runId, loop]);
 
+  const sceneContent: Record<SceneId, ReactNode> = {
+    intro: <IntroScene />,
+    v1: (
+      <ViolationScene row={DEMO_ROWS[1]!} step={`1 of ${VIOLATION_COUNT}`} holdMs={1300} />
+    ),
+    v2: (
+      <ViolationScene row={DEMO_ROWS[2]!} step={`2 of ${VIOLATION_COUNT}`} holdMs={1300} />
+    ),
+    v3: (
+      <ViolationScene row={DEMO_ROWS[3]!} step={`3 of ${VIOLATION_COUNT}`} holdMs={1300} />
+    ),
+    focus: (
+      <ViolationScene
+        row={DEMO_ROWS[0]!}
+        step={`4 of ${VIOLATION_COUNT}`}
+        holdMs={2900}
+        focus
+        approved={approved}
+      />
+    ),
+    outro: <OutroScene />,
+  };
+
   return (
-    <div className="relative min-h-[100dvh] overflow-hidden bg-canvas">
-      {/* Slow-drifting background so the frame is never fully static */}
-      <motion.div
-        className="pointer-events-none absolute -top-1/4 left-1/4 h-[70vh] w-[70vh] rounded-full bg-[radial-gradient(circle,rgba(79,127,95,0.12),transparent_65%)]"
-        animate={{ x: [0, 60, 0], y: [0, 30, 0] }}
-        transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.div
-        className="pointer-events-none absolute -bottom-1/3 right-1/5 h-[60vh] w-[60vh] rounded-full bg-[radial-gradient(circle,rgba(120,113,108,0.08),transparent_65%)]"
-        animate={{ x: [0, -50, 0], y: [0, -25, 0] }}
-        transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
-      />
-
-      {paused ? (
-        <div className="absolute right-4 top-4 z-50 rounded-full bg-ink-900/80 px-3 py-1 text-xs font-medium text-white backdrop-blur">
-          Paused · Space to resume
-        </div>
-      ) : null}
-
-      <AnimatePresence mode="sync">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-ink-950">
+      {/* 9:16 stage — fills a phone screen, letterboxed on desktop */}
+      <div
+        className="relative h-[100dvh] w-full overflow-hidden bg-canvas"
+        style={{ maxWidth: "calc(100dvh * 9 / 16)" }}
+      >
         <motion.div
-          key={runId}
-          className="absolute inset-0"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1, transition: { duration: 0.35 } }}
-          exit={{ opacity: 0, transition: { duration: 0.35 } }}
-        >
-          <div className="mx-auto flex h-full min-h-[100dvh] w-full max-w-5xl flex-col px-5 py-6 sm:px-8">
-            {/* Header */}
-            <motion.div
-              initial={{ opacity: 0, y: -12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-              className="flex items-center justify-between"
-            >
-              <Logo size="md" href={undefined} />
-              <p className="text-xs font-medium tracking-wide text-ink-500">
-                Willow Creek Estates · June 25, 2026
-              </p>
-            </motion.div>
+          className="pointer-events-none absolute -top-1/4 left-0 h-[60vh] w-[60vh] rounded-full bg-[radial-gradient(circle,rgba(79,127,95,0.12),transparent_65%)]"
+          animate={{ x: [0, 50, 0], y: [0, 25, 0] }}
+          transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+        />
 
-            {/* Stat chips */}
-            <div className="mt-7 flex flex-wrap items-center gap-2.5">
-              <StatChip
-                icon={<Home className="h-3.5 w-3.5" />}
-                label="homes reviewed"
-                value={DEMO_ROWS.length}
-                delay={0.15}
-                tone="ink"
-              />
-              <StatChip
-                icon={<AlertTriangle className="h-3.5 w-3.5" />}
-                label="violations"
-                value={VIOLATION_COUNT}
-                delay={0.28}
-                tone="amber"
-              />
-              <StatChip
-                icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-                label="clean"
-                value={CLEAN_COUNT}
-                delay={0.41}
-                tone="brand"
-              />
-            </div>
-
-            {/* Card grid */}
-            <motion.div
-              variants={gridContainer}
-              initial="initial"
-              animate="animate"
-              className="mt-7 grid flex-1 grid-cols-2 content-start gap-4 lg:grid-cols-3"
-              style={{ perspective: 1200 }}
-            >
-              {DEMO_ROWS.map((row, i) => {
-                const isFocused = focused && row.property.id === FOCUS_ROW.property.id;
-                const resolved = approved && row.property.id === FOCUS_ROW.property.id;
-                return (
-                  <motion.div
-                    key={row.property.id}
-                    className="relative"
-                    animate={{
-                      opacity: outro ? 0.35 : focused && !isFocused ? 0.55 : 1,
-                      scale: outro ? 0.97 : 1,
-                    }}
-                    transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                  >
-                    {/* Invisible copy keeps the grid cell's size while the
-                        real card is morphed into the focus overlay */}
-                    <div className="invisible" aria-hidden>
-                      <CardShell row={row} resolved={false} />
-                    </div>
-                    {!isFocused && (
-                      <motion.div
-                        layoutId={`reel-card-${row.property.id}`}
-                        variants={gridItem}
-                        initial={cascadeDone ? false : "initial"}
-                        animate="animate"
-                        transition={morphSpring}
-                        className="absolute inset-0"
-                      >
-                        <motion.div
-                          animate={{ y: [0, -4, 0] }}
-                          transition={{
-                            duration: 4.5 + i * 0.4,
-                            repeat: Infinity,
-                            ease: "easeInOut",
-                            delay: 2 + i * 0.3,
-                          }}
-                          className="h-full"
-                        >
-                          <CardShell row={row} resolved={resolved} />
-                        </motion.div>
-                      </motion.div>
-                    )}
-                  </motion.div>
-                );
-              })}
-            </motion.div>
+        {/* Persistent header: story segments + brand */}
+        <div className="absolute inset-x-0 top-0 z-30 px-5 pt-4">
+          <div className="flex gap-1">
+            {TIMELINE.map((seg, i) => (
+              <div
+                key={seg.id}
+                className="h-1 flex-1 overflow-hidden rounded-full bg-ink-900/10"
+              >
+                <div
+                  ref={(el) => {
+                    segRefs.current[i] = el;
+                  }}
+                  className="h-full rounded-full bg-ink-900/60"
+                  style={{ width: "0%" }}
+                />
+              </div>
+            ))}
           </div>
+          <div className="mt-3.5 flex items-center justify-between">
+            <Logo size="sm" href={undefined} />
+            <p className="text-[11px] font-medium tracking-wide text-ink-500">
+              Willow Creek Estates
+            </p>
+          </div>
+        </div>
 
-          {/* Focus overlay — same layoutId, so the grid card morphs into it */}
-          <AnimatePresence>
-            {focused && (
-              <motion.div
-                key="backdrop"
-                className="absolute inset-0 z-30 bg-ink-900/20 backdrop-blur-[2px]"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.35 }}
-              />
-            )}
-          </AnimatePresence>
-          {focused && (
-            <div className="absolute inset-0 z-40 grid place-items-center p-6">
-              <motion.div
-                layoutId={`reel-card-${FOCUS_ROW.property.id}`}
-                transition={morphSpring}
-                className="w-full max-w-lg"
-              >
-                <FocusCard approved={approved} />
-              </motion.div>
-            </div>
-          )}
+        {paused ? (
+          <div className="absolute right-4 top-16 z-40 rounded-full bg-ink-900/80 px-3 py-1 text-xs font-medium text-white">
+            Paused · Space to resume
+          </div>
+        ) : null}
 
-          {/* Outro */}
-          <AnimatePresence>
-            {outro && (
-              <motion.div
-                key="outro"
-                className="absolute inset-0 z-40 grid place-items-center"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.4 }}
-              >
-                <motion.div
-                  initial={{ opacity: 0, y: 24, scale: 0.97 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ type: "spring", stiffness: 280, damping: 24 }}
-                  className="rounded-3xl bg-white/90 px-10 py-8 text-center shadow-card-hover ring-1 ring-ink-200/60 backdrop-blur"
-                >
-                  <Logo size="lg" href={undefined} className="justify-center" />
-                  <p className="mt-4 font-display text-2xl font-semibold tracking-tight text-ink-900">
-                    One drive. Every home reviewed.
-                  </p>
-                  <p className="mt-2 text-sm text-ink-600">
-                    Violations flagged with photo evidence in minutes.
-                  </p>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
-      </AnimatePresence>
-
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 h-0.5 bg-ink-200/40">
-        <div ref={progressRef} className="h-full bg-brand-600/70" style={{ width: "0%" }} />
+        <AnimatePresence initial={false}>
+          <motion.div
+            key={`${scene}-${runId}`}
+            className="absolute inset-0"
+            initial={{ y: 110, opacity: 0 }}
+            animate={{
+              y: 0,
+              opacity: 1,
+              transition: {
+                type: "spring",
+                stiffness: 330,
+                damping: 30,
+                mass: 0.9,
+              },
+            }}
+            exit={{
+              y: -70,
+              opacity: 0,
+              transition: { duration: 0.3, ease: [0.4, 0, 1, 1] },
+            }}
+          >
+            {sceneContent[scene]}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
