@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { AnimatePresence, animate, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Home, XCircle } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
+import { Badge } from "@/components/ui/Badge";
 import type { Property, Violation } from "@/lib/mock-data";
 
 interface DemoRow {
@@ -133,9 +134,61 @@ const DEMO_ROWS: DemoRow[] = [
 const VIOLATION_COUNT = DEMO_ROWS.filter((r) => r.violation).length;
 const CLEAN_COUNT = DEMO_ROWS.filter((r) => !r.violation).length;
 
+const REEL_IMAGES = [
+  "/demo/demo-clean-home.jpg",
+  "/demo/demo-trash-bin.jpg",
+  "/demo/demo-tall-grass.jpg",
+  "/demo/demo-debris.jpg",
+  "/demo/demo-dead-landscaping.jpg",
+];
+
+const ROSTER_STATUSES = [
+  "Needs Review",
+  "Good Standing",
+  "Needs Review",
+  "Good Standing",
+  "Violation Sent",
+  "Good Standing",
+  "Resolved",
+  "Good Standing",
+  "Needs Review",
+  "Good Standing",
+  "Good Standing",
+  "Violation Sent",
+  "Good Standing",
+  "Resolved",
+  "Good Standing",
+  "Needs Review",
+] as const;
+
+const ROSTER = [
+  "123 Main St",
+  "456 Oak Drive",
+  "789 Pine Lane",
+  "101 Maple Court",
+  "234 Cedar Way",
+  "567 Birch Blvd",
+  "890 Willow Path",
+  "321 Elm Street",
+  "654 Aspen Circle",
+  "987 Spruce Avenue",
+  "147 Cherry Lane",
+  "258 Walnut Drive",
+  "369 Hickory Road",
+  "741 Sycamore Place",
+  "852 Magnolia Dr",
+  "963 Dogwood Ct",
+].map((address, i) => ({
+  id: `roster-${i}`,
+  address,
+  image: REEL_IMAGES[i % REEL_IMAGES.length]!,
+  status: ROSTER_STATUSES[i]!,
+}));
+
 /**
- * Vertical (9:16) story-style reel, ~11.4s. Full-screen panels swipe up:
- * intro -> three quick violations -> flagged home approved -> outro.
+ * Vertical (9:16) reel, ~16s. Full-screen panels swipe up:
+ * intro -> three quick violations -> flagged home approved ->
+ * slow scroll through the full property roster -> outro.
  * Transform/opacity only so it stays smooth on phones.
  */
 const TIMELINE = [
@@ -144,13 +197,15 @@ const TIMELINE = [
   { id: "v2", at: 4000 },
   { id: "v3", at: 5300 },
   { id: "focus", at: 6600 },
-  { id: "outro", at: 9500 },
+  { id: "properties", at: 9600 },
+  { id: "outro", at: 14200 },
 ] as const;
 
 type SceneId = (typeof TIMELINE)[number]["id"];
 
 const APPROVE_AT = 8000;
-const CYCLE_MS = 11400;
+const PROPERTIES_SCROLL_MS = 4200;
+const CYCLE_MS = 16000;
 
 function ReelImage({ src, alt }: { src: string; alt: string }) {
   // eslint-disable-next-line @next/next/no-img-element
@@ -276,7 +331,7 @@ function ViolationScene({
   if (!violation) return null;
 
   return (
-    <div className="flex h-full flex-col px-5 pb-8 pt-[92px]">
+    <div className="flex h-full flex-col px-5 pb-8 pt-[76px]">
       <div className="relative w-full shrink-0 basis-[46%] overflow-hidden rounded-3xl shadow-card">
         <motion.div
           className="absolute inset-0"
@@ -393,6 +448,90 @@ function ViolationScene({
   );
 }
 
+function PropertiesScene() {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const columnRef = useRef<HTMLDivElement>(null);
+  const [distance, setDistance] = useState(0);
+
+  // Measure the overflow so the scroll always lands exactly at the last row,
+  // whatever the phone's screen height is.
+  useEffect(() => {
+    const measure = () => {
+      const viewport = viewportRef.current;
+      const column = columnRef.current;
+      if (!viewport || !column) return;
+      setDistance(Math.max(0, column.scrollHeight - viewport.clientHeight));
+    };
+    measure();
+    const t = window.setTimeout(measure, 120);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  return (
+    <div className="flex h-full flex-col px-5 pb-8 pt-[76px]">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 26 }}
+      >
+        <h2 className="font-display text-3xl font-semibold tracking-tight text-ink-900">
+          Every home, tracked
+        </h2>
+        <p className="mt-1.5 text-sm text-ink-500">
+          {ROSTER.length} homes · Willow Creek Estates
+        </p>
+      </motion.div>
+
+      <div
+        ref={viewportRef}
+        className="relative mt-5 flex-1 overflow-hidden"
+        style={{
+          maskImage:
+            "linear-gradient(to bottom, transparent, black 6%, black 88%, transparent)",
+          WebkitMaskImage:
+            "linear-gradient(to bottom, transparent, black 6%, black 88%, transparent)",
+        }}
+      >
+        <motion.div
+          ref={columnRef}
+          className="grid grid-cols-2 gap-3"
+          animate={{ y: -distance }}
+          transition={{
+            delay: 0.5,
+            duration: PROPERTIES_SCROLL_MS / 1000,
+            ease: [0.36, 0, 0.64, 1],
+          }}
+        >
+          {ROSTER.map((home, i) => (
+            <motion.div
+              key={home.id}
+              initial={{ opacity: 0, y: 26 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                delay: 0.08 + Math.min(i, 6) * 0.05,
+                type: "spring",
+                stiffness: 380,
+                damping: 27,
+              }}
+              className="overflow-hidden rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-ink-200/70"
+            >
+              <div className="relative h-[74px] w-full overflow-hidden rounded-xl bg-ink-100">
+                <ReelImage src={home.image} alt={home.address} />
+              </div>
+              <p className="mt-2 truncate text-[13px] font-semibold text-ink-900">
+                {home.address}
+              </p>
+              <div className="mt-1.5">
+                <Badge status={home.status} className="text-[10px]" />
+              </div>
+            </motion.div>
+          ))}
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
 function OutroScene() {
   return (
     <div className="flex h-full flex-col items-center justify-center px-7 pb-16 text-center">
@@ -446,7 +585,6 @@ export function DemoReel() {
   const [approved, setApproved] = useState(false);
 
   const pausedRef = useRef(false);
-  const segRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -454,11 +592,14 @@ export function DemoReel() {
 
   // Warm the image cache so panels never pop in with a gray frame
   useEffect(() => {
-    DEMO_ROWS.forEach((r) => {
-      if (r.property.image) {
-        const img = new window.Image();
-        img.src = r.property.image;
-      }
+    const sources = [
+      ...DEMO_ROWS.map((r) => r.property.image),
+      ...REEL_IMAGES,
+    ];
+    sources.forEach((src) => {
+      if (!src) return;
+      const img = new window.Image();
+      img.src = src;
     });
   }, []);
 
@@ -472,14 +613,11 @@ export function DemoReel() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Ref-driven clock: scene changes at beats; the story progress segments
-  // are written straight to the DOM so nothing re-renders per frame.
+  // Ref-driven clock: React state changes only when a scene begins, so
+  // nothing re-renders per frame while the panels animate.
   useEffect(() => {
     setScene("intro");
     setApproved(false);
-    segRefs.current.forEach((el) => {
-      if (el) el.style.width = "0%";
-    });
 
     let nextScene = 1;
     let approveFired = false;
@@ -501,15 +639,6 @@ export function DemoReel() {
         if (!approveFired && acc >= APPROVE_AT) {
           approveFired = true;
           setApproved(true);
-        }
-
-        for (let i = 0; i < TIMELINE.length; i += 1) {
-          const el = segRefs.current[i];
-          if (!el) continue;
-          const start = TIMELINE[i]!.at;
-          const end = TIMELINE[i + 1]?.at ?? CYCLE_MS;
-          const f = Math.max(0, Math.min(1, (acc - start) / (end - start)));
-          el.style.width = `${f * 100}%`;
         }
 
         if (acc >= CYCLE_MS) {
@@ -547,6 +676,7 @@ export function DemoReel() {
         approved={approved}
       />
     ),
+    properties: <PropertiesScene />,
     outro: <OutroScene />,
   };
 
@@ -563,30 +693,11 @@ export function DemoReel() {
           transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
         />
 
-        {/* Persistent header: story segments + brand */}
-        <div className="absolute inset-x-0 top-0 z-30 px-5 pt-4">
-          <div className="flex gap-1">
-            {TIMELINE.map((seg, i) => (
-              <div
-                key={seg.id}
-                className="h-1 flex-1 overflow-hidden rounded-full bg-ink-900/10"
-              >
-                <div
-                  ref={(el) => {
-                    segRefs.current[i] = el;
-                  }}
-                  className="h-full rounded-full bg-ink-900/60"
-                  style={{ width: "0%" }}
-                />
-              </div>
-            ))}
-          </div>
-          <div className="mt-3.5 flex items-center justify-between">
-            <Logo size="sm" href={undefined} />
-            <p className="text-[11px] font-medium tracking-wide text-ink-500">
-              Willow Creek Estates
-            </p>
-          </div>
+        <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-5 pt-5">
+          <Logo size="sm" href={undefined} />
+          <p className="text-[11px] font-medium tracking-wide text-ink-500">
+            Willow Creek Estates
+          </p>
         </div>
 
         {paused ? (
