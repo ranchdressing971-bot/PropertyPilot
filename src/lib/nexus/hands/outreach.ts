@@ -1,12 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createChatCompletion } from "@/lib/openai-retry";
 import { getOpenAIApiKey } from "@/lib/openai-env";
-import { logAction } from "../jobs";
+import { enqueueJob, logAction } from "../jobs";
+import { OUTREACH_AUTO_APPROVE_MIN_SCORE } from "../outreach-policy";
 import type {
   HandResult,
   NexusCompany,
   NexusContact,
   OutreachDraftPayload,
+  OutreachReviewPayload,
 } from "../types";
 
 /**
@@ -399,8 +401,184 @@ export async function runOutreachDraft(
     db
   );
 
+  // Auto pipeline: AI reviews the draft next. No human gate.
+  await enqueueJob(
+    {
+      type: "outreach.review",
+      payload: { draftId: draft.id } satisfies OutreachReviewPayload,
+      dedupeKey: `outreach.review:${draft.id}`,
+      delaySeconds: 2,
+    },
+    db
+  );
+
   return {
-    summary: `drafted for ${contact.email}`,
+    summary: `drafted for ${contact.email} (AI review queued)`,
     metadata: { companyId, draftId: draft.id, to: contact.email, subject },
+  };
+}
+
+const REVIEW_PROMPT = `
+You are the QA gate for RideBy cold outreach. Decide whether this draft is
+safe and good enough to send unattended.
+
+Approve only if ALL are true:
+- Sounds like a human operator, not a brochure
+- No invented facts about the recipient
+- Mentions the clipboard / drive-through pain in plain English
+- Includes exactly the expected CTA URL
+- Subject is specific and not spammy (no "free", no "Re:")
+- Body is under ~90 words of prose
+- Would not embarrass Isaac if a real HOA manager read it
+
+Reject if any of those fail, or if the email is generic template sludge,
+awkward ("Hello THE TEXAS PROPERTY MANAGER"), or marketing-speak heavy.
+
+Return strict JSON only:
+{"decision":"approve"|"reject","score":0-100,"reason":"short plain reason"}
+`.trim();
+
+/**
+ * AI review gate. Approves drafts into the send-ready queue or rejects them.
+ * This replaces human approval — outreach is meant to run while Isaac is AFK.
+ */
+export async function runOutreachReview(
+  payload: OutreachReviewPayload,
+  db: SupabaseClient
+): Promise<HandResult> {
+  const draftId = payload.draftId;
+  if (!draftId) throw new Error("outreach.review requires a draftId");
+  if (!isOutreachConfigured()) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  const { data: draft, error } = await db
+    .from("nexus_drafts")
+    .select("id, company_id, to_email, subject, body, status, confidence, metadata")
+    .eq("id", draftId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to load draft: ${error.message}`);
+  if (!draft) throw new Error(`Draft ${draftId} not found`);
+  if (draft.status !== "pending_approval") {
+    return {
+      summary: `skipped — draft is ${draft.status}`,
+      metadata: { draftId },
+    };
+  }
+
+  const expectedUrl = ctaUrl();
+  const completion = await createChatCompletion(
+    {
+      model: MODEL,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: REVIEW_PROMPT },
+        {
+          role: "user",
+          content:
+            `Expected CTA URL: ${expectedUrl}\n\n` +
+            `To: ${draft.to_email}\n` +
+            `Subject: ${draft.subject}\n\n` +
+            `${draft.body}`,
+        },
+      ],
+    },
+    "nexus-outreach-review"
+  );
+
+  const raw =
+    "choices" in completion
+      ? (completion.choices[0]?.message?.content ?? "")
+      : "";
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+
+  let decision: "approve" | "reject" = "reject";
+  let score = 0;
+  let reason = "review parse failed";
+  try {
+    const parsed = JSON.parse(cleaned) as {
+      decision?: string;
+      score?: number;
+      reason?: string;
+    };
+    if (parsed.decision === "approve" || parsed.decision === "reject") {
+      decision = parsed.decision;
+    }
+    if (typeof parsed.score === "number") {
+      score = Math.max(0, Math.min(100, Math.round(parsed.score)));
+    }
+    if (typeof parsed.reason === "string" && parsed.reason.trim()) {
+      reason = parsed.reason.trim().slice(0, 500);
+    }
+  } catch {
+    decision = "reject";
+    reason = `review returned non-JSON: ${raw.slice(0, 160)}`;
+  }
+
+  // Hard mechanical gates on top of the model — never auto-approve a draft that
+  // fails the obvious checks even if the model says yes.
+  const mechanical = draftLooksTemplated(draft.subject, draft.body);
+  if (mechanical) {
+    decision = "reject";
+    reason = mechanical;
+    score = Math.min(score, 40);
+  } else if (
+    decision === "approve" &&
+    score < OUTREACH_AUTO_APPROVE_MIN_SCORE
+  ) {
+    decision = "reject";
+    reason = `score ${score} below auto-approve floor ${OUTREACH_AUTO_APPROVE_MIN_SCORE}`;
+  }
+
+  const now = new Date().toISOString();
+  const approving = decision === "approve";
+
+  await db
+    .from("nexus_drafts")
+    .update({
+      status: approving ? "approved" : "rejected",
+      confidence: score,
+      rejection_reason: approving ? null : reason,
+      reviewed_at: now,
+      reviewed_by: "nexus-ai",
+      updated_at: now,
+      metadata: {
+        ...((draft.metadata as Record<string, unknown> | null) ?? {}),
+        aiReview: { decision, score, reason },
+      },
+    })
+    .eq("id", draftId);
+
+  await db
+    .from("nexus_companies")
+    .update({
+      stage: approving ? "queued" : "ready",
+      updated_at: now,
+    })
+    .eq("id", draft.company_id);
+
+  await logAction(
+    {
+      action: approving
+        ? "outreach.draft_auto_approved"
+        : "outreach.draft_auto_rejected",
+      entityType: "draft",
+      entityId: draftId,
+      confidence: score,
+      metadata: { to: draft.to_email, reason, score },
+    },
+    db
+  );
+
+  return {
+    summary: approving
+      ? `auto-approved (${score}) for ${draft.to_email}`
+      : `auto-rejected (${score}): ${reason}`,
+    metadata: { draftId, decision, score, reason },
   };
 }

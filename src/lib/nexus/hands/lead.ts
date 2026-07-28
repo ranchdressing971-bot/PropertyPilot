@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enqueueJob, logAction } from "../jobs";
 import { cityFromQuery, evaluateLead } from "../lead-filter";
-import type { HandResult, LeadSearchPayload } from "../types";
+import type { HandResult, LeadSearchPayload, ResearchCompanyPayload } from "../types";
 
 /**
  * Lead Hand — finds companies via Google Places Text Search (New) and stores
@@ -283,6 +283,20 @@ export async function runLeadSearch(
       },
       db
     );
+
+    // Auto pipeline: research public emails on the new company next.
+    if (place.websiteUri) {
+      await enqueueJob(
+        {
+          type: "research.company",
+          payload: { companyId: inserted.id } satisfies ResearchCompanyPayload,
+          dedupeKey: `research.company:${inserted.id}`,
+          // Stagger so one tick doesn't try to crawl every new site at once.
+          delaySeconds: 5 + stored * 3,
+        },
+        db
+      );
+    }
   }
 
   const totalStored = storedSoFar + stored;

@@ -1,8 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { logAction } from "../jobs";
+import { enqueueJob, logAction } from "../jobs";
 import type {
   HandResult,
   NexusCompany,
+  OutreachDraftPayload,
   ResearchCompanyPayload,
 } from "../types";
 
@@ -490,10 +491,23 @@ export async function runResearchCompany(
     ...(stored > 0 && company.stage === "new" ? { stage: "ready" } : {}),
   });
 
+  // Auto pipeline: draft a cold email for the best contact, then AI-review it.
+  if (stored > 0) {
+    await enqueueJob(
+      {
+        type: "outreach.draft",
+        payload: { companyId } satisfies OutreachDraftPayload,
+        dedupeKey: `outreach.draft:${companyId}`,
+        delaySeconds: 3,
+      },
+      db
+    );
+  }
+
   return {
     summary: `${stored} contact${stored === 1 ? "" : "s"} from ${pages.length} page${
       pages.length === 1 ? "" : "s"
-    }`,
+    }${stored > 0 ? " (draft queued)" : ""}`,
     metadata: {
       companyId,
       company: company.name,

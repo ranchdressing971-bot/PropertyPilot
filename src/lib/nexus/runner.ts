@@ -1,6 +1,7 @@
 import {
   claimJobs,
   completeJob,
+  enqueueJob,
   failJob,
   logAction,
   releaseJob,
@@ -9,11 +10,12 @@ import {
 } from "./jobs";
 import { runLeadSearch, runLeadScore } from "./hands/lead";
 import { runResearchCompany } from "./hands/research";
-import { runOutreachDraft } from "./hands/outreach";
+import { runOutreachDraft, runOutreachReview } from "./hands/outreach";
 import type {
   LeadSearchPayload,
   LeadScorePayload,
   OutreachDraftPayload,
+  OutreachReviewPayload,
   ResearchCompanyPayload,
 } from "./types";
 
@@ -42,6 +44,7 @@ const RESERVE_MS: Record<string, number> = {
   "lead.score": 8_000,
   "research.company": 30_000,
   "outreach.draft": 25_000,
+  "outreach.review": 20_000,
 };
 const DEFAULT_RESERVE_MS = 20_000;
 
@@ -78,6 +81,24 @@ export async function runTick(): Promise<TickResult> {
 
   // Jobs whose worker died mid-run would sit in 'running' forever otherwise.
   result.requeuedStale = await requeueStaleJobs(10, db);
+
+  // Catch drafts that were created before auto-review existed, or whose review
+  // job was lost — queue AI review so the pipeline doesn't stall on "pending".
+  const { data: pendingDrafts } = await db
+    .from("nexus_drafts")
+    .select("id")
+    .eq("status", "pending_approval")
+    .limit(25);
+  for (const row of pendingDrafts ?? []) {
+    await enqueueJob(
+      {
+        type: "outreach.review",
+        payload: { draftId: row.id } satisfies OutreachReviewPayload,
+        dedupeKey: `outreach.review:${row.id}`,
+      },
+      db
+    );
+  }
 
   while (Date.now() - startedAt < TIME_BUDGET_MS) {
     const jobs = await claimJobs(BATCH_SIZE, db);
@@ -159,6 +180,23 @@ export async function runTick(): Promise<TickResult> {
             await logAction(
               {
                 action: "outreach.draft_completed",
+                entityType: "job",
+                entityId: job.id,
+                metadata: handResult.metadata ?? {},
+              },
+              db
+            );
+            break;
+          }
+          case "outreach.review": {
+            const handResult = await runOutreachReview(
+              job.payload as unknown as OutreachReviewPayload,
+              db
+            );
+            detail = handResult.summary;
+            await logAction(
+              {
+                action: "outreach.review_completed",
                 entityType: "job",
                 entityId: job.id,
                 metadata: handResult.metadata ?? {},

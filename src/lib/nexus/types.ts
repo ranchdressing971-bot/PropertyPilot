@@ -4,7 +4,8 @@ export type JobType =
   | "lead.search"
   | "lead.score"
   | "research.company"
-  | "outreach.draft";
+  | "outreach.draft"
+  | "outreach.review";
 
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
@@ -132,6 +133,11 @@ export interface OutreachDraftPayload {
   companyId: string;
   /** Specific recipient; when omitted the highest-confidence contact is used. */
   contactId?: string;
+}
+
+/** Payload for AI review of a draft before it becomes send-ready. */
+export interface OutreachReviewPayload {
+  draftId: string;
 }
 
 /** What a hand reports back to the runner. */

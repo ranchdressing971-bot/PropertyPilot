@@ -65,7 +65,8 @@ export default async function NexusPage() {
               Nexus
             </h1>
             <p className="mt-1.5 text-sm text-ink-600">
-              Find HOA managers → get their emails → write drafts → you approve
+              Automated outreach — AI finds leads, writes emails, and reviews
+              them. You only plug in the sender.
             </p>
           </div>
         </div>
