@@ -422,6 +422,9 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
                   <p className="text-xs text-ink-500">
                     {[company.city, company.state].filter(Boolean).join(", ") ||
                       "—"}
+                    {typeof company.metadata?.userRatingCount === "number"
+                      ? ` · ${company.metadata.userRatingCount} Google reviews`
+                      : " · reviews unknown"}
                     {company.research_status
                       ? ` · ${company.research_status}`
                       : ""}

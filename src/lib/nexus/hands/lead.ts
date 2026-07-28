@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enqueueJob, logAction } from "../jobs";
-import { cityFromQuery, evaluateLead } from "../lead-filter";
+import { cityFromQuery, evaluateLead, maxReviewCount } from "../lead-filter";
 import type { HandResult, LeadSearchPayload, ResearchCompanyPayload } from "../types";
 
 /**
@@ -61,12 +61,54 @@ export function isPlacesConfigured(): boolean {
   return Boolean(process.env.GOOGLE_PLACES_API_KEY);
 }
 
+/** Places returns `places/ChIJ…` or bare `ChIJ…` — Details wants the bare id. */
+export function barePlaceId(placeId: string): string {
+  return placeId.replace(/^places\//, "");
+}
+
 function componentOf(
   components: PlacesAddressComponent[] | undefined,
   type: string
 ): string | null {
   const match = components?.find((c) => c.types?.includes(type));
   return match?.shortText ?? match?.longText ?? null;
+}
+
+/**
+ * Text Search sometimes omits userRatingCount. Without it the size filter
+ * silently no-ops and big HOAs slip through as "active". Fetch Details when
+ * missing so we always have a number (0 = no reviews / new listing).
+ */
+async function resolveUserRatingCount(
+  placeId: string,
+  fromSearch: number | undefined
+): Promise<number> {
+  if (typeof fromSearch === "number" && Number.isFinite(fromSearch)) {
+    return fromSearch;
+  }
+
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) return 0;
+
+  const id = barePlaceId(placeId);
+  const response = await fetch(`https://places.googleapis.com/v1/places/${id}`, {
+    headers: {
+      "X-Goog-Api-Key": apiKey,
+      "X-Goog-FieldMask": "userRatingCount,rating",
+    },
+  });
+
+  if (!response.ok) {
+    // Fail closed on size when we can't read reviews — better than keeping a
+    // 400-review national that Text Search forgot to annotate.
+    console.warn(
+      `Place Details rating lookup failed (${response.status}) for ${id}`
+    );
+    return maxReviewCount() + 1;
+  }
+
+  const place = (await response.json()) as { userRatingCount?: number };
+  return typeof place.userRatingCount === "number" ? place.userRatingCount : 0;
 }
 
 async function searchPlaces(
@@ -136,27 +178,35 @@ export async function runLeadSearch(
       place.addressComponents,
       "administrative_area_level_1"
     );
+    // Always resolve a real review count before filtering — missing field was
+    // how 400-review shops became "small" leads.
+    const userRatingCount = await resolveUserRatingCount(
+      place.id,
+      place.userRatingCount
+    );
     const verdict = evaluateLead(
       {
         name: place.displayName.text,
         website: place.websiteUri ?? null,
         city,
-        userRatingCount: place.userRatingCount ?? null,
+        userRatingCount,
       },
       { targetCity }
     );
 
     const placesMeta = {
-      userRatingCount: place.userRatingCount ?? null,
+      userRatingCount,
       rating: place.rating ?? null,
     };
+
+    const placeId = barePlaceId(place.id);
 
     // Does this place already exist? Checked explicitly so we can report
     // duplicates rather than silently overwriting.
     const { data: existing } = await db
       .from("nexus_companies")
       .select("id, status, metadata")
-      .eq("place_id", place.id)
+      .eq("place_id", placeId)
       .maybeSingle();
 
     if (existing) {
@@ -194,7 +244,7 @@ export async function runLeadSearch(
       const { data: rejected, error: rejectError } = await db
         .from("nexus_companies")
         .insert({
-          place_id: place.id,
+          place_id: placeId,
           name: place.displayName.text,
           website: place.websiteUri ?? null,
           phone: place.nationalPhoneNumber ?? null,
@@ -231,7 +281,7 @@ export async function runLeadSearch(
             name: rejected.name,
             query,
             reason: verdict.reason,
-            userRatingCount: place.userRatingCount ?? null,
+            userRatingCount,
           },
         },
         db
@@ -242,7 +292,7 @@ export async function runLeadSearch(
     const { data: inserted, error } = await db
       .from("nexus_companies")
       .insert({
-        place_id: place.id,
+        place_id: placeId,
         name: place.displayName.text,
         website: place.websiteUri ?? null,
         phone: place.nationalPhoneNumber ?? null,
@@ -278,7 +328,7 @@ export async function runLeadSearch(
           name: inserted.name,
           query,
           hasWebsite: Boolean(place.websiteUri),
-          userRatingCount: place.userRatingCount ?? null,
+          userRatingCount,
         },
       },
       db
@@ -362,7 +412,7 @@ export async function runLeadScore(
   }
 
   const response = await fetch(
-    `https://places.googleapis.com/v1/places/${company.place_id}`,
+    `https://places.googleapis.com/v1/places/${barePlaceId(company.place_id)}`,
     {
       headers: {
         "X-Goog-Api-Key": apiKey,

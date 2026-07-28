@@ -11,6 +11,7 @@ import {
 import { runLeadSearch, runLeadScore } from "./hands/lead";
 import { runResearchCompany } from "./hands/research";
 import { runOutreachDraft, runOutreachReview } from "./hands/outreach";
+import { maxReviewCount } from "./lead-filter";
 import type {
   LeadSearchPayload,
   LeadScorePayload,
@@ -98,6 +99,34 @@ export async function runTick(): Promise<TickResult> {
       },
       db
     );
+  }
+
+  // Re-score active leads missing a review count, or already over the size cap
+  // (e.g. slipped in when Text Search omitted userRatingCount).
+  const { data: activeForScore } = await db
+    .from("nexus_companies")
+    .select("id, metadata, place_id")
+    .eq("status", "active")
+    .not("place_id", "is", null)
+    .limit(40);
+  const reviewCap = maxReviewCount();
+  let scoreQueued = 0;
+  for (const row of activeForScore ?? []) {
+    const meta = (row.metadata as Record<string, unknown> | null) ?? {};
+    const count =
+      typeof meta.userRatingCount === "number" ? meta.userRatingCount : null;
+    const needsScore = count == null || count > reviewCap;
+    if (!needsScore) continue;
+    await enqueueJob(
+      {
+        type: "lead.score",
+        payload: { companyId: row.id },
+        dedupeKey: `lead.score:${row.id}`,
+      },
+      db
+    );
+    scoreQueued += 1;
+    if (scoreQueued >= 15) break;
   }
 
   while (Date.now() - startedAt < TIME_BUDGET_MS) {

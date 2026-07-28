@@ -27,6 +27,9 @@ export interface LeadFilterResult {
 /**
  * Soft ceiling on Google reviews. Tunable via NEXUS_MAX_REVIEW_COUNT.
  * 75 keeps quiet local shops and cuts the loud regional/national offices.
+ *
+ * Important: missing review count must NOT skip this check — Text Search
+ * sometimes omits the field, and that used to let 400-review shops through.
  */
 export function maxReviewCount(): number {
   const raw = Number(process.env.NEXUS_MAX_REVIEW_COUNT ?? 75);
