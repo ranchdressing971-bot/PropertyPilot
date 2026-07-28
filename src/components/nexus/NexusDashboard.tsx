@@ -537,6 +537,7 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
                   <th className="pb-2 pr-3 font-medium">Location</th>
                   <th className="pb-2 pr-3 font-medium">Phone</th>
                   <th className="pb-2 pr-3 font-medium">Research</th>
+                  <th className="pb-2 pr-3 font-medium">Reviews</th>
                   <th className="pb-2 pr-3 font-medium">Status</th>
                   <th className="pb-2 font-medium">Found</th>
                 </tr>
@@ -580,6 +581,11 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
                     </td>
                     <td className="py-2.5 pr-3">
                       <StatusPill status={company.research_status || "pending"} />
+                    </td>
+                    <td className="py-2.5 pr-3 text-ink-600 tabular-nums">
+                      {typeof company.metadata?.userRatingCount === "number"
+                        ? company.metadata.userRatingCount
+                        : "—"}
                     </td>
                     <td className="py-2.5 pr-3">
                       <StatusPill status={company.stage} />

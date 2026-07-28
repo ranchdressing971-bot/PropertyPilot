@@ -1,13 +1,11 @@
 /**
  * Lead quality filters for the Lead Hand.
  *
- * Google Places has no "portfolio size" field, so we approximate "small / local"
- * two ways:
- *  1. Block known national HOA management brands and big franchises by name and
- *     website domain.
- *  2. When the search query names a city ("in Austin TX"), drop results whose
- *     locality is somewhere else — Places treats the city as a hint, not a
- *     filter, which is why Houston and Dallas showed up in Austin searches.
+ * Size signal: Google Places `userRatingCount`. A storefront with hundreds of
+ * reviews is almost never a small local HOA shop; one with a handful usually is.
+ * That is imperfect (a quiet national office can look small), so a short brand
+ * blocklist still catches known nationals, and a city hint stops Places from
+ * handing us Houston results for an Austin query.
  *
  * Matches are not deleted. They are stored (or updated) as status=disqualified
  * so the action log stays honest and a re-run cannot resurrect them as leads.
@@ -17,11 +15,23 @@ export interface LeadCandidate {
   name: string;
   website?: string | null;
   city?: string | null;
+  /** Google Places userRatingCount — number of Google reviews. */
+  userRatingCount?: number | null;
 }
 
 export interface LeadFilterResult {
   ok: boolean;
   reason?: string;
+}
+
+/**
+ * Soft ceiling on Google reviews. Tunable via NEXUS_MAX_REVIEW_COUNT.
+ * 75 keeps quiet local shops and cuts the loud regional/national offices.
+ */
+export function maxReviewCount(): number {
+  const raw = Number(process.env.NEXUS_MAX_REVIEW_COUNT ?? 75);
+  if (!Number.isFinite(raw) || raw < 1) return 75;
+  return Math.floor(raw);
 }
 
 /** National / multi-state brands and franchises we do not want as first-touch leads. */
@@ -71,7 +81,6 @@ const BLOCKED_DOMAINS = [
   "riseamg.com",
   "sbbmanagement.com",
   "allcountycapital.com",
-  // Vacation / STR noise that Places returns for "property management"
   "austinbnbmanagement.com",
   "nomadstr.net",
   "strmanagement.com",
@@ -108,7 +117,6 @@ export function cityFromQuery(query: string): string | null {
   );
   if (!match) return null;
   const city = match[1].trim().replace(/\s+/g, " ");
-  // Guard against "in Texas" style queries with no city.
   if (/^(texas|tx|california|florida|arizona|north carolina)$/i.test(city)) {
     return null;
   }
@@ -124,14 +132,24 @@ function citiesMatch(actual: string | null | undefined, target: string): boolean
 
 export function evaluateLead(
   candidate: LeadCandidate,
-  opts?: { targetCity?: string | null }
+  opts?: { targetCity?: string | null; maxReviews?: number }
 ): LeadFilterResult {
   const name = candidate.name.trim();
+  const maxReviews = opts?.maxReviews ?? maxReviewCount();
 
   for (const pattern of NON_HOA_NAME_PATTERNS) {
     if (pattern.test(name)) {
       return { ok: false, reason: "not_hoa_manager" };
     }
+  }
+
+  // Review count is the primary size signal — cheap, objective, and already on
+  // the Enterprise SKU we pay for website/phone.
+  if (
+    typeof candidate.userRatingCount === "number" &&
+    candidate.userRatingCount > maxReviews
+  ) {
+    return { ok: false, reason: "too_many_reviews" };
   }
 
   for (const pattern of BLOCKED_NAME_PATTERNS) {

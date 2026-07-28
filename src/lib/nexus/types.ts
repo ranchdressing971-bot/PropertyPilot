@@ -1,6 +1,10 @@
 /** Shared Nexus / Atlas types. */
 
-export type JobType = "lead.search" | "research.company" | "outreach.draft";
+export type JobType =
+  | "lead.search"
+  | "lead.score"
+  | "research.company"
+  | "outreach.draft";
 
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
@@ -109,6 +113,11 @@ export interface LeadSearchPayload {
   pageToken?: string;
   /** Running total across requeued pages */
   storedSoFar?: number;
+}
+
+/** Payload for a Lead Hand size re-check via Place Details. */
+export interface LeadScorePayload {
+  companyId: string;
 }
 
 /** Payload for a Research Hand crawl of one company website. */

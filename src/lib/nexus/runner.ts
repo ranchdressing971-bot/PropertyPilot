@@ -7,11 +7,12 @@ import {
   requeueStaleJobs,
   requireNexusDb,
 } from "./jobs";
-import { runLeadSearch } from "./hands/lead";
+import { runLeadSearch, runLeadScore } from "./hands/lead";
 import { runResearchCompany } from "./hands/research";
 import { runOutreachDraft } from "./hands/outreach";
 import type {
   LeadSearchPayload,
+  LeadScorePayload,
   OutreachDraftPayload,
   ResearchCompanyPayload,
 } from "./types";
@@ -38,6 +39,7 @@ const BATCH_SIZE = 5;
  */
 const RESERVE_MS: Record<string, number> = {
   "lead.search": 15_000,
+  "lead.score": 8_000,
   "research.company": 30_000,
   "outreach.draft": 25_000,
 };
@@ -106,6 +108,23 @@ export async function runTick(): Promise<TickResult> {
             await logAction(
               {
                 action: "lead.search_completed",
+                entityType: "job",
+                entityId: job.id,
+                metadata: handResult.metadata ?? {},
+              },
+              db
+            );
+            break;
+          }
+          case "lead.score": {
+            const handResult = await runLeadScore(
+              job.payload as unknown as LeadScorePayload,
+              db
+            );
+            detail = handResult.summary;
+            await logAction(
+              {
+                action: "lead.score_completed",
                 entityType: "job",
                 entityId: job.id,
                 metadata: handResult.metadata ?? {},

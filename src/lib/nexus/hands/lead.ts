@@ -26,6 +26,10 @@ const FIELD_MASK = [
   "places.addressComponents",
   "places.websiteUri",
   "places.nationalPhoneNumber",
+  // Review count is the size signal. Already on the Enterprise SKU we hit for
+  // website/phone, so it adds no extra Places charge.
+  "places.userRatingCount",
+  "places.rating",
   "nextPageToken",
 ].join(",");
 
@@ -44,6 +48,8 @@ interface PlacesResult {
   addressComponents?: PlacesAddressComponent[];
   websiteUri?: string;
   nationalPhoneNumber?: string;
+  userRatingCount?: number;
+  rating?: number;
 }
 
 interface PlacesResponse {
@@ -135,32 +141,48 @@ export async function runLeadSearch(
         name: place.displayName.text,
         website: place.websiteUri ?? null,
         city,
+        userRatingCount: place.userRatingCount ?? null,
       },
       { targetCity }
     );
+
+    const placesMeta = {
+      userRatingCount: place.userRatingCount ?? null,
+      rating: place.rating ?? null,
+    };
 
     // Does this place already exist? Checked explicitly so we can report
     // duplicates rather than silently overwriting.
     const { data: existing } = await db
       .from("nexus_companies")
-      .select("id, status")
+      .select("id, status, metadata")
       .eq("place_id", place.id)
       .maybeSingle();
 
     if (existing) {
       duplicates += 1;
-      // A previously-active national that now matches the blocklist gets
-      // demoted in place, so re-runs clean the list without creating orphans.
+      const nextMeta = {
+        ...((existing.metadata as Record<string, unknown> | null) ?? {}),
+        ...placesMeta,
+      };
+      // A previously-active company that now fails the filter gets demoted in
+      // place, so re-runs clean the list without creating orphans.
       if (!verdict.ok && existing.status === "active") {
         await db
           .from("nexus_companies")
           .update({
             status: "disqualified",
             disqualified_reason: verdict.reason ?? "filtered",
+            metadata: nextMeta,
             updated_at: now,
           })
           .eq("id", existing.id);
         filtered += 1;
+      } else {
+        await db
+          .from("nexus_companies")
+          .update({ metadata: nextMeta, places_synced_at: now, updated_at: now })
+          .eq("id", existing.id);
       }
       continue;
     }
@@ -185,6 +207,7 @@ export async function runLeadSearch(
           status: "disqualified",
           disqualified_reason: verdict.reason ?? "filtered",
           places_synced_at: now,
+          metadata: placesMeta,
         })
         .select("id, name")
         .single();
@@ -208,6 +231,7 @@ export async function runLeadSearch(
             name: rejected.name,
             query,
             reason: verdict.reason,
+            userRatingCount: place.userRatingCount ?? null,
           },
         },
         db
@@ -229,6 +253,7 @@ export async function runLeadSearch(
         search_query: query,
         stage: "new",
         places_synced_at: now,
+        metadata: placesMeta,
       })
       .select("id, name")
       .single();
@@ -253,6 +278,7 @@ export async function runLeadSearch(
           name: inserted.name,
           query,
           hasWebsite: Boolean(place.websiteUri),
+          userRatingCount: place.userRatingCount ?? null,
         },
       },
       db
@@ -294,3 +320,115 @@ export async function runLeadSearch(
     },
   };
 }
+
+/**
+ * Re-check one existing company against Places review count. Used to apply the
+ * size filter to leads that were imported before userRatingCount was fetched.
+ */
+export async function runLeadScore(
+  payload: { companyId: string },
+  db: SupabaseClient
+): Promise<HandResult> {
+  const companyId = payload.companyId;
+  if (!companyId) throw new Error("lead.score requires a companyId");
+
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) throw new Error("GOOGLE_PLACES_API_KEY is not configured");
+
+  const { data: company, error } = await db
+    .from("nexus_companies")
+    .select("id, name, place_id, website, city, status, metadata")
+    .eq("id", companyId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to load company: ${error.message}`);
+  if (!company) throw new Error(`Company ${companyId} not found`);
+  if (!company.place_id) {
+    return { summary: "skipped — no place_id", metadata: { companyId } };
+  }
+
+  const response = await fetch(
+    `https://places.googleapis.com/v1/places/${company.place_id}`,
+    {
+      headers: {
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "id,displayName,userRatingCount,rating,websiteUri",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(
+      `Place Details failed (${response.status}): ${detail.slice(0, 300)}`
+    );
+  }
+
+  const place = (await response.json()) as {
+    userRatingCount?: number;
+    rating?: number;
+    websiteUri?: string;
+  };
+
+  const userRatingCount = place.userRatingCount ?? 0;
+  const now = new Date().toISOString();
+  const nextMeta = {
+    ...((company.metadata as Record<string, unknown> | null) ?? {}),
+    userRatingCount,
+    rating: place.rating ?? null,
+  };
+
+  const verdict = evaluateLead({
+    name: company.name,
+    website: company.website ?? place.websiteUri ?? null,
+    city: company.city,
+    userRatingCount,
+  });
+
+  if (!verdict.ok && company.status === "active") {
+    await db
+      .from("nexus_companies")
+      .update({
+        status: "disqualified",
+        disqualified_reason: verdict.reason ?? "filtered",
+        metadata: nextMeta,
+        places_synced_at: now,
+        updated_at: now,
+      })
+      .eq("id", companyId);
+
+    await logAction(
+      {
+        action: "lead.company_filtered",
+        entityType: "company",
+        entityId: companyId,
+        metadata: {
+          name: company.name,
+          reason: verdict.reason,
+          userRatingCount,
+        },
+      },
+      db
+    );
+
+    return {
+      summary: `filtered ${company.name} (${userRatingCount} reviews)`,
+      metadata: { companyId, userRatingCount, reason: verdict.reason },
+    };
+  }
+
+  await db
+    .from("nexus_companies")
+    .update({
+      metadata: nextMeta,
+      places_synced_at: now,
+      updated_at: now,
+    })
+    .eq("id", companyId);
+
+  return {
+    summary: `scored ${company.name} (${userRatingCount} reviews)`,
+    metadata: { companyId, userRatingCount, kept: true },
+  };
+}
+
