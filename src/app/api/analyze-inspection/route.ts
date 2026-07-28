@@ -42,6 +42,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { sanitizeImageDataUrl } from "@/lib/image-data-url";
 import { extractHouseNumber } from "@/lib/address-normalize";
 import { createChatCompletion, isQuotaError, mapPool } from "@/lib/openai-retry";
+import { parseAiJson } from "@/lib/parse-ai-json";
 import {
   formatCollectionDays,
   isCollectionDay,
@@ -88,8 +89,8 @@ async function analyzeBatch(
                 type: "image_url" as const,
                 image_url: {
                   url: cleanImage,
-                  // low: trash/grass/debris don't need mailbox-level tiles (saves TPM)
-                  detail: "low" as const,
+                  // high: tall grass / curb debris are easy to miss at "low" from a moving car
+                  detail: "high" as const,
                 },
               },
             ]
@@ -117,7 +118,7 @@ async function analyzeBatch(
     "choices" in response
       ? (response.choices[0]?.message?.content ?? "{}")
       : "{}";
-  const parsed = JSON.parse(text) as { results?: unknown[] };
+  const parsed = parseAiJson<{ results?: unknown[] }>(text, { results: [] });
   const raw = (parsed.results ?? []) as {
     propertyId: string;
     violationType: string | null;

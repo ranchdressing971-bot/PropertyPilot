@@ -18,6 +18,7 @@ import {
 import { cacheInspectionClient } from "@/lib/inspection-cache";
 import type { AIInspectionData } from "@/lib/ai-analyze";
 import { captureUploadGeo } from "@/lib/geo/capture-geo";
+import { rosterFromStorage } from "@/lib/roster";
 import {
   Upload,
   Film,
@@ -92,9 +93,9 @@ export default function UploadPage() {
         const [frames, geo] = await Promise.all([
           extractVideoFrames(file, {
             intervalSec: 1.8,
-            maxFrames: 12,
-            maxWidth: 768,
-            quality: 0.62,
+            maxFrames: 14,
+            maxWidth: 960,
+            quality: 0.68,
           }),
           captureUploadGeo(),
         ]);
@@ -107,6 +108,7 @@ export default function UploadPage() {
         setCurrentStep(2);
         const ccrRules = loadCcrRules();
         const trashCollectionDays = loadCollectionDays();
+        const localRoster = rosterFromStorage();
 
         setCurrentStep(3);
         setStatusDetail("AI matching addresses from mailbox & curb numbers...");
@@ -124,6 +126,8 @@ export default function UploadPage() {
               timestamp: f.timestamp,
               dataUrl: f.dataUrl,
             })),
+            // Backup if Supabase roster is empty (CSV only in localStorage)
+            properties: localRoster.length > 0 ? localRoster : undefined,
             neighborhood: profile?.hoaName || "Your Community",
             ccrRules,
             trashCollectionDays,

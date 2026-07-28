@@ -7,6 +7,7 @@ import { ADDRESS_REVIEW_THRESHOLD } from "./geo/types";
 import { sanitizeImageDataUrl } from "./image-data-url";
 import { extractHouseNumber } from "./address-normalize";
 import { createChatCompletion, mapPool } from "./openai-retry";
+import { parseAiJson } from "./parse-ai-json";
 
 /** 3 frames per API call + 2 calls in flight ≈ faster without TPM blowups */
 const FRAMES_PER_MATCH_CALL = 3;
@@ -122,7 +123,7 @@ async function matchBatch(
     "choices" in response
       ? (response.choices[0]?.message?.content ?? "{}")
       : "{}";
-  const parsed = JSON.parse(text) as {
+  const parsed = parseAiJson<{
     matches?: {
       frameIndex: number;
       visibleText: string | null;
@@ -133,7 +134,7 @@ async function matchBatch(
       focalRegion?: AddressMatchResult["focalRegion"];
       reasoning: string;
     }[];
-  };
+  }>(text, { matches: [] });
 
   return (parsed.matches ?? []).map((m) => {
     const frameIndex =

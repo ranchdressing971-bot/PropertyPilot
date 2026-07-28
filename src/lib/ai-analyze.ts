@@ -202,6 +202,7 @@ Respond with JSON only:
 Be strict:
 - Only flag a violation if it is clearly visible ON THAT property's lot / curb / driveway.
 - Do NOT invent addresses. Use the propertyId and Address given.
+- Drive-through footage is often angled — judge the lot in the frame, not the neighbor across the street.
 - Tall grass only if lawn is clearly overgrown on that lot (not a distant median or roadside strip).
 - Prefer null (good standing) when unsure. Most homes should be null.
 - confidence below 70 means you should return null instead.`;

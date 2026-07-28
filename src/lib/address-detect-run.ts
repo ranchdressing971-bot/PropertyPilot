@@ -9,6 +9,7 @@ import type { DiscoveredHome } from "./frame-property-map";
 import type { Property } from "./mock-data";
 import { sanitizeImageDataUrl } from "./image-data-url";
 import { createChatCompletion, mapPool } from "./openai-retry";
+import { parseAiJson } from "./parse-ai-json";
 
 const FRAMES_PER_VISION_CALL = 4;
 const BATCH_CONCURRENCY = 2;
@@ -57,7 +58,7 @@ async function detectBatch(
     "choices" in response
       ? (response.choices[0]?.message?.content ?? "{}")
       : "{}";
-  const parsed = JSON.parse(text) as {
+  const parsed = parseAiJson<{
     detections?: {
       frameIndex: number;
       visibleAddress: string | null;
@@ -65,7 +66,7 @@ async function detectBatch(
       confidence: number;
       reasoning: string;
     }[];
-  };
+  }>(text, { detections: [] });
 
   const raw = (parsed.detections ?? []).map((d) => ({
     ...d,
@@ -140,6 +141,6 @@ export async function runHomeDiscovery(
     "choices" in response
       ? (response.choices[0]?.message?.content ?? "{}")
       : "{}";
-  const parsed = JSON.parse(text) as { homes?: DiscoveredHome[] };
+  const parsed = parseAiJson<{ homes?: DiscoveredHome[] }>(text, { homes: [] });
   return parsed.homes ?? [];
 }

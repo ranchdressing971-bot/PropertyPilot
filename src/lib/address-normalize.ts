@@ -41,13 +41,20 @@ export function addressDedupeKey(address: string): string {
   return `text|${trimmed.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
 }
 
+function hasStreetSuffix(text: string): boolean {
+  // Fresh regex each call — /g .test() mutates lastIndex and flakes.
+  return /\b(street|st|lane|ln|drive|dr|road|rd|avenue|ave|court|ct|boulevard|blvd|way|circle|cir|place|pl|terrace|ter|trail|trl)\b/i.test(
+    text
+  );
+}
+
 /** Prefer the most complete readable address. */
 export function pickBetterAddress(a: string, b: string): string {
   const score = (addr: string) => {
     if (isPlaceholderAddress(addr)) return 0;
     let s = addr.length;
     if (/\d/.test(addr)) s += 20;
-    if (STREET_SUFFIXES.test(addr)) s += 15;
+    if (hasStreetSuffix(addr)) s += 15;
     if (addr.split(/\s+/).length >= 3) s += 10;
     return s;
   };
@@ -65,7 +72,8 @@ export function addressesLikelySame(a: string, b: string): boolean {
 
   const streetA = streetCore(a);
   const streetB = streetCore(b);
-  if (!streetA || !streetB) return true;
+  // Same number + missing street is NOT enough — "123" on Oak ≠ "123" on Maple.
+  if (!streetA || !streetB) return false;
 
   if (streetA === streetB) return true;
   if (streetA.includes(streetB) || streetB.includes(streetA)) return true;
@@ -84,7 +92,7 @@ export function formatAddressTitle(address: string): string {
     .split(/\s+/)
     .map((word, i) => {
       if (i === 0 && /^\d+[a-z]?$/i.test(word)) return word;
-      if (STREET_SUFFIXES.test(word)) {
+      if (hasStreetSuffix(word)) {
         const map: Record<string, string> = {
           st: "St",
           street: "Street",
