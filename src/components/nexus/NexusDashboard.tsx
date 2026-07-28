@@ -204,7 +204,7 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
         <p className="mt-1.5 max-w-2xl text-sm text-ink-600">
           One click finds small local HOA managers, pulls public emails from
           their sites, writes drafts, and has AI approve or reject them. You
-          don’t review every email — the AI does. Sending (1 email / 15 min,
+          don’t review every email — the AI does. Sending (1 email every 5–15 min,
           10am–3pm) plugs in once the mailbox exists.
         </p>
 
@@ -309,7 +309,7 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
             </h3>
             <p className="mt-1 text-sm text-ink-600">
               AI-approved drafts. When the sender is connected, these go out at
-              about one every 15 minutes from 10am–3pm — not all at once.
+              about one every 5–15 minutes from 10am–3pm — paced so it looks natural.
             </p>
           </div>
           <button
