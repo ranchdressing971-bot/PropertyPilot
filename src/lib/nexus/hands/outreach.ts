@@ -41,10 +41,17 @@ sees to house numbers, pulls evidence frames, and returns a review list of
 possible violations. The manager approves or discards each item — RideBy never
 emails homeowners on its own.
 
-The offer in this first email: one free inspection run on a video of their own
-community. No card. No sales call. Reply "yes" and Isaac sends a 60-second
-filming guide.
+The offer in this first email: one free inspection on a video of their own
+community. No card. No sales call. CTA is a single link to start — do not ask
+them to reply "yes".
 `.trim();
+
+function ctaUrl(): string {
+  return (
+    process.env.NEXUS_OUTREACH_CTA_URL?.trim() ||
+    "https://rideby-ai.vercel.app/free"
+  );
+}
 
 const SYSTEM_PROMPT = `
 You write cold first-touch emails from Isaac at RideBy to HOA / community
@@ -64,12 +71,14 @@ Structure (body, in order):
 2. One sentence on the pain they already know: clipboard drive-throughs, then
    matching photos to addresses by hand.
 3. One sentence on what RideBy does, in plain English.
-4. The offer + a sharp CTA: ask them to reply "yes" for a free inspection on a
-   video of their own community. Isaac will send a short filming guide.
+4. The offer + CTA: one free inspection on a video of their own community, then
+   paste the exact CTA URL from the context on its own line. Do not ask them to
+   reply "yes". Do not invent a different URL.
 
 Hard rules:
-- 70 words max in the body. Shorter is better.
-- Plain text only. No markdown, bullets, links, or emojis.
+- 75 words max in the body (URL line does not count). Shorter is better.
+- Plain text only. No markdown, bullets, or emojis.
+- Exactly one URL in the whole email — the CTA URL provided in context.
 - Never invent facts: portfolio size, communities they manage, tools they use,
   or that you've spoken to anyone there. Use only the context block.
 - Do not mention pricing, demos, calendars, or "jump on a call".
@@ -81,7 +90,7 @@ Hard rules:
   different cities would get the identical body, you failed.
 
 Return strict JSON only: {"subject": string, "body": string}
-Body ends with a blank line, then "Isaac" on its own line.
+Body ends with the CTA URL on its own line, then a blank line, then "Isaac".
 `.trim();
 
 export function isOutreachConfigured(): boolean {
@@ -145,8 +154,17 @@ function draftLooksTemplated(subject: string, body: string): string | null {
   }
   if (/\bfree\b/i.test(subject)) return "subject contains 'free'";
   if (/^re:/i.test(subject)) return "fake reply subject";
-  const words = body.trim().split(/\s+/).length;
-  if (words > 85) return `too long (${words} words)`;
+  if (/\breply ["']?yes["']?/i.test(body)) return "asks to reply yes instead of linking";
+  const expectedUrl = ctaUrl();
+  if (!body.includes(expectedUrl)) return "missing CTA URL";
+  const urlMatches = body.match(/https?:\/\/\S+/g) ?? [];
+  if (urlMatches.length !== 1) return `expected 1 URL, found ${urlMatches.length}`;
+  const words = body
+    .replace(expectedUrl, "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+  if (words > 90) return `too long (${words} words)`;
   return null;
 }
 
@@ -195,7 +213,7 @@ async function generateDraft(
               `Who you are writing to:\n${context}\n\n` +
               (attempt === 0 || !lastProblem
                 ? `Write one cold email. Make the subject and opener specific to this recipient using only the facts above. Return JSON.`
-                : `Your previous draft failed review (${lastProblem}). Rewrite with none of the banned marketing words, a different subject, and under 70 words. Return JSON.`),
+                : `Your previous draft failed review (${lastProblem}). Rewrite. Include the exact CTA URL on its own line, no "reply yes", no banned marketing words, different subject. Return JSON.`),
           },
         ],
       },
@@ -318,6 +336,7 @@ export async function runOutreachDraft(
     contact.name ? `Recipient name: ${contact.name}` : null,
     contact.role ? `Recipient mailbox type: ${contact.role}` : null,
     `Recipient email: ${contact.email}`,
+    `CTA URL (paste exactly, on its own line): ${ctaUrl()}`,
   ]
     .filter(Boolean)
     .join("\n");
