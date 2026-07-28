@@ -35,17 +35,14 @@ const MAX_DRAFTS_PER_COMPANY = 1;
 const MIN_CONTACT_CONFIDENCE = 45;
 
 const PRODUCT_BRIEF = `
-RideBy helps HOA / community association managers do drive-through inspections
-without the clipboard grind.
+RideBy is a small tool Isaac built for HOA managers.
 
-The manager films a normal drive-through on their phone. RideBy matches what it
-sees to house numbers, pulls evidence frames, and returns a review list of
-possible violations. The manager approves or discards each item — RideBy never
-emails homeowners on its own.
+You film a normal drive-through on your phone. It tries to match house numbers
+and flags possible issues for you to approve or toss. It does not email
+homeowners for you.
 
-The offer in this first email: one free inspection on a video of their own
-community. No card. No sales call. CTA is a single link to start — do not ask
-them to reply "yes".
+First email offer: try one free inspection on a video of their own community.
+No card. No call. One link. That is it.
 `.trim();
 
 function ctaUrl(): string {
@@ -56,40 +53,48 @@ function ctaUrl(): string {
 }
 
 const SYSTEM_PROMPT = `
-You write cold first-touch emails from Isaac at RideBy to HOA / community
-association managers.
+You write a short cold email from Isaac (one guy building RideBy) to someone
+who manages HOAs / community associations.
 
-Voice:
-- One operator emailing another operator. Short sentences. Concrete words.
-- Sound like a human, not a product page. Never use: streamline, leverage,
-  cutting-edge, revolutionize, seamless, empower, simplify, simplifies,
-  automate, automating, game-changer, synergy.
-- Warm but direct. No flattery. No "I hope this finds you well".
+This is NOT a sales email, NOT a product launch, NOT a commercial. If it could
+air as a 15-second ad, you failed. Write like a peer who noticed a real job
+pain and built a small thing — one note, then out.
 
-Structure (body, in order):
-1. One-line opener that uses something real from the context (their name, their
-   company name, or their city). If you only have a generic inbox, skip the
-   fake familiarity and just be clear.
-2. One sentence on the pain they already know: clipboard drive-throughs, then
-   matching photos to addresses by hand.
-3. One sentence on what RideBy does, in plain English.
-4. The offer + CTA: one free inspection on a video of their own community, then
-   paste the exact CTA URL from the context on its own line. Do not ask them to
-   reply "yes". Do not invent a different URL.
+Voice (non-negotiable):
+- Casual, specific, a little blunt. Like a Slack DM or a text, not LinkedIn.
+- Contractions are fine (I'm, it's, don't).
+- No hype. No polish. No "value prop". No feature list.
+- Never sound excited about your own product.
 
-Hard rules:
-- 75 words max in the body (URL line does not count). Shorter is better.
-- Plain text only. No markdown, bullets, or emojis.
-- Exactly one URL in the whole email — the CTA URL provided in context.
-- Never invent facts: portfolio size, communities they manage, tools they use,
-  or that you've spoken to anyone there. Use only the context block.
-- Do not mention pricing, demos, calendars, or "jump on a call".
-- Subject: 4–7 words, specific, lowercase-ish, no "free", no "Re:", no
-  clickbait, no company-name spam. Aim for curiosity about the job, not the
-  product. Good examples of shape: "drive-through notes without the clipboard",
-  "faster HOA drive-throughs in Austin". Bad: "free inspection for your community".
-- Every draft must feel different from a generic template. If two companies in
-  different cities would get the identical body, you failed.
+Banned words/phrases (instant fail):
+streamline, leverage, cutting-edge, revolutionize, seamless, empower,
+simplify/simplifies/simplifying, automate/automating, game-changer, synergy,
+transform, innovative, solution, platform, optimize, unlock, elevate,
+"reaching out", "wanted to share", "I'd love to", "excited to", "check out",
+"save you time", "take your … to the next level", "hope this finds you",
+"as an HOA manager", "I noticed your company", "quick question", "just following up".
+
+What to write (body):
+- 40–65 words of prose max (URL line does not count). Prefer ~50.
+- Open with one specific, true detail from context (name, company, or city).
+  If the inbox is generic (info@ / office@), do not fake a personal greeting —
+  just start with the job pain.
+- Name the clipboard / paper drive-through annoyance in plain words. One beat.
+- Say what RideBy does in one plain sentence (phone video → review list). No
+  adjectives.
+- Soft offer: one free try on their own community video. Then paste the exact
+  CTA URL from context on its own line. Do not say "reply yes". Do not invent
+  a URL. Do not pitch a demo, call, or pricing.
+- Sign off as Isaac only. No title, no "Founder", no "Team RideBy".
+
+Subject:
+- 3–6 words. Lowercase ok. About the job, not the product.
+- No "free", no "Re:", no company name spam, no exclamation marks.
+- Good shape: "clipboard drive-throughs", "hoa notes from a phone video"
+- Bad shape: "free AI inspection for your HOA", "transform your inspections"
+
+Anti-template test: if you swap the company name for another HOA shop in another
+city and the email still reads identical, rewrite until it doesn't.
 
 Return strict JSON only: {"subject": string, "body": string}
 Body ends with the CTA URL on its own line, then a blank line, then "Isaac".
@@ -143,10 +148,31 @@ const BANNED_PHRASES = [
   "empower",
   "simplifies",
   "simplify",
+  "simplifying",
   "automating",
   "automate",
   "game-changer",
   "synergy",
+  "transform",
+  "innovative",
+  "solution",
+  "platform",
+  "optimize",
+  "unlock",
+  "elevate",
+  "reaching out",
+  "wanted to share",
+  "i'd love to",
+  "excited to",
+  "check out",
+  "save you time",
+  "hope this finds you",
+  "as an hoa manager",
+  "i noticed your company",
+  "quick question",
+  "just following up",
+  "founder at",
+  "team rideby",
 ];
 
 function draftLooksTemplated(subject: string, body: string): string | null {
@@ -156,7 +182,11 @@ function draftLooksTemplated(subject: string, body: string): string | null {
   }
   if (/\bfree\b/i.test(subject)) return "subject contains 'free'";
   if (/^re:/i.test(subject)) return "fake reply subject";
+  if (/!/.test(subject)) return "subject has exclamation";
   if (/\breply ["']?yes["']?/i.test(body)) return "asks to reply yes instead of linking";
+  if (/\bi('m| am) (reaching out|writing|emailing) (because|to)\b/i.test(body)) {
+    return "generic commercial opener";
+  }
   const expectedUrl = ctaUrl();
   if (!body.includes(expectedUrl)) return "missing CTA URL";
   const urlMatches = body.match(/https?:\/\/\S+/g) ?? [];
@@ -166,7 +196,8 @@ function draftLooksTemplated(subject: string, body: string): string | null {
     .trim()
     .split(/\s+/)
     .filter(Boolean).length;
-  if (words > 90) return `too long (${words} words)`;
+  if (words > 70) return `too long (${words} words)`;
+  if (words < 25) return `too short (${words} words)`;
   return null;
 }
 
@@ -214,8 +245,8 @@ async function generateDraft(
               `Product (for your understanding — do not paste this wording):\n${PRODUCT_BRIEF}\n\n` +
               `Who you are writing to:\n${context}\n\n` +
               (attempt === 0 || !lastProblem
-                ? `Write one cold email. Make the subject and opener specific to this recipient using only the facts above. Return JSON.`
-                : `Your previous draft failed review (${lastProblem}). Rewrite. Include the exact CTA URL on its own line, no "reply yes", no banned marketing words, different subject. Return JSON.`),
+                ? `Write one short peer note (not a pitch). Specific to this recipient using only the facts above. Return JSON.`
+                : `Previous draft failed (${lastProblem}). Rewrite shorter and more human — no ad voice, no banned phrases, exact CTA URL on its own line. Return JSON.`),
           },
         ],
       },
@@ -419,20 +450,25 @@ export async function runOutreachDraft(
 }
 
 const REVIEW_PROMPT = `
-You are the QA gate for RideBy cold outreach. Decide whether this draft is
-safe and good enough to send unattended.
+You are a harsh QA gate for RideBy cold outreach. Isaac would rather send
+nothing than a commercial-sounding email.
 
-Approve only if ALL are true:
-- Sounds like a human operator, not a brochure
+Approve ONLY if ALL are true:
+- Reads like a short note from one person to another (Slack/text energy)
+- Does NOT sound like an ad, product launch, SaaS pitch, or brochure
 - No invented facts about the recipient
-- Mentions the clipboard / drive-through pain in plain English
-- Includes exactly the expected CTA URL
-- Subject is specific and not spammy (no "free", no "Re:")
-- Body is under ~90 words of prose
-- Would not embarrass Isaac if a real HOA manager read it
+- Mentions clipboard / paper drive-through pain in plain words
+- Exactly one URL — the expected CTA URL
+- Subject is boring-specific about the job (no "free", no "Re:", no !)
+- Body prose under ~70 words
+- Would not make Isaac cringe if a real manager forwarded it to a friend
 
-Reject if any of those fail, or if the email is generic template sludge,
-awkward ("Hello THE TEXAS PROPERTY MANAGER"), or marketing-speak heavy.
+Hard reject (score ≤40) if any of these:
+- Generic template that would fit any HOA company with a name swap
+- Marketing / commercial voice ("reaching out", "excited", "solution", "platform")
+- Awkward greeting ("Hello THE TEXAS PROPERTY MANAGER")
+- Feature-dumping or hype adjectives
+- Asks for a call, demo, or "reply yes"
 
 Return strict JSON only:
 {"decision":"approve"|"reject","score":0-100,"reason":"short plain reason"}
