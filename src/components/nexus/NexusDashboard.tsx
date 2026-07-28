@@ -1,56 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   Building2,
   Check,
-  Clock,
   ExternalLink,
   Loader2,
   Mail,
-  Phone,
   RefreshCw,
   Search,
   Sparkles,
   X,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
-import { staggerContainer, staggerItem } from "@/lib/motion";
 import type { NexusState } from "@/lib/nexus/state";
 import clsx from "clsx";
 
-const SUGGESTED_QUERIES = [
-  "HOA management company in Austin TX",
-  "HOA management company in Phoenix AZ",
-  "community association management in Charlotte NC",
+const CITY_PRESETS = [
+  { label: "Austin", query: "HOA management company in Austin TX" },
+  { label: "Phoenix", query: "HOA management company in Phoenix AZ" },
+  { label: "Charlotte", query: "community association management in Charlotte NC" },
+  { label: "Dallas", query: "HOA management company in Dallas TX" },
 ];
 
-const jobStatusStyles: Record<string, string> = {
-  queued: "bg-amber-50 text-amber-800 ring-amber-600/10",
-  running: "bg-brand-50 text-brand-700 ring-brand-600/10",
-  done: "bg-emerald-50 text-emerald-700 ring-emerald-600/10",
-  failed: "bg-red-50 text-red-700 ring-red-600/10",
-  pending: "bg-ink-50 text-ink-600 ring-ink-600/10",
-  pending_approval: "bg-amber-50 text-amber-800 ring-amber-600/10",
-  approved: "bg-emerald-50 text-emerald-700 ring-emerald-600/10",
-  rejected: "bg-red-50 text-red-700 ring-red-600/10",
-  skipped: "bg-ink-50 text-ink-500 ring-ink-600/10",
-};
-
-function StatusPill({ status }: { status: string }) {
-  return (
-    <span
-      className={clsx(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
-        jobStatusStyles[status] ?? "bg-ink-50 text-ink-600 ring-ink-600/10"
-      )}
-    >
-      {status}
-    </span>
-  );
-}
+type StepId = "find" | "emails" | "write" | "review";
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -64,125 +39,189 @@ function relativeTime(iso: string): string {
 
 export function NexusDashboard({ initialState }: { initialState: NexusState }) {
   const [state, setState] = useState(initialState);
-  const [query, setQuery] = useState("");
-  const [maxResults, setMaxResults] = useState(60);
-  const [queueing, setQueueing] = useState(false);
-  const [researching, setResearching] = useState(false);
-  const [drafting, setDrafting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState(CITY_PRESETS[0]!.query);
+  const [busy, setBusy] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [workingNote, setWorkingNote] = useState<string | null>(null);
+
+  const activeCompanies = useMemo(
+    () => state.companies.filter((c) => c.status === "active"),
+    [state.companies]
+  );
+  const pendingResearch = useMemo(
+    () =>
+      activeCompanies.filter(
+        (c) =>
+          c.website &&
+          (c.research_status === "pending" || !c.research_status)
+      ).length,
+    [activeCompanies]
+  );
+  const pendingDrafts = useMemo(
+    () => state.drafts.filter((d) => d.status === "pending_approval"),
+    [state.drafts]
+  );
+  const needsDraft = useMemo(() => {
+    const drafted = new Set(
+      state.drafts
+        .filter((d) =>
+          ["pending_approval", "approved", "sent"].includes(d.status)
+        )
+        .map((d) => d.company_id)
+    );
+    const withContact = new Set(state.contacts.map((c) => c.company_id));
+    let n = 0;
+    for (const id of withContact) if (!drafted.has(id)) n += 1;
+    return n;
+  }, [state.contacts, state.drafts]);
+
+  const jobsOutstanding =
+    state.queuedCount > 0 || state.jobs.some((j) => j.status === "running");
+
+  const nextStep: StepId = useMemo(() => {
+    if (pendingDrafts.length > 0) return "review";
+    if (needsDraft > 0) return "write";
+    if (pendingResearch > 0 || (activeCompanies.length > 0 && state.contactCount === 0)) {
+      return "emails";
+    }
+    if (activeCompanies.length === 0) return "find";
+    return "find";
+  }, [
+    pendingDrafts.length,
+    needsDraft,
+    pendingResearch,
+    activeCompanies.length,
+    state.contactCount,
+  ]);
 
   const refresh = useCallback(async () => {
-    setRefreshing(true);
     try {
       const res = await fetch("/api/nexus/state", { cache: "no-store" });
       const data = await res.json();
       if (data.ok) setState(data as NexusState);
     } catch {
-      // Leave the last good state on screen rather than blanking the page.
-    } finally {
-      setRefreshing(false);
+      // Keep last good state.
     }
   }, []);
 
-  // Poll while work is outstanding so results appear without a manual refresh.
   useEffect(() => {
-    const busy =
-      state.queuedCount > 0 || state.jobs.some((j) => j.status === "running");
-    if (!busy) return;
-    const id = window.setInterval(refresh, 15000);
+    if (!jobsOutstanding) return;
+    const id = window.setInterval(refresh, 8000);
     return () => window.clearInterval(id);
-  }, [state.queuedCount, state.jobs, refresh]);
+  }, [jobsOutstanding, refresh]);
 
-  async function queueSearch(searchQuery: string) {
-    const trimmed = searchQuery.trim();
-    if (!trimmed || queueing) return;
+  async function runWorker(label = "Working…") {
+    setWorkingNote(label);
+    try {
+      const res = await fetch("/api/nexus/run", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error ?? "Worker failed");
+      }
+      await refresh();
+      return data as { processed: number; succeeded: number; failed: number };
+    } finally {
+      setWorkingNote(null);
+    }
+  }
 
-    setQueueing(true);
+  async function findCompanies() {
+    const trimmed = query.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
     setMessage(null);
     setError(null);
-
     try {
       const res = await fetch("/api/nexus/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: trimmed, maxResults }),
+        body: JSON.stringify({ query: trimmed, maxResults: 40 }),
       });
       const data = await res.json();
-
-      if (!res.ok || !data.ok) {
-        setError(data.error ?? "Failed to queue search");
-      } else if (data.queued === false) {
-        setMessage(data.message ?? "Already queued");
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Search failed");
+      if (data.queued === false) {
+        setMessage(data.message ?? "That search is already running");
       } else {
-        setMessage("Queued — the next tick will run it");
-        setQuery("");
+        const result = await runWorker("Searching Google for companies…");
+        setMessage(
+          result.processed
+            ? `Done — found new companies (big ones filtered out).`
+            : "Search queued. Hit Run again in a moment if nothing appears."
+        );
       }
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to queue search");
+      setError(err instanceof Error ? err.message : "Search failed");
     } finally {
-      setQueueing(false);
+      setBusy(false);
     }
   }
 
-  async function queueResearch(limit = 10) {
-    if (researching) return;
-    setResearching(true);
+  async function findEmails() {
+    if (busy) return;
+    setBusy(true);
     setMessage(null);
     setError(null);
     try {
       const res = await fetch("/api/nexus/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit }),
+        body: JSON.stringify({ limit: 12 }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) {
-        setError(data.error ?? "Failed to queue research");
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Research failed");
+      if (!data.queued) {
+        setMessage(data.message ?? "No companies left to research");
       } else {
+        const result = await runWorker(
+          `Visiting ${data.queued} website${data.queued === 1 ? "" : "s"} for emails…`
+        );
         setMessage(
-          data.queued
-            ? `Queued research for ${data.queued} compan${data.queued === 1 ? "y" : "ies"}`
-            : (data.message ?? "Nothing left to research")
+          result.processed
+            ? "Done looking for emails. Check the Contacts list below."
+            : "Research queued."
         );
       }
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to queue research");
+      setError(err instanceof Error ? err.message : "Research failed");
     } finally {
-      setResearching(false);
+      setBusy(false);
     }
   }
 
-  async function queueDrafts(limit = 5) {
-    if (drafting) return;
-    setDrafting(true);
+  async function writeEmails() {
+    if (busy) return;
+    setBusy(true);
     setMessage(null);
     setError(null);
     try {
       const res = await fetch("/api/nexus/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit }),
+        body: JSON.stringify({ limit: 7 }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) {
-        setError(data.error ?? "Failed to queue drafts");
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Drafting failed");
+      if (!data.queued) {
+        setMessage(data.message ?? "Nothing to draft");
       } else {
+        const result = await runWorker(
+          `Writing ${data.queued} email${data.queued === 1 ? "" : "s"}…`
+        );
         setMessage(
-          data.queued
-            ? `Queued ${data.queued} draft${data.queued === 1 ? "" : "s"}`
-            : (data.message ?? "No companies waiting for a draft")
+          result.processed
+            ? "Drafts ready — review them below."
+            : "Drafts queued."
         );
       }
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to queue drafts");
+      setError(err instanceof Error ? err.message : "Drafting failed");
     } finally {
-      setDrafting(false);
+      setBusy(false);
     }
   }
 
@@ -202,18 +241,15 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
         body: JSON.stringify({ action, ...opts }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) {
-        setError(data.error ?? "Failed to update draft");
-      } else {
-        setMessage(
-          action === "approve"
-            ? "Approved — nothing sends yet (sending hand not built)"
-            : "Rejected"
-        );
-      }
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Update failed");
+      setMessage(
+        action === "approve"
+          ? "Approved. Nothing sends yet — sending isn’t built."
+          : "Rejected"
+      );
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update draft");
+      setError(err instanceof Error ? err.message : "Update failed");
     } finally {
       setReviewingId(null);
     }
@@ -226,7 +262,7 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
           <div>
             <h2 className="font-display text-lg font-semibold text-ink-900">
-              Nexus is not ready
+              Nexus isn’t ready
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-ink-700">
               {state.error}
@@ -237,9 +273,53 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
     );
   }
 
-  const pendingResearch = state.companies.filter(
-    (c) => c.website && (c.research_status === "pending" || !c.research_status)
-  ).length;
+  const steps: Array<{
+    id: StepId;
+    n: number;
+    title: string;
+    blurb: string;
+    ready: boolean;
+    detail: string;
+  }> = [
+    {
+      id: "find",
+      n: 1,
+      title: "Find companies",
+      blurb: "Search Google for HOA managers in a city.",
+      ready: true,
+      detail: `${activeCompanies.length} small local leads`,
+    },
+    {
+      id: "emails",
+      n: 2,
+      title: "Find emails",
+      blurb: "Visit their websites and pull public emails.",
+      ready: state.phase2Ready && activeCompanies.length > 0,
+      detail:
+        pendingResearch > 0
+          ? `${pendingResearch} waiting`
+          : `${state.contactCount} emails found`,
+    },
+    {
+      id: "write",
+      n: 3,
+      title: "Write emails",
+      blurb: "AI drafts a short cold email with your free-offer link.",
+      ready: state.phase2Ready && state.contactCount > 0,
+      detail:
+        needsDraft > 0
+          ? `${needsDraft} ready to draft`
+          : `${pendingDrafts.length} waiting for you`,
+    },
+    {
+      id: "review",
+      n: 4,
+      title: "Review",
+      blurb: "Approve or reject. Nothing sends automatically.",
+      ready: pendingDrafts.length > 0,
+      detail: `${pendingDrafts.length} to review`,
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -249,493 +329,393 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
             <div>
               <h2 className="font-display text-base font-semibold text-ink-900">
-                Phase 2 schema not installed
+                One setup step left
               </h2>
               <p className="mt-1 text-sm text-ink-700">
                 Run <code className="rounded bg-white px-1.5 py-0.5 text-xs">docs/NEXUS_SCHEMA_PHASE2.sql</code>{" "}
-                in the Supabase SQL editor to unlock email research and drafting.
+                in Supabase to unlock email finding and drafting.
               </p>
             </div>
           </div>
         </Card>
       )}
 
-      <motion.div
-        variants={staggerContainer}
-        initial="initial"
-        animate="animate"
-        className="grid grid-cols-2 gap-3 sm:grid-cols-4"
-      >
-        {[
-          {
-            label: "Active leads",
-            value: state.companies.filter((c) => c.status === "active").length,
-            icon: Building2,
-          },
-          { label: "Contacts", value: state.contactCount, icon: Mail },
-          { label: "Drafts pending", value: state.pendingDraftCount, icon: Sparkles },
-          { label: "Queued jobs", value: state.queuedCount, icon: Clock },
-        ].map((stat) => (
-          <motion.div key={stat.label} variants={staggerItem}>
-            <Card padding="sm" className="flex items-center gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-100">
-                <stat.icon className="h-4 w-4 text-ink-600" />
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-xs font-medium text-ink-500">
-                  {stat.label}
-                </p>
-                <p className="text-xl font-semibold tabular-nums text-ink-900">
-                  {stat.value}
-                </p>
-              </div>
-            </Card>
-          </motion.div>
-        ))}
-      </motion.div>
-
       <Card>
-        <h2 className="font-display text-lg font-semibold text-ink-900">
-          Run Lead Hand
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+          How to use Nexus
+        </p>
+        <h2 className="mt-1 font-display text-xl font-semibold text-ink-900">
+          Four steps. Do them in order.
         </h2>
-        <p className="mt-1 text-sm text-ink-600">
-          Queues a Google Places search. Results are deduped by Place ID, so
-          re-running the same query is safe.
+        <p className="mt-1.5 max-w-2xl text-sm text-ink-600">
+          Find companies → find emails on their sites → write drafts → you
+          approve. Emails never send by themselves.
         </p>
 
-        <form
-          className="mt-4 flex flex-col gap-2.5 sm:flex-row"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void queueSearch(query);
-          }}
-        >
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="HOA management company in Austin TX"
-            className="flex-1 rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none placeholder:text-ink-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-          />
-          <select
-            value={maxResults}
-            onChange={(e) => setMaxResults(Number(e.target.value))}
-            className="rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-700 outline-none focus:border-brand-400"
-          >
-            <option value={20}>Up to 20</option>
-            <option value={60}>Up to 60</option>
-            <option value={120}>Up to 120</option>
-          </select>
-          <button
-            type="submit"
-            disabled={queueing || !query.trim()}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-800 disabled:opacity-50"
-          >
-            {queueing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-            Queue search
-          </button>
-        </form>
+        <ol className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {steps.map((step) => {
+            const isNext = step.id === nextStep;
+            return (
+              <li
+                key={step.id}
+                className={clsx(
+                  "rounded-2xl border p-3.5",
+                  isNext
+                    ? "border-brand-300 bg-brand-50/60"
+                    : "border-ink-100 bg-ink-50/40"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={clsx(
+                      "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
+                      isNext
+                        ? "bg-brand-700 text-white"
+                        : "bg-ink-200 text-ink-700"
+                    )}
+                  >
+                    {step.n}
+                  </span>
+                  <p className="text-sm font-semibold text-ink-900">{step.title}</p>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-ink-600">
+                  {step.blurb}
+                </p>
+                <p className="mt-2 text-[11px] font-medium text-ink-500">
+                  {step.detail}
+                </p>
+              </li>
+            );
+          })}
+        </ol>
+      </Card>
 
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {SUGGESTED_QUERIES.map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              onClick={() => setQuery(suggestion)}
-              className="rounded-full bg-ink-50 px-3 py-1 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-100"
-            >
-              {suggestion}
-            </button>
-          ))}
+      {(message || error || workingNote || jobsOutstanding) && (
+        <p
+          className={clsx(
+            "text-sm font-medium",
+            error ? "text-red-700" : "text-brand-800"
+          )}
+        >
+          {error ??
+            workingNote ??
+            (jobsOutstanding ? "Still working in the background…" : message)}
+        </p>
+      )}
+
+      {/* Step 1 */}
+      <Card className={clsx(nextStep === "find" && "ring-2 ring-brand-200")}>
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-100">
+            <Search className="h-4 w-4 text-ink-700" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-display text-lg font-semibold text-ink-900">
+              1. Find companies
+            </h3>
+            <p className="mt-1 text-sm text-ink-600">
+              Pick a city. Nexus searches Google, keeps small local HOA managers,
+              and drops big nationals.
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {CITY_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => setQuery(preset.query)}
+                  className={clsx(
+                    "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                    query === preset.query
+                      ? "bg-ink-900 text-white"
+                      : "bg-ink-100 text-ink-700 hover:bg-ink-200"
+                  )}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2.5 sm:flex-row">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="flex-1 rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+              />
+              <button
+                type="button"
+                disabled={busy || !query.trim()}
+                onClick={() => void findCompanies()}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50"
+              >
+                {busy && nextStep === "find" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="h-4 w-4" />
+                )}
+                Search now
+              </button>
+            </div>
+          </div>
         </div>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <h2 className="font-display text-lg font-semibold text-ink-900">
-            Research Hand
-          </h2>
-          <p className="mt-1 text-sm text-ink-600">
-            Crawls company websites for publicly posted emails. Honors robots.txt,
-            keeps a small page budget, and records the source page for every address.
-          </p>
-          <p className="mt-2 text-xs text-ink-500">
-            {pendingResearch} compan{pendingResearch === 1 ? "y" : "ies"} waiting ·{" "}
-            {state.researchedCount} researched
-          </p>
+      {/* Step 2 */}
+      <Card className={clsx(nextStep === "emails" && "ring-2 ring-brand-200")}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-100">
+              <Mail className="h-4 w-4 text-ink-700" />
+            </span>
+            <div>
+              <h3 className="font-display text-lg font-semibold text-ink-900">
+                2. Find emails
+              </h3>
+              <p className="mt-1 text-sm text-ink-600">
+                Opens each company website and looks for public contact emails.
+                {pendingResearch > 0
+                  ? ` ${pendingResearch} companies waiting.`
+                  : state.contactCount > 0
+                    ? ` ${state.contactCount} emails found so far.`
+                    : " Find companies first."}
+              </p>
+            </div>
+          </div>
           <button
             type="button"
-            disabled={researching || !state.phase2Ready || pendingResearch === 0}
-            onClick={() => void queueResearch(10)}
-            className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-ink-800 disabled:opacity-50"
+            disabled={
+              busy || !state.phase2Ready || activeCompanies.length === 0
+            }
+            onClick={() => void findEmails()}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-800 disabled:opacity-50"
           >
-            {researching ? (
+            {busy && nextStep === "emails" ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Search className="h-4 w-4" />
+              <Mail className="h-4 w-4" />
             )}
-            Research next 10
+            Find emails
           </button>
-        </Card>
+        </div>
+      </Card>
 
-        <Card>
-          <h2 className="font-display text-lg font-semibold text-ink-900">
-            Outreach Hand
-          </h2>
-          <p className="mt-1 text-sm text-ink-600">
-            Writes personalized first-touch drafts for review. Does not send —
-            approval only. Sending needs a separate domain and Gmail API later.
-          </p>
-          <p className="mt-2 text-xs text-ink-500">
-            {state.contactCount} contact{state.contactCount === 1 ? "" : "s"} ·{" "}
-            {state.pendingDraftCount} pending approval
-          </p>
+      {/* Step 3 */}
+      <Card className={clsx(nextStep === "write" && "ring-2 ring-brand-200")}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink-100">
+              <Sparkles className="h-4 w-4 text-ink-700" />
+            </span>
+            <div>
+              <h3 className="font-display text-lg font-semibold text-ink-900">
+                3. Write emails
+              </h3>
+              <p className="mt-1 text-sm text-ink-600">
+                Writes a short cold email with your free-offer link
+                (rideby-ai.vercel.app/free). You still have to approve each one.
+              </p>
+            </div>
+          </div>
           <button
             type="button"
-            disabled={drafting || !state.phase2Ready || state.contactCount === 0}
-            onClick={() => void queueDrafts(5)}
-            className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-ink-800 disabled:opacity-50"
+            disabled={busy || !state.phase2Ready || state.contactCount === 0}
+            onClick={() => void writeEmails()}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-800 disabled:opacity-50"
           >
-            {drafting ? (
+            {busy && nextStep === "write" ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Sparkles className="h-4 w-4" />
             )}
-            Draft next 5
+            Write drafts
           </button>
-        </Card>
-      </div>
+        </div>
+      </Card>
 
-      {(message || error) && (
-        <p
-          className={clsx(
-            "text-sm font-medium",
-            error ? "text-red-700" : "text-brand-700"
-          )}
-        >
-          {error ?? message}
-        </p>
-      )}
-
-      {state.drafts.filter((d) => d.status === "pending_approval").length > 0 && (
-        <Card>
-          <h2 className="font-display text-lg font-semibold text-ink-900">
-            Drafts pending approval
-          </h2>
-          <p className="mt-1 text-sm text-ink-600">
-            Read each one. Approve clears it to send later; reject can suppress
-            the address so it never gets drafted again.
-          </p>
-          <ul className="mt-4 space-y-4">
-            {state.drafts
-              .filter((d) => d.status === "pending_approval")
-              .map((draft) => (
-                <li
-                  key={draft.id}
-                  className="rounded-2xl border border-ink-100 bg-ink-50/40 p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-ink-900">
-                        {draft.company_name ?? "Company"}
-                      </p>
-                      <p className="mt-0.5 text-xs text-ink-500">
-                        To {draft.to_email}
-                        {draft.contact_name ? ` · ${draft.contact_name}` : ""}
-                        {draft.confidence != null
-                          ? ` · confidence ${draft.confidence}`
-                          : ""}
-                      </p>
-                    </div>
-                    <StatusPill status={draft.status} />
-                  </div>
-                  <p className="mt-3 text-sm font-medium text-ink-800">
-                    Subject: {draft.subject}
-                  </p>
-                  <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-relaxed text-ink-700">
-                    {draft.body}
-                  </pre>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={reviewingId === draft.id}
-                      onClick={() => void reviewDraft(draft.id, "approve")}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
-                    >
-                      {reviewingId === draft.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Check className="h-3.5 w-3.5" />
-                      )}
-                      Approve
-                    </button>
-                    <button
-                      type="button"
-                      disabled={reviewingId === draft.id}
-                      onClick={() =>
-                        void reviewDraft(draft.id, "reject", {
-                          reason: "Not a fit",
-                          suppress: false,
-                        })
-                      }
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-ink-200 px-3 py-1.5 text-xs font-semibold text-ink-800 hover:bg-ink-300 disabled:opacity-50"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                      Reject
-                    </button>
-                    <button
-                      type="button"
-                      disabled={reviewingId === draft.id}
-                      onClick={() =>
-                        void reviewDraft(draft.id, "reject", {
-                          reason: "Wrong or unwanted address",
-                          suppress: true,
-                        })
-                      }
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-200 disabled:opacity-50"
-                    >
-                      Reject + suppress
-                    </button>
-                  </div>
-                </li>
-              ))}
-          </ul>
-        </Card>
-      )}
-
-      <Card>
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg font-semibold text-ink-900">
-            Companies
-          </h2>
+      {/* Step 4 — drafts */}
+      <Card className={clsx(nextStep === "review" && "ring-2 ring-brand-200")}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display text-lg font-semibold text-ink-900">
+              4. Review drafts
+            </h3>
+            <p className="mt-1 text-sm text-ink-600">
+              {pendingDrafts.length === 0
+                ? "No drafts waiting. Write some in step 3."
+                : "Read each one. Approve keeps it for later sending. Reject drops it."}
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => void refresh()}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-600 transition-colors hover:text-ink-900"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-600 hover:text-ink-900"
           >
-            <RefreshCw
-              className={clsx("h-3.5 w-3.5", refreshing && "animate-spin")}
-            />
+            <RefreshCw className={clsx("h-3.5 w-3.5", busy && "animate-spin")} />
             Refresh
           </button>
         </div>
 
-        {state.companies.length === 0 ? (
-          <p className="mt-4 text-sm text-ink-500">
-            No companies yet. Queue a search above, then wait for the next
-            scheduler tick.
+        {pendingDrafts.length > 0 && (
+          <ul className="mt-4 space-y-4">
+            {pendingDrafts.map((draft) => (
+              <li
+                key={draft.id}
+                className="rounded-2xl border border-ink-100 bg-ink-50/40 p-4"
+              >
+                <p className="text-sm font-semibold text-ink-900">
+                  {draft.company_name ?? "Company"}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-500">
+                  To {draft.to_email}
+                  {draft.contact_name ? ` · ${draft.contact_name}` : ""}
+                </p>
+                <p className="mt-3 text-sm font-medium text-ink-800">
+                  Subject: {draft.subject}
+                </p>
+                <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-relaxed text-ink-700">
+                  {draft.body}
+                </pre>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={reviewingId === draft.id}
+                    onClick={() => void reviewDraft(draft.id, "approve")}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                  >
+                    {reviewingId === draft.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    Looks good
+                  </button>
+                  <button
+                    type="button"
+                    disabled={reviewingId === draft.id}
+                    onClick={() =>
+                      void reviewDraft(draft.id, "reject", {
+                        reason: "Not a fit",
+                      })
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-ink-200 px-3 py-1.5 text-xs font-semibold text-ink-800 hover:bg-ink-300 disabled:opacity-50"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    disabled={reviewingId === draft.id}
+                    onClick={() =>
+                      void reviewDraft(draft.id, "reject", {
+                        reason: "Wrong or unwanted address",
+                        suppress: true,
+                      })
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-200 disabled:opacity-50"
+                  >
+                    Wrong email — never contact
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {/* Simple lists */}
+      <Card>
+        <div className="flex items-center justify-between">
+          <h3 className="font-display text-lg font-semibold text-ink-900">
+            Your leads
+          </h3>
+          <span className="text-xs text-ink-500">
+            {activeCompanies.length} active
+          </span>
+        </div>
+        {activeCompanies.length === 0 ? (
+          <p className="mt-3 text-sm text-ink-500">
+            None yet. Search a city in step 1.
           </p>
         ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-ink-100 text-xs uppercase tracking-wide text-ink-500">
-                  <th className="pb-2 pr-3 font-medium">Company</th>
-                  <th className="pb-2 pr-3 font-medium">Location</th>
-                  <th className="pb-2 pr-3 font-medium">Phone</th>
-                  <th className="pb-2 pr-3 font-medium">Research</th>
-                  <th className="pb-2 pr-3 font-medium">Reviews</th>
-                  <th className="pb-2 pr-3 font-medium">Status</th>
-                  <th className="pb-2 font-medium">Found</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.companies
-                  .filter((c) => c.status === "active")
-                  .map((company) => (
-                  <tr
-                    key={company.id}
-                    className="border-b border-ink-50 last:border-0"
-                  >
-                    <td className="py-2.5 pr-3">
-                      <span className="font-medium text-ink-900">
-                        {company.name}
-                      </span>
-                      {company.website && (
-                        <a
-                          href={company.website}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="ml-1.5 inline-flex text-ink-400 transition-colors hover:text-brand-700"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      )}
-                    </td>
-                    <td className="py-2.5 pr-3 text-ink-600">
-                      {[company.city, company.state].filter(Boolean).join(", ") ||
-                        "—"}
-                    </td>
-                    <td className="py-2.5 pr-3 text-ink-600">
-                      {company.phone ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <Phone className="h-3.5 w-3.5 text-ink-400" />
-                          {company.phone}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="py-2.5 pr-3">
-                      <StatusPill status={company.research_status || "pending"} />
-                    </td>
-                    <td className="py-2.5 pr-3 text-ink-600 tabular-nums">
-                      {typeof company.metadata?.userRatingCount === "number"
-                        ? company.metadata.userRatingCount
-                        : "—"}
-                    </td>
-                    <td className="py-2.5 pr-3">
-                      <StatusPill status={company.stage} />
-                    </td>
-                    <td className="py-2.5 text-ink-500">
-                      {relativeTime(company.created_at)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="mt-3 divide-y divide-ink-50">
+            {activeCompanies.map((company) => (
+              <li
+                key={company.id}
+                className="flex items-start justify-between gap-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-ink-900">
+                    {company.name}
+                    {company.website && (
+                      <a
+                        href={company.website}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="ml-1.5 inline-flex text-ink-400 hover:text-brand-700"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                  </p>
+                  <p className="text-xs text-ink-500">
+                    {[company.city, company.state].filter(Boolean).join(", ") ||
+                      "—"}
+                    {typeof company.metadata?.userRatingCount === "number"
+                      ? ` · ${company.metadata.userRatingCount} reviews`
+                      : ""}
+                    {company.research_status && company.research_status !== "pending"
+                      ? ` · emails: ${company.research_status}`
+                      : ""}
+                  </p>
+                </div>
+                <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-ink-300" />
+              </li>
+            ))}
+          </ul>
         )}
       </Card>
 
       {state.contacts.length > 0 && (
         <Card>
-          <h2 className="font-display text-lg font-semibold text-ink-900">
-            Contacts found
-          </h2>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-ink-100 text-xs uppercase tracking-wide text-ink-500">
-                  <th className="pb-2 pr-3 font-medium">Email</th>
-                  <th className="pb-2 pr-3 font-medium">Name</th>
-                  <th className="pb-2 pr-3 font-medium">Confidence</th>
-                  <th className="pb-2 font-medium">Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.contacts.map((contact) => (
-                  <tr
-                    key={contact.id}
-                    className="border-b border-ink-50 last:border-0"
-                  >
-                    <td className="py-2.5 pr-3 font-medium text-ink-900">
-                      {contact.email}
-                    </td>
-                    <td className="py-2.5 pr-3 text-ink-600">
-                      {contact.name ?? contact.role ?? "—"}
-                    </td>
-                    <td className="py-2.5 pr-3 tabular-nums text-ink-600">
-                      {contact.confidence}
-                    </td>
-                    <td className="py-2.5 text-ink-500">
-                      {contact.source_url ? (
-                        <a
-                          href={contact.source_url}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="inline-flex items-center gap-1 text-brand-700 hover:underline"
-                        >
-                          page
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <h3 className="font-display text-lg font-semibold text-ink-900">
+            Emails found
+          </h3>
+          <ul className="mt-3 divide-y divide-ink-50">
+            {state.contacts.map((contact) => (
+              <li key={contact.id} className="py-2.5">
+                <p className="text-sm font-medium text-ink-900">{contact.email}</p>
+                <p className="text-xs text-ink-500">
+                  {contact.name ?? contact.role ?? "contact"}
+                  {" · "}
+                  confidence {contact.confidence}
+                  {contact.source_url ? (
+                    <>
+                      {" · "}
+                      <a
+                        href={contact.source_url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="text-brand-700 hover:underline"
+                      >
+                        source page
+                      </a>
+                    </>
+                  ) : null}
+                </p>
+              </li>
+            ))}
+          </ul>
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <h2 className="font-display text-lg font-semibold text-ink-900">
-            Job queue
-          </h2>
-          {state.jobs.length === 0 ? (
-            <p className="mt-4 text-sm text-ink-500">No jobs yet.</p>
-          ) : (
-            <ul className="mt-4 space-y-2.5">
-              {state.jobs.map((job) => (
-                <li
-                  key={job.id}
-                  className="flex items-start justify-between gap-3 border-b border-ink-50 pb-2.5 last:border-0 last:pb-0"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink-900">
-                      {job.type}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-ink-500">
-                      {typeof job.payload?.query === "string"
-                        ? job.payload.query
-                        : typeof job.payload?.companyId === "string"
-                          ? `company ${job.payload.companyId.slice(0, 8)}…`
-                          : "—"}
-                      {job.attempts > 1 ? ` · attempt ${job.attempts}` : ""}
-                    </p>
-                    {job.last_error && (
-                      <p className="mt-1 line-clamp-2 text-xs text-red-600">
-                        {job.last_error}
-                      </p>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <StatusPill status={job.status} />
-                    <p className="mt-1 text-[11px] text-ink-400">
-                      {relativeTime(job.created_at)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card>
-          <h2 className="font-display text-lg font-semibold text-ink-900">
-            Action log
-          </h2>
-          <p className="mt-1 text-sm text-ink-600">
-            Every action Nexus takes, newest first.
-          </p>
-          {state.actions.length === 0 ? (
-            <p className="mt-4 text-sm text-ink-500">Nothing logged yet.</p>
-          ) : (
-            <ul className="mt-4 space-y-2">
-              {state.actions.map((action) => (
-                <li key={action.id} className="flex items-start gap-2.5 text-sm">
-                  <span
-                    className={clsx(
-                      "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
-                      action.actor === "isaac" ? "bg-brand-600" : "bg-ink-300"
-                    )}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-ink-800">{action.action}</p>
-                    <p className="text-xs text-ink-500">
-                      {action.actor} · {relativeTime(action.created_at)}
-                      {typeof action.metadata?.name === "string"
-                        ? ` · ${action.metadata.name}`
-                        : typeof action.metadata?.email === "string"
-                          ? ` · ${action.metadata.email}`
-                          : typeof action.metadata?.to === "string"
-                            ? ` · ${action.metadata.to}`
-                            : ""}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
+      {jobsOutstanding && (
+        <p className="text-center text-xs text-ink-400">
+          Background jobs: {state.queuedCount} waiting
+          {state.jobs.some((j) => j.status === "running") ? " · running now" : ""}
+          {" · "}
+          last activity {relativeTime(state.jobs[0]?.created_at ?? new Date().toISOString())}
+        </p>
+      )}
     </div>
   );
 }

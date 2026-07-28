@@ -24,5 +24,6 @@ export const config = {
     "/api/nexus/research",
     "/api/nexus/draft",
     "/api/nexus/drafts/:path*",
+    "/api/nexus/run",
   ],
 };

@@ -65,7 +65,7 @@ export default async function NexusPage() {
               Nexus
             </h1>
             <p className="mt-1.5 text-sm text-ink-600">
-              Atlas OS · lead pipeline and action history
+              Find HOA managers → get their emails → write drafts → you approve
             </p>
           </div>
         </div>
