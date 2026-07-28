@@ -267,7 +267,11 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
         className="grid grid-cols-2 gap-3 sm:grid-cols-4"
       >
         {[
-          { label: "Companies", value: state.companyCount, icon: Building2 },
+          {
+            label: "Active leads",
+            value: state.companies.filter((c) => c.status === "active").length,
+            icon: Building2,
+          },
           { label: "Contacts", value: state.contactCount, icon: Mail },
           { label: "Drafts pending", value: state.pendingDraftCount, icon: Sparkles },
           { label: "Queued jobs", value: state.queuedCount, icon: Clock },
@@ -533,12 +537,14 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
                   <th className="pb-2 pr-3 font-medium">Location</th>
                   <th className="pb-2 pr-3 font-medium">Phone</th>
                   <th className="pb-2 pr-3 font-medium">Research</th>
-                  <th className="pb-2 pr-3 font-medium">Stage</th>
+                  <th className="pb-2 pr-3 font-medium">Status</th>
                   <th className="pb-2 font-medium">Found</th>
                 </tr>
               </thead>
               <tbody>
-                {state.companies.map((company) => (
+                {state.companies
+                  .filter((c) => c.status === "active")
+                  .map((company) => (
                   <tr
                     key={company.id}
                     className="border-b border-ink-50 last:border-0"

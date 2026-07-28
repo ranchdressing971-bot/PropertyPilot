@@ -46,6 +46,8 @@ export async function POST(request: Request) {
         .eq("status", "active")
         .eq("research_status", "pending")
         .not("website", "is", null)
+        // Prefer local-looking firms: city filled, already past the national filter.
+        .not("city", "is", null)
         .order("created_at", { ascending: true })
         .limit(limit);
 

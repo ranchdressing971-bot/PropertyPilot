@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enqueueJob, logAction } from "../jobs";
+import { cityFromQuery, evaluateLead } from "../lead-filter";
 import type { HandResult, LeadSearchPayload } from "../types";
 
 /**
@@ -110,28 +111,107 @@ export async function runLeadSearch(
 
   const maxResults = payload.maxResults ?? DEFAULT_MAX_RESULTS;
   const storedSoFar = payload.storedSoFar ?? 0;
+  const targetCity = cityFromQuery(query);
 
   const response = await searchPlaces(query, payload.pageToken);
   const places = response.places ?? [];
 
   let stored = 0;
   let duplicates = 0;
+  let filtered = 0;
   const now = new Date().toISOString();
 
   for (const place of places) {
     if (storedSoFar + stored >= maxResults) break;
     if (!place.id || !place.displayName?.text) continue;
 
+    const city = componentOf(place.addressComponents, "locality");
+    const state = componentOf(
+      place.addressComponents,
+      "administrative_area_level_1"
+    );
+    const verdict = evaluateLead(
+      {
+        name: place.displayName.text,
+        website: place.websiteUri ?? null,
+        city,
+      },
+      { targetCity }
+    );
+
     // Does this place already exist? Checked explicitly so we can report
     // duplicates rather than silently overwriting.
     const { data: existing } = await db
       .from("nexus_companies")
-      .select("id")
+      .select("id, status")
       .eq("place_id", place.id)
       .maybeSingle();
 
     if (existing) {
       duplicates += 1;
+      // A previously-active national that now matches the blocklist gets
+      // demoted in place, so re-runs clean the list without creating orphans.
+      if (!verdict.ok && existing.status === "active") {
+        await db
+          .from("nexus_companies")
+          .update({
+            status: "disqualified",
+            disqualified_reason: verdict.reason ?? "filtered",
+            updated_at: now,
+          })
+          .eq("id", existing.id);
+        filtered += 1;
+      }
+      continue;
+    }
+
+    if (!verdict.ok) {
+      filtered += 1;
+      // Still insert, but marked disqualified — keeps Place ID reserved so a
+      // later search cannot resurrect it as an active lead.
+      const { data: rejected, error: rejectError } = await db
+        .from("nexus_companies")
+        .insert({
+          place_id: place.id,
+          name: place.displayName.text,
+          website: place.websiteUri ?? null,
+          phone: place.nationalPhoneNumber ?? null,
+          address: place.formattedAddress ?? null,
+          city,
+          state,
+          source: "places",
+          search_query: query,
+          stage: "lost",
+          status: "disqualified",
+          disqualified_reason: verdict.reason ?? "filtered",
+          places_synced_at: now,
+        })
+        .select("id, name")
+        .single();
+
+      if (rejectError) {
+        if (rejectError.code === "23505") {
+          duplicates += 1;
+          continue;
+        }
+        throw new Error(
+          `Failed to store filtered ${place.displayName.text}: ${rejectError.message}`
+        );
+      }
+
+      await logAction(
+        {
+          action: "lead.company_filtered",
+          entityType: "company",
+          entityId: rejected.id,
+          metadata: {
+            name: rejected.name,
+            query,
+            reason: verdict.reason,
+          },
+        },
+        db
+      );
       continue;
     }
 
@@ -143,8 +223,8 @@ export async function runLeadSearch(
         website: place.websiteUri ?? null,
         phone: place.nationalPhoneNumber ?? null,
         address: place.formattedAddress ?? null,
-        city: componentOf(place.addressComponents, "locality"),
-        state: componentOf(place.addressComponents, "administrative_area_level_1"),
+        city,
+        state,
         source: "places",
         search_query: query,
         stage: "new",
@@ -201,8 +281,16 @@ export async function runLeadSearch(
 
   return {
     summary:
-      `${stored} new, ${duplicates} duplicate` +
+      `${stored} new, ${duplicates} duplicate, ${filtered} filtered` +
       (morePages ? ", next page queued" : ""),
-    metadata: { query, stored, duplicates, totalStored, morePages },
+    metadata: {
+      query,
+      stored,
+      duplicates,
+      filtered,
+      targetCity,
+      totalStored,
+      morePages,
+    },
   };
 }
