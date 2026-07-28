@@ -6,10 +6,16 @@ lead pipeline can be built and reviewed with zero deliverability risk.
 
 ## 1. Create the database tables
 
-Supabase → SQL Editor → paste and run [`docs/NEXUS_SCHEMA.sql`](NEXUS_SCHEMA.sql).
+Supabase → SQL Editor → paste and run, in order:
+
+1. [`docs/NEXUS_SCHEMA.sql`](NEXUS_SCHEMA.sql) — companies, contacts, jobs, actions, suppressions
+2. [`docs/NEXUS_SCHEMA_PHASE2.sql`](NEXUS_SCHEMA_PHASE2.sql) — research columns + draft review queue
 
 Safe to re-run. Every table is service-role only, so the browser cannot read
 Nexus data even when signed in.
+
+Without the phase 2 migration, Lead Hand still works but Research and Outreach
+buttons stay locked.
 
 ## 2. Google Places API key
 
@@ -101,10 +107,14 @@ token rather than looping, so every invocation stays short.
 
 ## Not built yet (later phases)
 
-- **Research Hand** — crawl contact/about/team pages for public emails, storing the source URL for each
-- **Outreach Hand** — Gmail API on a separate outreach domain, warmup ramp, daily caps, drafts pending approval, CAN-SPAM footer
+- **Sending Hand** — Gmail API on a separate outreach domain, warmup ramp, daily caps, CAN-SPAM footer. Drafts already get approved in `/nexus`; this is the hand that actually transmits them.
 - **Inbox Hand** — ingest replies, classify intent, route by confidence
 - **Customer / Weekly Summary / Learning**
+
+### Built in phase 2
+
+- **Research Hand** — crawl contact/about/team pages for public emails, storing the source URL for each
+- **Outreach Hand (draft only)** — personalized first-touch emails filed for your approval; never sends
 
 ### Before any sending is added
 

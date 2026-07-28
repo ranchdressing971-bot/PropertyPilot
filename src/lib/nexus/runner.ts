@@ -3,11 +3,18 @@ import {
   completeJob,
   failJob,
   logAction,
+  releaseJob,
   requeueStaleJobs,
   requireNexusDb,
 } from "./jobs";
 import { runLeadSearch } from "./hands/lead";
-import type { LeadSearchPayload } from "./types";
+import { runResearchCompany } from "./hands/research";
+import { runOutreachDraft } from "./hands/outreach";
+import type {
+  LeadSearchPayload,
+  OutreachDraftPayload,
+  ResearchCompanyPayload,
+} from "./types";
 
 /**
  * Job runner. Claims a small batch, dispatches each job to its hand, and stops
@@ -22,6 +29,23 @@ import type { LeadSearchPayload } from "./types";
  */
 const TIME_BUDGET_MS = 50_000;
 const BATCH_SIZE = 5;
+
+/**
+ * Worst-case duration per job type. A job is only started when at least this
+ * much budget remains, because checking "are we past the deadline" after the
+ * fact is useless when a single job can run for half a minute: two back-to-back
+ * crawls would sail past the function timeout and lose their completion writes.
+ */
+const RESERVE_MS: Record<string, number> = {
+  "lead.search": 15_000,
+  "research.company": 30_000,
+  "outreach.draft": 25_000,
+};
+const DEFAULT_RESERVE_MS = 20_000;
+
+function reserveFor(jobType: string): number {
+  return RESERVE_MS[jobType] ?? DEFAULT_RESERVE_MS;
+}
 
 export interface TickResult {
   processed: number;
@@ -58,10 +82,11 @@ export async function runTick(): Promise<TickResult> {
     if (jobs.length === 0) break;
 
     for (const job of jobs) {
-      // Re-check the clock inside the batch: one slow job shouldn't push the
-      // whole tick past the timeout and lose the others' completion writes.
-      if (Date.now() - startedAt >= TIME_BUDGET_MS) {
-        await failJob(job, "Tick budget exhausted before start; requeued", db);
+      // Only start a job if its worst case still fits in the remaining budget.
+      // Anything that doesn't fit goes back to the queue untouched.
+      const remaining = TIME_BUDGET_MS - (Date.now() - startedAt);
+      if (remaining < reserveFor(job.type)) {
+        await releaseJob(job, db);
         result.budgetExhausted = true;
         break;
       }
@@ -81,6 +106,40 @@ export async function runTick(): Promise<TickResult> {
             await logAction(
               {
                 action: "lead.search_completed",
+                entityType: "job",
+                entityId: job.id,
+                metadata: handResult.metadata ?? {},
+              },
+              db
+            );
+            break;
+          }
+          case "research.company": {
+            const handResult = await runResearchCompany(
+              job.payload as unknown as ResearchCompanyPayload,
+              db
+            );
+            detail = handResult.summary;
+            await logAction(
+              {
+                action: "research.company_completed",
+                entityType: "job",
+                entityId: job.id,
+                metadata: handResult.metadata ?? {},
+              },
+              db
+            );
+            break;
+          }
+          case "outreach.draft": {
+            const handResult = await runOutreachDraft(
+              job.payload as unknown as OutreachDraftPayload,
+              db
+            );
+            detail = handResult.summary;
+            await logAction(
+              {
+                action: "outreach.draft_completed",
                 entityType: "job",
                 entityId: job.id,
                 metadata: handResult.metadata ?? {},

@@ -1,6 +1,6 @@
 /** Shared Nexus / Atlas types. */
 
-export type JobType = "lead.search";
+export type JobType = "lead.search" | "research.company" | "outreach.draft";
 
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
@@ -45,6 +45,44 @@ export interface NexusCompany {
   disqualified_reason: string | null;
   places_synced_at: string | null;
   researched_at: string | null;
+  research_status: ResearchStatus | string;
+  research_error: string | null;
+  research_pages: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ResearchStatus = "pending" | "running" | "done" | "failed" | "skipped";
+
+export interface NexusContact {
+  id: string;
+  company_id: string;
+  email: string;
+  name: string | null;
+  role: string | null;
+  source_url: string | null;
+  confidence: number;
+  verified_at: string | null;
+  created_at: string;
+}
+
+export type DraftStatus = "pending_approval" | "approved" | "rejected" | "sent";
+
+export interface NexusDraft {
+  id: string;
+  company_id: string;
+  contact_id: string | null;
+  to_email: string;
+  subject: string;
+  body: string;
+  model: string | null;
+  status: DraftStatus | string;
+  confidence: number | null;
+  rejection_reason: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  sent_at: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -71,6 +109,20 @@ export interface LeadSearchPayload {
   pageToken?: string;
   /** Running total across requeued pages */
   storedSoFar?: number;
+}
+
+/** Payload for a Research Hand crawl of one company website. */
+export interface ResearchCompanyPayload {
+  companyId: string;
+  /** Hard cap on pages fetched, so one sprawling site can't eat a whole tick. */
+  maxPages?: number;
+}
+
+/** Payload for an Outreach Hand draft. Drafting only — never sends. */
+export interface OutreachDraftPayload {
+  companyId: string;
+  /** Specific recipient; when omitted the highest-confidence contact is used. */
+  contactId?: string;
 }
 
 /** What a hand reports back to the runner. */

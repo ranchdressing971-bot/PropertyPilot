@@ -150,6 +150,28 @@ export async function completeJob(
 }
 
 /**
+ * Put a claimed job back without penalty. Used when the runner runs out of
+ * wall-clock time before starting the job: the attempt that `nexus_claim_jobs`
+ * counted never actually happened, so it is given back rather than burned.
+ */
+export async function releaseJob(
+  job: NexusJob,
+  db: SupabaseClient = requireNexusDb()
+): Promise<void> {
+  const { error } = await db
+    .from("nexus_jobs")
+    .update({
+      status: "queued",
+      locked_at: null,
+      attempts: Math.max(job.attempts - 1, 0),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", job.id);
+
+  if (error) throw new Error(`Failed to release job: ${error.message}`);
+}
+
+/**
  * Record a failure. Retries with exponential backoff until max_attempts, then
  * dead-letters the job as 'failed' so it stops consuming ticks but stays
  * visible for inspection.

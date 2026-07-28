@@ -21,5 +21,8 @@ export const config = {
     "/nexus",
     "/api/nexus/search",
     "/api/nexus/state",
+    "/api/nexus/research",
+    "/api/nexus/draft",
+    "/api/nexus/drafts/:path*",
   ],
 };
