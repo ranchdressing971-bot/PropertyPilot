@@ -52,8 +52,9 @@ association managers.
 
 Voice:
 - One operator emailing another operator. Short sentences. Concrete words.
-- Sound like a human, not a product page. No "streamline", "leverage",
-  "cutting-edge", "revolutionize", "seamless", or "empower".
+- Sound like a human, not a product page. Never use: streamline, leverage,
+  cutting-edge, revolutionize, seamless, empower, simplify, simplifies,
+  automate, automating, game-changer, synergy.
 - Warm but direct. No flattery. No "I hope this finds you well".
 
 Structure (body, in order):
@@ -121,6 +122,34 @@ async function findSuppression(
   return { reason: hit.reason, scope: hit.email ? "email" : "domain" };
 }
 
+const BANNED_PHRASES = [
+  "streamline",
+  "streamlining",
+  "leverage",
+  "cutting-edge",
+  "revolutionize",
+  "seamless",
+  "empower",
+  "simplifies",
+  "simplify",
+  "automating",
+  "automate",
+  "game-changer",
+  "synergy",
+];
+
+function draftLooksTemplated(subject: string, body: string): string | null {
+  const haystack = `${subject}\n${body}`.toLowerCase();
+  for (const phrase of BANNED_PHRASES) {
+    if (haystack.includes(phrase)) return `banned phrase: ${phrase}`;
+  }
+  if (/\bfree\b/i.test(subject)) return "subject contains 'free'";
+  if (/^re:/i.test(subject)) return "fake reply subject";
+  const words = body.trim().split(/\s+/).length;
+  if (words > 85) return `too long (${words} words)`;
+  return null;
+}
+
 function parseDraftJson(raw: string): { subject: string; body: string } {
   // Models occasionally wrap JSON in a code fence despite instructions.
   const cleaned = raw
@@ -143,6 +172,48 @@ function parseDraftJson(raw: string): { subject: string; body: string } {
     throw new Error("Model response missing subject or body");
   }
   return { subject, body };
+}
+
+async function generateDraft(
+  context: string
+): Promise<{ subject: string; body: string }> {
+  let lastRaw = "";
+  let lastProblem: string | null = null;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const completion = await createChatCompletion(
+      {
+        model: MODEL,
+        temperature: attempt === 0 ? 0.85 : 0.95,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          {
+            role: "user",
+            content:
+              `Product (for your understanding — do not paste this wording):\n${PRODUCT_BRIEF}\n\n` +
+              `Who you are writing to:\n${context}\n\n` +
+              (attempt === 0 || !lastProblem
+                ? `Write one cold email. Make the subject and opener specific to this recipient using only the facts above. Return JSON.`
+                : `Your previous draft failed review (${lastProblem}). Rewrite with none of the banned marketing words, a different subject, and under 70 words. Return JSON.`),
+          },
+        ],
+      },
+      "nexus-outreach-draft"
+    );
+
+    lastRaw =
+      "choices" in completion
+        ? (completion.choices[0]?.message?.content ?? "")
+        : "";
+    const parsed = parseDraftJson(lastRaw);
+    lastProblem = draftLooksTemplated(parsed.subject, parsed.body);
+    if (!lastProblem) return parsed;
+  }
+
+  // Last attempt still failed the style check — return it anyway so a human
+  // can fix it in review rather than blocking the queue.
+  return parseDraftJson(lastRaw);
 }
 
 export async function runOutreachDraft(
@@ -251,32 +322,7 @@ export async function runOutreachDraft(
     .filter(Boolean)
     .join("\n");
 
-  const completion = await createChatCompletion(
-    {
-      model: MODEL,
-      temperature: 0.85,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content:
-            `Product (for your understanding — do not paste this wording):\n${PRODUCT_BRIEF}\n\n` +
-            `Who you are writing to:\n${context}\n\n` +
-            `Write one cold email. Make the subject and opener specific to this ` +
-            `recipient using only the facts above. Return JSON.`,
-        },
-      ],
-    },
-    "nexus-outreach-draft"
-  );
-
-  // createChatCompletion's return type covers the streaming case too.
-  const raw =
-    "choices" in completion
-      ? (completion.choices[0]?.message?.content ?? "")
-      : "";
-  const { subject, body } = parseDraftJson(raw);
+  const { subject, body } = await generateDraft(context);
 
   // Draft confidence tracks how sure we are about the recipient, not the prose.
   // A generic info@ inbox is a weaker target than a named manager.
