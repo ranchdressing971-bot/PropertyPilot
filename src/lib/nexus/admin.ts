@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * Nexus is internal tooling, so access is gated to a single operator address
- * rather than a role system. Set NEXUS_ADMIN_EMAIL to your signed-in email.
+ * Nexus is internal tooling, so access is gated to an explicit operator list
+ * rather than a role system. Set NEXUS_ADMIN_EMAIL to one email, or several
+ * separated by commas.
  */
 
 export interface NexusAdminCheck {
@@ -13,8 +14,11 @@ export interface NexusAdminCheck {
 }
 
 export async function checkNexusAdmin(): Promise<NexusAdminCheck> {
-  const configured = process.env.NEXUS_ADMIN_EMAIL?.trim().toLowerCase();
-  if (!configured) return { allowed: false, reason: "not_configured" };
+  const configured = (process.env.NEXUS_ADMIN_EMAIL ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  if (configured.length === 0) return { allowed: false, reason: "not_configured" };
 
   const supabase = await createClient();
   if (!supabase) return { allowed: false, reason: "not_signed_in" };
@@ -25,7 +29,7 @@ export async function checkNexusAdmin(): Promise<NexusAdminCheck> {
 
   const email = user?.email?.trim().toLowerCase();
   if (!email) return { allowed: false, reason: "not_signed_in" };
-  if (email !== configured) return { allowed: false, reason: "not_admin", email };
+  if (!configured.includes(email)) return { allowed: false, reason: "not_admin", email };
 
   return { allowed: true, email };
 }

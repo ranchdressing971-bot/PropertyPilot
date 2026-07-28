@@ -46,7 +46,12 @@ Set the value as `NEXUS_CRON_SECRET` in `.env.local` and Vercel.
 ## 4. Operator access
 
 Set `NEXUS_ADMIN_EMAIL` to the email of the account you sign in with. Only that
-address can open `/nexus`.
+address can open `/nexus`. For more than one operator, separate addresses with
+commas:
+
+```
+NEXUS_ADMIN_EMAIL=you@example.com,cofounder@example.com
+```
 
 ## 5. Scheduler
 

@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 const deniedCopy: Record<string, { title: string; body: string }> = {
   not_configured: {
     title: "Nexus is not configured",
-    body: "Set NEXUS_ADMIN_EMAIL to your account email in .env.local and Vercel, then reload.",
+    body: "Set NEXUS_ADMIN_EMAIL to your account email in .env.local and Vercel, then reload. Multiple operators can be separated by commas.",
   },
   not_signed_in: {
     title: "Sign in required",
@@ -25,7 +25,7 @@ const deniedCopy: Record<string, { title: string; body: string }> = {
   },
   not_admin: {
     title: "Not authorized",
-    body: "This account is not the configured Nexus operator.",
+    body: "This account is not in the configured Nexus operator list.",
   },
 };
 
