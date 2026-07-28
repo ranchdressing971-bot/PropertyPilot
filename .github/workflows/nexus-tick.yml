@@ -1,0 +1,50 @@
+name: Nexus tick
+
+# Drives the Nexus job runner. Vercel Cron is not used because Hobby plans allow
+# only one cron per day with up to 59 minutes of drift; that limit applies to
+# Vercel's scheduler, not to the endpoint, so any HTTP scheduler works.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   NEXUS_APP_URL      e.g. https://rideby-ai.vercel.app
+#   NEXUS_CRON_SECRET  must match the value in the Vercel environment
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  # Never let two ticks overlap; the queue tolerates it, but this keeps logs clean.
+  group: nexus-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping Nexus runner
+        env:
+          APP_URL: ${{ secrets.NEXUS_APP_URL }}
+          CRON_SECRET: ${{ secrets.NEXUS_CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "NEXUS_APP_URL or NEXUS_CRON_SECRET is not set"
+            exit 1
+          fi
+
+          response=$(curl --silent --show-error --max-time 90 \
+            --write-out "\n%{http_code}" \
+            --request POST \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/nexus/tick")
+
+          status=$(echo "$response" | tail -n 1)
+          body=$(echo "$response" | sed '$d')
+
+          echo "$body"
+
+          if [ "$status" != "200" ]; then
+            echo "Tick failed with HTTP $status"
+            exit 1
+          fi

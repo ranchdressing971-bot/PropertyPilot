@@ -14,5 +14,12 @@ export const config = {
     "/api/analyze-inspection",
     "/api/live/dashboard",
     "/api/setup-status",
+    // Nexus operator surfaces need session refresh so the admin gate keeps
+    // working after the access token expires. /api/nexus/tick is intentionally
+    // excluded: the scheduler calls it with a bearer secret and no cookies.
+    "/nexus/:path*",
+    "/nexus",
+    "/api/nexus/search",
+    "/api/nexus/state",
   ],
 };
