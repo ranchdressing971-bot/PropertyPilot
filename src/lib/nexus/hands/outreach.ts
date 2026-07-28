@@ -23,47 +23,64 @@ import type {
  *     database as well as here.
  */
 
-const MODEL = "gpt-4o-mini";
+// gpt-4o over mini: cold email quality is the whole point of this hand, and
+// the volume is tiny (a handful of drafts per day), so the cost difference is
+// noise compared to a bad first impression.
+const MODEL = "gpt-4o";
 const MAX_DRAFTS_PER_COMPANY = 1;
 
 /** Minimum contact confidence worth spending a model call on. */
 const MIN_CONTACT_CONFIDENCE = 45;
 
 const PRODUCT_BRIEF = `
-RideBy is software for HOA and community association managers.
+RideBy helps HOA / community association managers do drive-through inspections
+without the clipboard grind.
 
-How it works: the manager films a normal drive-through of the community on a
-phone. RideBy matches what it sees to house numbers, pulls evidence frames, and
-returns a review list of possible violations. The manager approves or discards
-each item before anything is sent to a homeowner — the software never contacts
-residents on its own.
+The manager films a normal drive-through on their phone. RideBy matches what it
+sees to house numbers, pulls evidence frames, and returns a review list of
+possible violations. The manager approves or discards each item — RideBy never
+emails homeowners on its own.
 
-What it replaces: walking or driving the property with a clipboard, then typing
-up notes and matching photos to addresses by hand.
-
-Offer: a free full inspection on the manager's own community video. No card, no
-sales call.
+The offer in this first email: one free inspection run on a video of their own
+community. No card. No sales call. Reply "yes" and Isaac sends a 60-second
+filming guide.
 `.trim();
 
 const SYSTEM_PROMPT = `
-You write short first-touch B2B emails for RideBy, a tool for HOA community managers.
+You write cold first-touch emails from Isaac at RideBy to HOA / community
+association managers.
+
+Voice:
+- One operator emailing another operator. Short sentences. Concrete words.
+- Sound like a human, not a product page. No "streamline", "leverage",
+  "cutting-edge", "revolutionize", "seamless", or "empower".
+- Warm but direct. No flattery. No "I hope this finds you well".
+
+Structure (body, in order):
+1. One-line opener that uses something real from the context (their name, their
+   company name, or their city). If you only have a generic inbox, skip the
+   fake familiarity and just be clear.
+2. One sentence on the pain they already know: clipboard drive-throughs, then
+   matching photos to addresses by hand.
+3. One sentence on what RideBy does, in plain English.
+4. The offer + a sharp CTA: ask them to reply "yes" for a free inspection on a
+   video of their own community. Isaac will send a short filming guide.
 
 Hard rules:
-- 90 words maximum in the body. Shorter is better.
-- Plain text. No markdown, no bullet points, no links, no images.
-- No greeting fluff ("I hope this email finds you well"), no flattery, no
-  invented facts about the recipient's company. You only know what is in the
-  context block; do not guess portfolio size, pain points, or history.
-- Never claim to have used their product, visited their community, or spoken to
-  anyone there.
-- One concrete ask: a reply saying yes if they want a free inspection run on a
-  video of their own community.
-- Subject line: 6 words maximum, lowercase-ish and specific, no clickbait, no
-  "Re:" or fake-reply tricks.
-- Write like one person emailing another, not like marketing copy.
+- 70 words max in the body. Shorter is better.
+- Plain text only. No markdown, bullets, links, or emojis.
+- Never invent facts: portfolio size, communities they manage, tools they use,
+  or that you've spoken to anyone there. Use only the context block.
+- Do not mention pricing, demos, calendars, or "jump on a call".
+- Subject: 4–7 words, specific, lowercase-ish, no "free", no "Re:", no
+  clickbait, no company-name spam. Aim for curiosity about the job, not the
+  product. Good examples of shape: "drive-through notes without the clipboard",
+  "faster HOA drive-throughs in Austin". Bad: "free inspection for your community".
+- Every draft must feel different from a generic template. If two companies in
+  different cities would get the identical body, you failed.
 
 Return strict JSON only: {"subject": string, "body": string}
-The body must end with a line break, then "Isaac" on its own line.
+Body ends with a blank line, then "Isaac" on its own line.
 `.trim();
 
 export function isOutreachConfigured(): boolean {
@@ -237,13 +254,17 @@ export async function runOutreachDraft(
   const completion = await createChatCompletion(
     {
       model: MODEL,
-      temperature: 0.7,
+      temperature: 0.85,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
           role: "user",
-          content: `Product:\n${PRODUCT_BRIEF}\n\nContext about who you are writing to:\n${context}\n\nWrite the email.`,
+          content:
+            `Product (for your understanding — do not paste this wording):\n${PRODUCT_BRIEF}\n\n` +
+            `Who you are writing to:\n${context}\n\n` +
+            `Write one cold email. Make the subject and opener specific to this ` +
+            `recipient using only the facts above. Return JSON.`,
         },
       ],
     },
