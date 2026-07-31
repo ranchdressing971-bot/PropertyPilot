@@ -25,8 +25,11 @@ interface StatusPayload {
   novaArmed: boolean;
   dailyTarget: number;
   withinWindow: boolean;
-  mailtrapConfigured: boolean;
-  mailtrapSandbox: boolean;
+  plannedProvider?: string;
+  mailtrapVerified?: boolean;
+  resendConfigured?: boolean;
+  customDomainLikely?: boolean;
+  canTransmitLive?: boolean;
   voiceConfigured: boolean;
   queuedJobs: number;
   companies: number;
@@ -39,6 +42,18 @@ interface StatusPayload {
   subscriptionRate?: number;
   sentInWindow?: number;
   recentSignupCount?: number;
+  business?: {
+    mrr: number;
+    arr: number;
+    pipelineMrr: number;
+    payingClients: number;
+    trialingClients: number;
+    pastDueClients: number;
+    productCompanies: number;
+    inspectionsTotal: number;
+    communityTrialsClaimed: number;
+    totalProfiles: number;
+  };
   messages: Array<{
     id: string;
     role: string;
@@ -809,6 +824,15 @@ export function NovaConsole() {
   const [showTapToHear, setShowTapToHear] = useState(false);
   const [voiceDebug, setVoiceDebug] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [clock, setClock] = useState(() =>
+    new Date().toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZone: "America/New_York",
+    })
+  );
 
   const phaseRef = useRef<Phase>("idle");
   const listeningOnRef = useRef(true);
@@ -1021,6 +1045,22 @@ export function NovaConsole() {
   useEffect(() => {
     void refreshStatus();
   }, [refreshStatus]);
+
+  useEffect(() => {
+    const tick = () =>
+      setClock(
+        new Date().toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+          timeZone: "America/New_York",
+        })
+      );
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   /** Hard-kill mic. Chrome will not reliably restart a stopped instance. */
   const killMic = useCallback((opts?: { keepSpeech?: boolean }) => {
@@ -1769,17 +1809,24 @@ export function NovaConsole() {
       />
       <div className="nova-void" aria-hidden />
       <div className="nova-stars" aria-hidden />
+      <div className="nova-grid" aria-hidden />
+      <div className="nova-scanlines" aria-hidden />
       <div className="nova-vignette" aria-hidden />
 
       <header className="nova-top">
         <div className="nova-top-inner">
           <div className="flex flex-col gap-2">
+            <div className="nova-sys-label">RideBy · Systems</div>
             <Link href="/nexus" className="nova-link">
               Nexus
             </Link>
             <Link href="/nova/download" className="nova-link">
               Get APK
             </Link>
+          </div>
+          <div className="nova-clock-block" aria-hidden>
+            <div className="nova-clock">{clock}</div>
+            <div className="nova-clock-sub">Eastern · ops window 10–15</div>
           </div>
           <div className="nova-meta">
             <div className="flex items-center gap-2">
@@ -1806,12 +1853,12 @@ export function NovaConsole() {
               </span>
             </div>
             <div className="nova-meta-dim">
-              Send {status?.sendEnabled ? "on" : "off"}
-              {status?.mailtrapConfigured ? "" : " · no Mailtrap"}
+              Transmit prep · Resend after domain
+              {status?.resendConfigured ? " · key set" : " · Resend pending"}
               {status && !status.voiceConfigured
                 ? " · free device voice"
                 : status?.voiceConfigured
-                  ? " · ElevenLabs (+ free fallback)"
+                  ? " · ElevenLabs"
                   : ""}
             </div>
             <div className="nova-meta-dim">
@@ -1830,14 +1877,88 @@ export function NovaConsole() {
         </div>
       </header>
 
+      <aside className="nova-hud nova-hud-left" aria-label="Pipeline HUD">
+        <div className="nova-hud-title">Pipeline</div>
+        <div className="nova-hud-row">
+          <span>Leads</span>
+          <strong>{status?.companies ?? "—"}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>Approved</span>
+          <strong>{status?.approvedDrafts ?? "—"}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>Queued</span>
+          <strong>{status?.queuedJobs ?? "—"}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>Sent</span>
+          <strong>{status?.sentDrafts ?? "—"}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>Pending</span>
+          <strong>{status?.pendingDrafts ?? "—"}</strong>
+        </div>
+        <div className="nova-hud-divider" />
+        <div className="nova-hud-row">
+          <span>Window</span>
+          <strong>{status?.withinWindow ? "OPEN" : "CLOSED"}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>Send env</span>
+          <strong>{status?.sendEnabled ? "ON" : "OFF"}</strong>
+        </div>
+        <div className="nova-hud-note">
+          Mailtrap unverified · live path = Resend + domain
+        </div>
+      </aside>
+
+      <aside className="nova-hud nova-hud-right" aria-label="Business HUD">
+        <div className="nova-hud-title">Business</div>
+        <div className="nova-hud-row nova-hud-row-hero">
+          <span>MRR</span>
+          <strong>${status?.business?.mrr ?? 0}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>ARR</span>
+          <strong>${status?.business?.arr ?? 0}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>Active</span>
+          <strong>{status?.business?.payingClients ?? 0}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>Trialing</span>
+          <strong>{status?.business?.trialingClients ?? 0}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>Past due</span>
+          <strong>{status?.business?.pastDueClients ?? 0}</strong>
+        </div>
+        <div className="nova-hud-divider" />
+        <div className="nova-hud-row">
+          <span>Companies</span>
+          <strong>{status?.business?.productCompanies ?? 0}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>Inspections</span>
+          <strong>{status?.business?.inspectionsTotal ?? 0}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>Profiles</span>
+          <strong>{status?.business?.totalProfiles ?? 0}</strong>
+        </div>
+      </aside>
+
       <main className="nova-stage">
         <h1 className="nova-brand font-display">NOVA</h1>
         <p className="nova-tagline">
-          Nova runs outreach. Say <span>“Hey Nova”</span> — she’ll shoot
-          straight, push back when needed, and keep it real.
+          Systems online. Say <span>“Hey Nova”</span> — outreach, MRR, clients.
         </p>
 
         <div className={wrapClass}>
+          <span className="nova-ring nova-ring-a" aria-hidden />
+          <span className="nova-ring nova-ring-b" aria-hidden />
           <span className="nova-orb-halo nova-orb-halo-a" aria-hidden />
           <span className="nova-orb-halo nova-orb-halo-b" aria-hidden />
           <NovaMeshOrb
@@ -1913,11 +2034,15 @@ export function NovaConsole() {
         )}
 
       <footer className="nova-dock">
+        <div className="nova-dock-chrome" aria-hidden>
+          <span>COMMS</span>
+          <span className="nova-dock-chrome-mid">VOICE · TEXT · OPS</span>
+          <span>{status?.novaArmed ? "ARMED" : "STANDBY"}</span>
+        </div>
         <div className="nova-transcript" ref={transcriptRef}>
           {lines.length === 0 && (
             <p className="text-center text-sm text-white/25">
-              Say “Hey Nova” for a pipeline read or a call. She’ll tell you
-              what she’d actually do — ambient talk is ignored.
+              Ask for pipeline, MRR, clients, or a call. Ambient talk is ignored.
             </p>
           )}
           {lines.map((line) => (

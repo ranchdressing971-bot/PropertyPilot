@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { checkNexusAdmin } from "@/lib/nexus/admin";
-import { isMailtrapConfigured, isMailtrapSandbox } from "@/lib/nexus/mailtrap";
 import {
   isNexusSendEnabled,
   isWithinOutreachWindow,
 } from "@/lib/nexus/outreach-policy";
 import { loadNexusState } from "@/lib/nexus/state";
+import { loadBusinessBrief } from "@/lib/nova/business";
 import { loadConversionSummary } from "@/lib/nova/conversions";
 import { isElevenLabsConfigured } from "@/lib/nova/speak";
 import { loadRecentNovaMessages } from "@/lib/nova/memory";
 import { getNovaSendPlan } from "@/lib/nova/send-plan";
+import { isResendConfigured } from "@/lib/resend";
 
 export const dynamic = "force-dynamic";
 
@@ -26,14 +27,25 @@ export async function GET() {
   const messages = await loadRecentNovaMessages(20);
   const plan = await getNovaSendPlan();
   const conversions = await loadConversionSummary(90);
+  const business = await loadBusinessBrief();
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.NEXUS_APP_URL?.trim() ||
+    null;
+  const looksCustomDomain = Boolean(
+    appUrl && !/vercel\.app/i.test(appUrl) && /^https?:\/\//i.test(appUrl)
+  );
 
   return NextResponse.json({
     sendEnabled: isNexusSendEnabled(),
     novaArmed: plan.armed,
     dailyTarget: plan.dailyTarget,
     withinWindow: isWithinOutreachWindow(),
-    mailtrapConfigured: isMailtrapConfigured(),
-    mailtrapSandbox: isMailtrapSandbox(),
+    plannedProvider: "resend",
+    mailtrapVerified: false,
+    resendConfigured: isResendConfigured(),
+    customDomainLikely: looksCustomDomain,
+    canTransmitLive: false,
     voiceConfigured: isElevenLabsConfigured(),
     /** Always true — Web Speech API kicks in when ElevenLabs is missing or out of credits. */
     browserVoiceFallback: true,
@@ -48,6 +60,18 @@ export async function GET() {
     subscriptionRate: conversions.subscriptionRate,
     sentInWindow: conversions.sentCount,
     recentSignupCount: conversions.recentSignupCount,
+    business: {
+      mrr: business.mrr,
+      arr: business.arr,
+      pipelineMrr: business.pipelineMrr,
+      payingClients: business.payingClients,
+      trialingClients: business.trialingClients,
+      pastDueClients: business.pastDueClients,
+      productCompanies: business.productCompanies,
+      inspectionsTotal: business.inspectionsTotal,
+      communityTrialsClaimed: business.communityTrialsClaimed,
+      totalProfiles: business.totalProfiles,
+    },
     messages: messages.map((m) => ({
       id: m.id,
       role: m.role,

@@ -1,7 +1,6 @@
 import { enqueueJob, getNexusDb, requireNexusDb } from "@/lib/nexus/jobs";
 import { loadNexusState } from "@/lib/nexus/state";
 import { enqueueOutreachSend } from "@/lib/nexus/hands/send";
-import { isMailtrapConfigured, isMailtrapSandbox } from "@/lib/nexus/mailtrap";
 import {
   clampDailySendTarget,
   isNexusSendEnabled,
@@ -11,6 +10,8 @@ import {
 } from "@/lib/nexus/outreach-policy";
 import { runTick } from "@/lib/nexus/runner";
 import type { LeadSearchPayload } from "@/lib/nexus/types";
+import { isResendConfigured } from "@/lib/resend";
+import { loadBusinessBrief } from "./business";
 import { loadConversionReport, loadConversionSummary } from "./conversions";
 import {
   computeNovaDailyTarget,
@@ -39,7 +40,16 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "status",
       description:
-        "Pipeline + delivery mode (prep_only vs live) + API cost notes + blockers. Call before claiming you can email HOAs or before burning Places/OpenAI on more leads.",
+        "Pipeline + delivery (prep_only — waiting on domain/Resend) + business snapshot (MRR/clients) + API cost notes + blockers. Call before claiming you can email HOAs or before burning Places/OpenAI.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "business",
+      description:
+        "RideBy business intelligence: MRR, ARR, active/trialing/past_due clients, product companies, inspections, community trials, plan mix, recent paying clients. Use for 'how's the business', MRR, client counts — never invent dollars.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
@@ -78,7 +88,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "send_today",
       description:
-        "Optional override: set today's prep/queue volume or resume after pause. Does NOT bypass NEXUS_SEND_ENABLED — if prep_only, say emails are queued for when domain is live. Refuse weak batches.",
+        "Optional override: set today's prep/queue volume or resume after pause. Does NOT transmit live — Mailtrap unverified; go-live is Resend after domain. Refuse weak batches.",
       parameters: {
         type: "object",
         properties: {
@@ -151,13 +161,13 @@ async function toolStatus() {
   const state = await loadNexusState(40);
   const plan = await getNovaSendPlan();
   const conversions = await loadConversionSummary(90);
+  const business = await loadBusinessBrief();
   const approved = state.drafts.filter((d) => d.status === "approved");
   const sent = state.drafts.filter((d) => d.status === "sent");
   const active = state.companies.filter((c) => c.status === "active");
 
   const sendOn = isNexusSendEnabled();
-  const mailtrap = isMailtrapConfigured();
-  const sandbox = isMailtrapSandbox();
+  const resend = isResendConfigured();
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL?.trim() ||
     process.env.NEXUS_APP_URL?.trim() ||
@@ -165,28 +175,29 @@ async function toolStatus() {
   const looksCustomDomain = Boolean(
     appUrl && !/vercel\.app/i.test(appUrl) && /^https?:\/\//i.test(appUrl)
   );
-  const canTransmitLive = sendOn && mailtrap && !sandbox;
+  // Mailtrap is not verified / not the plan. Live path = Resend after domain (not wired yet).
+  const canTransmitLive = false;
 
   const blockers: string[] = [];
   if (!plan.armed) blockers.push("Nova paused (ask to resume or call send_today)");
+  blockers.push(
+    "Waiting on custom domain — then Resend sending domain (Mailtrap is NOT verified / not go-live)"
+  );
+  if (!resend) {
+    blockers.push("Resend API key not set yet (will be used after domain)");
+  }
   if (!sendOn) {
     blockers.push(
-      "NEXUS_SEND_ENABLED is false — prep/queue only until Isaac flips it after domain is live"
-    );
-  }
-  if (!mailtrap) blockers.push("Mailtrap not wired yet");
-  if (sandbox) {
-    blockers.push(
-      "Mailtrap sandbox on — emails won't hit real HOA inboxes until sandbox is off + sending domain verified"
+      "NEXUS_SEND_ENABLED is false — flip after domain + Resend are live"
     );
   }
   if (!looksCustomDomain) {
     blockers.push(
-      "App URL still looks like default/vercel — waiting on custom domain for live outreach CTA/from-domain"
+      "App URL still looks like default/vercel — need custom domain for CTA/from-domain"
     );
   }
-  if (!sandbox && !isWithinOutreachWindow()) {
-    blockers.push("outside 10am–3pm ET send window");
+  if (!isWithinOutreachWindow()) {
+    blockers.push("outside 10am–3pm ET send window (matters when live)");
   }
 
   return {
@@ -206,25 +217,37 @@ async function toolStatus() {
       sentInWindow: conversions.sentCount,
       recentSignups: conversions.recentSignupCount,
     },
+    business: {
+      mrr: business.mrr,
+      arr: business.arr,
+      pipelineMrr: business.pipelineMrr,
+      payingClients: business.payingClients,
+      trialingClients: business.trialingClients,
+      pastDueClients: business.pastDueClients,
+      productCompanies: business.productCompanies,
+      inspectionsTotal: business.inspectionsTotal,
+      plainEnglish: business.plainEnglish,
+    },
     delivery: {
       canTransmitLive,
-      mode: canTransmitLive ? "live" : "prep_only",
+      mode: "prep_only",
+      plannedProvider: "resend",
+      mailtrapVerified: false,
+      mailtrapIsGoLivePath: false,
       appUrl,
       customDomainLikely: looksCustomDomain,
       nexusSendEnabled: sendOn,
-      mailtrapConfigured: mailtrap,
-      mailtrapSandbox: sandbox,
-      waitingOnDomain: !canTransmitLive,
-      plainEnglish: canTransmitLive
-        ? "Live transmit allowed (still subject to ET window + daily cap)."
-        : "Cannot send to real inboxes yet — build pipeline; go live after domain + Mailtrap live + NEXUS_SEND_ENABLED.",
+      resendConfigured: resend,
+      waitingOnDomain: true,
+      plainEnglish:
+        "Cannot send to real HOA inboxes yet. Mailtrap not verified. Go live with Resend after the custom domain.",
     },
     apiCosts: {
       openai:
         "Chat, drafts, AI review, learn — real $ per call. Avoid thrashing work/learn/find_leads.",
       googlePlaces:
         "find_leads burns Places quota (~1k free Enterprise/mo class, then paid). One city with intent.",
-      mailtrap: "Transmit cost + deliverability — only when live send is on.",
+      resend: "Transmit cost + deliverability — only when live send is on (after domain).",
       tip: "If approved drafts are already stocked, skip find_leads to save Places + draft tokens.",
     },
     blockers,
@@ -238,7 +261,7 @@ async function toolStatus() {
       city: c.city,
       reviews: c.metadata?.userRatingCount ?? null,
     })),
-    tip: "Be honest about prep_only vs live. Mention OpenAI/Places cost when proposing big lead pulls or review thrash.",
+    tip: "Be honest about prep_only. Mention OpenAI/Places cost. Use business for MRR/clients.",
   };
 }
 
@@ -402,19 +425,14 @@ async function toolSendToday(args: Record<string, unknown>) {
     queued,
     approvedAvailable: approved.length,
     envSendEnabled: isNexusSendEnabled(),
-    mailtrapConfigured: isMailtrapConfigured(),
+    plannedProvider: "resend",
+    mailtrapVerified: false,
     plainEnglish:
       queued === 0
         ? count === 0
           ? "Target set to 0 — nothing queued."
           : "No approved drafts ready. Run work / find_leads first."
-        : !isMailtrapConfigured()
-          ? `Queued ${queued}. Waiting on Mailtrap + domain before real inboxes.`
-          : isMailtrapSandbox()
-            ? `Queued ${queued}. Sandbox on — not real HOA inboxes until live domain + sandbox off.`
-            : !isNexusSendEnabled()
-              ? `Queued ${queued}. Prep only until domain is live and NEXUS_SEND_ENABLED=true.`
-              : `Queued ${queued} sends (override), paced every 5–15 minutes.`,
+        : `Queued ${queued}. Prep only — Mailtrap not verified; real inboxes wait on domain + Resend + NEXUS_SEND_ENABLED.`,
   };
 }
 
@@ -436,6 +454,12 @@ export async function runNovaTool(
     case "list_recent_drafts":
     case "list_companies":
       return JSON.stringify(await toolStatus());
+
+    case "business":
+    case "mrr":
+    case "clients":
+    case "fleet":
+      return JSON.stringify(await loadBusinessBrief());
 
     case "find_leads":
     case "start_search": {
