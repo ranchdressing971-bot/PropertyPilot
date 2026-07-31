@@ -142,9 +142,14 @@ When you leave sandbox: verify a Mailtrap sending domain, set
 
 ```bash
 ELEVENLABS_API_KEY=...
-ELEVENLABS_VOICE_ID=...        # optional; defaults to a stock voice
+ELEVENLABS_VOICE_ID=...        # required on free tier — copy from My Voices
 # ELEVENLABS_MODEL_ID=eleven_multilingual_v2
 ```
+
+Free ElevenLabs accounts **cannot** use Voice Library IDs via the API. Open
+[Voices](https://elevenlabs.io/app/voice-lab) → My Voices → ⋯ → **Copy voice ID**
+→ paste as `ELEVENLABS_VOICE_ID` on Vercel → redeploy. If unset, Nova tries the
+first voice on your account instead of a library default.
 
 Nova can call Nexus tools: status, list drafts/companies, start search, run a
 tick, queue approved sends, and store memory/trials.
