@@ -180,6 +180,36 @@
   word-break: break-word;
 }
 
+/* Fixed iPhone voice diagnostics — impossible to miss in screenshots. */
+.nova-voice-debug-fixed {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.75rem;
+  padding-top: calc(0.55rem + env(safe-area-inset-top, 0px));
+  background: rgba(120, 20, 20, 0.94);
+  border-bottom: 2px solid rgba(255, 100, 100, 0.9);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  color: #ffe8e8;
+  pointer-events: none;
+  text-align: left;
+  word-break: break-word;
+}
+
+.nova-voice-debug-fixed strong {
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffb4b4;
+}
+
 .nova-audio-hidden {
   /* iOS refuses playback from fully off-screen / zero-size elements. */
   position: fixed;
@@ -189,7 +219,7 @@
   height: 1px;
   opacity: 0.01;
   pointer-events: none;
-  z-index: -1;
+  z-index: 1;
 }
 
 .nova-tap-hear {
@@ -223,18 +253,18 @@
   z-index: 2147483646;
   transform: translateX(-50%);
   display: block;
-  min-width: min(18rem, calc(100vw - 2rem));
-  min-height: 3.25rem;
-  padding: 0.9rem 1.5rem;
+  min-width: min(20rem, calc(100vw - 1.5rem));
+  min-height: 4rem;
+  padding: 1.1rem 1.75rem;
   border-radius: 9999px;
   border: 1px solid rgba(120, 220, 255, 0.65);
   background: rgba(10, 40, 55, 0.98);
   box-shadow:
     0 0 24px rgba(86, 214, 255, 0.25),
     0 8px 32px rgba(0, 0, 0, 0.55);
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: rgba(200, 245, 255, 1);
   cursor: pointer;

@@ -89,8 +89,42 @@ export async function resolveElevenLabsVoiceId(apiKey: string): Promise<string> 
   return cachedVoiceId;
 }
 
+/** iPhone / iPad Safari — needs WAV for reliable HTMLAudioElement decode. */
+export function isMobileSafariUserAgent(ua: string): boolean {
+  if (!ua) return false;
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  // iPadOS 13+ desktop UA
+  return /Macintosh/i.test(ua) && /Mobile/i.test(ua);
+}
+
+function pcm16ToWav(pcm: Buffer, sampleRate = 44100): Buffer {
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = pcm.length;
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(dataSize, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+export type NovaSpeechFormat = "mpeg" | "wav";
+
 export async function synthesizeNovaSpeech(
-  text: string
+  text: string,
+  opts?: { format?: NovaSpeechFormat }
 ): Promise<{ audio: Buffer; contentType: string }> {
   const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
   if (!apiKey) {
@@ -100,18 +134,20 @@ export async function synthesizeNovaSpeech(
   const voiceId = await resolveElevenLabsVoiceId(apiKey);
   const model =
     process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2";
+  const wantWav = opts?.format === "wav";
+  const outputFormat = wantWav ? "pcm_44100" : "mp3_44100_128";
 
   const clipped = text.trim().slice(0, 2500);
   if (!clipped) throw new Error("Nothing to speak");
 
   const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
+    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${outputFormat}`,
     {
       method: "POST",
       headers: {
         "xi-api-key": apiKey,
         "Content-Type": "application/json",
-        Accept: "audio/mpeg",
+        Accept: wantWav ? "audio/pcm" : "audio/mpeg",
       },
       body: JSON.stringify({
         text: clipped,
@@ -168,8 +204,17 @@ export async function synthesizeNovaSpeech(
   }
 
   const arrayBuffer = await response.arrayBuffer();
+  const raw = Buffer.from(arrayBuffer);
+
+  if (wantWav) {
+    return {
+      audio: pcm16ToWav(raw, 44100),
+      contentType: "audio/wav",
+    };
+  }
+
   return {
-    audio: Buffer.from(arrayBuffer),
+    audio: raw,
     contentType: response.headers.get("content-type") || "audio/mpeg",
   };
 }

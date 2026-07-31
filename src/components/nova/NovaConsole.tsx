@@ -194,6 +194,7 @@ function primeSpeechSynthesis(synth: SpeechSynthesis) {
 
 function primeSpeechSynthesisInGesture(synth: SpeechSynthesis) {
   primeSpeechSynthesis(synth);
+  if (isIOS()) return;
   if (!isSafariBrowser()) return;
   try {
     synth.cancel();
@@ -243,62 +244,177 @@ interface PendingVoice {
 interface VoiceFetchResult {
   blob: Blob | null;
   useBrowserTts: boolean;
-  debug?: string;
+  status: number;
+  contentType: string;
+  bytes: number;
+  format: string;
+  error?: string;
+}
+
+function formatVoiceDiag(parts: {
+  unlocked?: boolean;
+  status?: number;
+  contentType?: string;
+  bytes?: number;
+  format?: string;
+  path?: string;
+  error?: string;
+}): string {
+  const bits: string[] = [];
+  if (parts.unlocked !== undefined) bits.push(`unlock=${parts.unlocked ? "yes" : "no"}`);
+  if (parts.status != null) bits.push(`HTTP ${parts.status}`);
+  if (parts.contentType) bits.push(parts.contentType);
+  if (parts.bytes != null) bits.push(`${parts.bytes}b`);
+  if (parts.format) bits.push(parts.format);
+  if (parts.path) bits.push(parts.path);
+  if (parts.error) bits.push(parts.error);
+  return bits.join(" · ");
 }
 
 /** Fetch TTS audio; never treat JSON error bodies as MPEG. */
 async function fetchVoiceAudio(text: string): Promise<VoiceFetchResult> {
-  const res = await fetch("/api/nova/speak", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
-  });
+  const empty: VoiceFetchResult = {
+    blob: null,
+    useBrowserTts: true,
+    status: 0,
+    contentType: "",
+    bytes: 0,
+    format: "",
+  };
+
+  let res: Response;
+  try {
+    res = await fetch("/api/nova/speak", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(isIOS() ? { "X-Nova-Mobile": "ios" } : {}),
+      },
+      body: JSON.stringify({
+        text,
+        ...(isIOS() ? { format: "wav" } : {}),
+      }),
+    });
+  } catch (err) {
+    return {
+      ...empty,
+      error: err instanceof Error ? err.message : "network failed",
+    };
+  }
+
+  const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+  const format =
+    res.headers.get("x-nova-format") ??
+    (contentType.includes("wav") ? "wav" : contentType.includes("mpeg") ? "mpeg" : "");
+
+  if (res.status === 401) {
+    let reason = "auth denied";
+    try {
+      const data = (await res.json()) as { error?: string; reason?: string };
+      reason = data.reason ?? data.error ?? reason;
+    } catch {
+      /* ignore */
+    }
+    return {
+      ...empty,
+      status: 401,
+      contentType,
+      format,
+      useBrowserTts: true,
+      error: `401 ${reason} — sign in on this device`,
+    };
+  }
 
   if (res.status === 503) {
     try {
       const data = (await res.json()) as { code?: string; error?: string };
       if (data.code === "FALLBACK_BROWSER" || !data.code) {
-        return { blob: null, useBrowserTts: true };
+        return {
+          ...empty,
+          status: 503,
+          contentType: "application/json",
+          format: "browser-tts",
+          useBrowserTts: true,
+        };
       }
       return {
-        blob: null,
+        ...empty,
+        status: 503,
+        contentType: "application/json",
+        format: "",
         useBrowserTts: false,
-        debug: data.error ?? "Voice API unavailable",
+        error: data.error ?? "Voice API unavailable",
       };
     } catch {
-      return { blob: null, useBrowserTts: true };
+      return { ...empty, status: 503, useBrowserTts: true, error: "503 fallback" };
     }
   }
 
   if (!res.ok) {
-    return { blob: null, useBrowserTts: true, debug: `speak HTTP ${res.status}` };
+    return {
+      ...empty,
+      status: res.status,
+      contentType,
+      format,
+      useBrowserTts: true,
+      error: `speak HTTP ${res.status}`,
+    };
   }
 
-  const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
   if (contentType.includes("json")) {
     try {
       const data = (await res.json()) as { error?: string };
       return {
-        blob: null,
+        ...empty,
+        status: res.status,
+        contentType,
         useBrowserTts: true,
-        debug: data.error ?? "speak returned JSON",
+        error: data.error ?? "speak returned JSON",
       };
     } catch {
-      return { blob: null, useBrowserTts: true, debug: "speak returned JSON" };
+      return {
+        ...empty,
+        status: res.status,
+        contentType,
+        useBrowserTts: true,
+        error: "speak returned JSON",
+      };
     }
   }
 
   const blob = await res.blob();
   if (!blob.size) {
-    return { blob: null, useBrowserTts: true, debug: "empty audio blob" };
+    return {
+      ...empty,
+      status: res.status,
+      contentType: blob.type || contentType,
+      format,
+      useBrowserTts: true,
+      error: "empty audio blob",
+    };
   }
 
   if (blob.type.includes("json")) {
-    return { blob: null, useBrowserTts: true, debug: "blob is JSON not audio" };
+    return {
+      ...empty,
+      status: res.status,
+      contentType: blob.type,
+      format,
+      useBrowserTts: true,
+      error: "blob is JSON not audio",
+    };
   }
 
-  return { blob: normalizeAudioBlob(blob), useBrowserTts: false };
+  const normalized = normalizeAudioBlob(blob, format);
+  return {
+    blob: normalized,
+    useBrowserTts: false,
+    status: res.status,
+    contentType: normalized.type || contentType,
+    bytes: normalized.size,
+    format: format || normalized.type,
+  };
 }
 
 /** Safari/iOS: call speak() synchronously — no await before speak in this function. */
@@ -355,9 +471,14 @@ function speakWithFreeVoiceSync(text: string): Promise<void> {
   });
 }
 
-function normalizeAudioBlob(blob: Blob): Blob {
+function normalizeAudioBlob(blob: Blob, formatHint?: string): Blob {
   if (blob.type && blob.type !== "application/octet-stream") return blob;
-  return new Blob([blob], { type: "audio/mpeg" });
+  const type = formatHint?.includes("wav")
+    ? "audio/wav"
+    : isIOS()
+      ? "audio/wav"
+      : "audio/mpeg";
+  return new Blob([blob], { type });
 }
 
 /**
@@ -486,7 +607,8 @@ function playPreparedInGesture(
   el: HTMLAudioElement,
   objectUrlRef: { current: string | null }
 ): Promise<void> {
-  primeAudioElement(el);
+  el.muted = false;
+  el.volume = 1;
 
   return new Promise<void>((resolve, reject) => {
     let settled = false;
@@ -716,42 +838,23 @@ export function NovaConsole() {
     const el = audioElRef.current;
     if (!el) return false;
 
-    if (audioUnlockedRef.current) return true;
-    if (unlockInFlightRef.current) return true;
-
-    unlockInFlightRef.current = true;
-
-    // iOS requires play() in the same synchronous turn as touchstart — no await.
     try {
       primeAudioElement(el);
-      el.muted = true;
+      el.muted = false;
+      el.volume = 1;
       el.src = SILENT_WAV;
-      const playPromise = el.play();
-      playPromise
-        ?.then(() => {
-          el.pause();
-          el.muted = false;
-          el.removeAttribute("src");
-          if (!isIOS()) el.load();
-          audioUnlockedRef.current = true;
-          unlockInFlightRef.current = false;
-          setNeedsGesture(false);
-          const synth = window.speechSynthesis;
-          if (synth && isSafariBrowser()) {
-            primeSpeechSynthesisInGesture(synth);
-            void waitForSpeechVoices(synth, isIOS() ? 3000 : 1200);
-          }
-        })
-        .catch(() => {
-          el.muted = false;
-          unlockInFlightRef.current = false;
-          setNeedsGesture(true);
-        });
+      void el.play();
+      audioUnlockedRef.current = true;
+      unlockInFlightRef.current = false;
+      setNeedsGesture(false);
+      setVoiceDebug(
+        formatVoiceDiag({ unlocked: true, path: "unlock:silent-wav" })
+      );
       return true;
     } catch {
-      el.muted = false;
       unlockInFlightRef.current = false;
       setNeedsGesture(true);
+      setVoiceDebug(formatVoiceDiag({ unlocked: false, path: "unlock:failed" }));
       return false;
     }
   }, []);
@@ -955,18 +1058,17 @@ export function NovaConsole() {
     }, 100);
   }, []);
 
-  const prefetchVoiceUrl = useCallback((blob: Blob): string => {
+  const prefetchVoiceUrl = useCallback((blob: Blob, formatHint?: string): string => {
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
     }
-    const url = URL.createObjectURL(normalizeAudioBlob(blob));
+    const url = URL.createObjectURL(normalizeAudioBlob(blob, formatHint));
     objectUrlRef.current = url;
     const el = audioElRef.current;
     if (el) {
       primeAudioElement(el);
       el.src = url;
-      // iOS: avoid load() before gesture — it can reset playback permission.
-      if (!isIOS()) el.load();
+      el.load();
     }
     return url;
   }, []);
@@ -985,13 +1087,24 @@ export function NovaConsole() {
   );
 
   const queueTapToHear = useCallback(
-    (pending: PendingVoice) => {
-      if (pending.blob && !pending.url && !pending.useBrowserTts) {
-        pending.url = prefetchVoiceUrl(pending.blob);
+    (pending: PendingVoice, diag?: VoiceFetchResult) => {
+      if (pending.blob && !pending.useBrowserTts) {
+        pending.url = prefetchVoiceUrl(pending.blob, diag?.format);
       }
       pendingVoiceRef.current = pending;
       waitingForTapRef.current = true;
       setShowTapToHear(true);
+      setVoiceDebug(
+        formatVoiceDiag({
+          unlocked: audioUnlockedRef.current,
+          status: diag?.status,
+          contentType: diag?.contentType,
+          bytes: diag?.bytes,
+          format: diag?.format,
+          path: pending.useBrowserTts ? "tap:browser-tts" : "tap:prefetched",
+          error: diag?.error,
+        })
+      );
     },
     [prefetchVoiceUrl]
   );
@@ -1005,7 +1118,7 @@ export function NovaConsole() {
     const pending = pendingVoiceRef.current;
     const el = audioElRef.current;
     if (!pending || !el) {
-      setVoiceDebug("tap: nothing pending");
+      setVoiceDebug(formatVoiceDiag({ path: "tap", error: "nothing pending" }));
       return;
     }
 
@@ -1024,30 +1137,15 @@ export function NovaConsole() {
     let playback: Promise<void>;
 
     if (snapshot.blob && !snapshot.useBrowserTts) {
-      if (snapshot.url) {
+      const srcReady =
+        Boolean(snapshot.url) &&
+        Boolean(el.src) &&
+        (el.src === snapshot.url || el.currentSrc === snapshot.url);
+      if (!srcReady && snapshot.url) {
         objectUrlRef.current = snapshot.url;
         primeAudioElement(el);
         el.src = snapshot.url;
-      } else {
-        playback = playBlobInGesture(el, snapshot.blob, objectUrlRef);
-        void playback
-          .then(() => {
-            setVoiceDebug(null);
-            setError(null);
-          })
-          .catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : "play failed";
-            setVoiceDebug(`tap: ${msg}`);
-            pendingVoiceRef.current = snapshot;
-            waitingForTapRef.current = true;
-            setShowTapToHear(true);
-            setError("Tap again to hear Nova's reply.");
-          })
-          .finally(() => {
-            gesturePlayLockRef.current = false;
-            resumeAfterSpeech(snapshot.after);
-          });
-        return;
+        el.load();
       }
       playback = playPreparedInGesture(el, objectUrlRef);
     } else if (isNovaApk() && hasNativeTts()) {
@@ -1056,7 +1154,7 @@ export function NovaConsole() {
       playback = speakWithFreeVoiceSync(snapshot.text);
     } else {
       gesturePlayLockRef.current = false;
-      setVoiceDebug("tap: no playback path");
+      setVoiceDebug(formatVoiceDiag({ path: "tap", error: "no playback path" }));
       pendingVoiceRef.current = snapshot;
       waitingForTapRef.current = true;
       setShowTapToHear(true);
@@ -1065,12 +1163,18 @@ export function NovaConsole() {
 
     void playback
       .then(() => {
-        setVoiceDebug(null);
+        setVoiceDebug(formatVoiceDiag({ unlocked: true, path: "tap:played" }));
         setError(null);
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : "play failed";
-        setVoiceDebug(`tap: ${msg}`);
+        setVoiceDebug(
+          formatVoiceDiag({
+            unlocked: audioUnlockedRef.current,
+            path: "tap:failed",
+            error: msg,
+          })
+        );
         pendingVoiceRef.current = snapshot;
         waitingForTapRef.current = true;
         setShowTapToHear(true);
@@ -1086,20 +1190,21 @@ export function NovaConsole() {
     (e: React.TouchEvent<HTMLButtonElement>) => {
       e.preventDefault();
       e.stopPropagation();
+      unlockAudioInGesture();
       playPendingNow();
     },
-    [playPendingNow]
+    [playPendingNow, unlockAudioInGesture]
   );
 
   const onTapToHear = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
-      // iOS fires touchstart first — skip duplicate pointerdown.
       if (isIOS() && e.pointerType === "touch") return;
       e.preventDefault();
       e.stopPropagation();
+      unlockAudioInGesture();
       playPendingNow();
     },
-    [playPendingNow]
+    [playPendingNow, unlockAudioInGesture]
   );
 
   const clearSilenceEnd = useCallback(() => {
@@ -1319,25 +1424,51 @@ export function NovaConsole() {
       let voiceBlob: Blob | null = null;
       let useBrowserTts = false;
       let prefetchedUrl: string | undefined;
+      let fetchMeta: VoiceFetchResult | null = null;
 
       try {
-        if (!audioUnlockedRef.current) {
-          await unlockAudio();
-        }
-
-        // Safari MPEG path: speechSynthesis.cancel() can block HTMLAudioElement.
-        if (!needsSafariGesturePlayback()) {
+        if (!isIOS()) {
+          if (!audioUnlockedRef.current) {
+            await unlockAudio();
+          }
           stopNativeTts();
           window.speechSynthesis?.cancel();
         }
 
-        const fetched = await fetchVoiceAudio(text);
-        voiceBlob = fetched.blob;
-        useBrowserTts = fetched.useBrowserTts;
-        if (fetched.debug) setVoiceDebug(fetched.debug);
+        fetchMeta = await fetchVoiceAudio(text);
+        voiceBlob = fetchMeta.blob;
+        useBrowserTts = fetchMeta.useBrowserTts;
+
+        setVoiceDebug(
+          formatVoiceDiag({
+            unlocked: audioUnlockedRef.current,
+            status: fetchMeta.status,
+            contentType: fetchMeta.contentType,
+            bytes: fetchMeta.bytes,
+            format: fetchMeta.format,
+            path: isIOS() ? "ios:fetch-done" : "fetch-done",
+            error: fetchMeta.error,
+          })
+        );
 
         if (voiceBlob && !useBrowserTts) {
-          prefetchedUrl = prefetchVoiceUrl(voiceBlob);
+          prefetchedUrl = prefetchVoiceUrl(voiceBlob, fetchMeta.format);
+        }
+
+        if (isIOS()) {
+          queueTapToHear(
+            {
+              text,
+              blob: voiceBlob,
+              url: prefetchedUrl,
+              after,
+              useBrowserTts: useBrowserTts || !voiceBlob,
+            },
+            fetchMeta
+          );
+          setPhase("speaking");
+          setError(null);
+          return;
         }
 
         if (voiceBlob && !useBrowserTts && audioElRef.current) {
@@ -1352,18 +1483,21 @@ export function NovaConsole() {
             return;
           } catch (err) {
             const msg = err instanceof Error ? err.message : "autoplay failed";
-            setVoiceDebug(`auto: ${msg}`);
+            setVoiceDebug(formatVoiceDiag({ path: "auto", error: msg }));
           }
         }
 
         if (needsSafariGesturePlayback()) {
-          queueTapToHear({
-            text,
-            blob: voiceBlob,
-            url: prefetchedUrl,
-            after,
-            useBrowserTts: useBrowserTts || !voiceBlob,
-          });
+          queueTapToHear(
+            {
+              text,
+              blob: voiceBlob,
+              url: prefetchedUrl,
+              after,
+              useBrowserTts: useBrowserTts || !voiceBlob,
+            },
+            fetchMeta
+          );
           setPhase("speaking");
           setError(null);
           return;
@@ -1380,14 +1514,17 @@ export function NovaConsole() {
         setVoiceDebug(null);
         setError(null);
       } catch (err) {
-        if (needsSafariGesturePlayback()) {
-          queueTapToHear({
-            text,
-            blob: voiceBlob,
-            url: prefetchedUrl,
-            after,
-            useBrowserTts: useBrowserTts || !voiceBlob,
-          });
+        if (needsSafariGesturePlayback() || isIOS()) {
+          queueTapToHear(
+            {
+              text,
+              blob: voiceBlob,
+              url: prefetchedUrl,
+              after,
+              useBrowserTts: useBrowserTts || !voiceBlob,
+            },
+            fetchMeta ?? undefined
+          );
           setPhase("speaking");
           setError(null);
           return;
@@ -1400,7 +1537,12 @@ export function NovaConsole() {
           const msg = err instanceof Error ? err.message : "Voice failed";
           const fbMsg =
             fallbackErr instanceof Error ? fallbackErr.message : "";
-          setVoiceDebug(`err: ${msg}${fbMsg ? ` / ${fbMsg}` : ""}`);
+          setVoiceDebug(
+            formatVoiceDiag({
+              path: "err",
+              error: `${msg}${fbMsg ? ` / ${fbMsg}` : ""}`,
+            })
+          );
           if (
             /NotAllowed|interact|gesture|play blocked/i.test(msg) ||
             /NotAllowed|interact|gesture|play blocked|did not start/i.test(fbMsg)
@@ -1623,6 +1765,7 @@ export function NovaConsole() {
         playsInline
         preload="auto"
         className="nova-audio-hidden"
+        aria-hidden
       />
       <div className="nova-void" aria-hidden />
       <div className="nova-stars" aria-hidden />
@@ -1732,7 +1875,7 @@ export function NovaConsole() {
             Turn up volume (side buttons). Silent switch does not mute Nova, but volume must be up.
           </p>
         )}
-        {voiceDebug && (
+        {voiceDebug && !isIOS() && (
           <p className="nova-voice-debug" aria-live="polite">
             voice: {voiceDebug}
           </p>
@@ -1743,6 +1886,16 @@ export function NovaConsole() {
           </p>
         )}
       </main>
+
+      {mounted &&
+        isIOS() &&
+        createPortal(
+          <div className="nova-voice-debug-fixed" aria-live="assertive">
+            <strong>Voice debug</strong>
+            <span>{voiceDebug ?? "Tap orb once, then Tap to hear"}</span>
+          </div>,
+          document.body
+        )}
 
       {mounted &&
         showTapToHear &&
@@ -1812,6 +1965,8 @@ export function NovaConsole() {
             type="submit"
             disabled={phase === "thinking"}
             className="nova-send"
+            onTouchStart={handleGestureUnlock}
+            onPointerDown={handleGestureUnlock}
           >
             Send
           </button>
