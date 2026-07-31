@@ -577,71 +577,118 @@ export function NovaConsole() {
             ? "nova-orb nova-orb-speak"
             : "nova-orb";
 
+  const waveLive =
+    listeningOn &&
+    (phase === "listening_wake" ||
+      phase === "listening_command" ||
+      phase === "speaking" ||
+      phase === "thinking");
+
+  const phaseLabel = !listeningOn
+    ? "muted — tap to wake"
+    : phase === "idle"
+      ? "starting…"
+      : phase === "listening_wake"
+        ? "listening for nova"
+        : phase === "listening_command"
+          ? "go ahead"
+          : phase === "thinking"
+            ? "thinking"
+            : phase === "speaking"
+              ? "speaking"
+              : "";
+
   return (
-    <div className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,#0f3d3a_0%,#061312_55%,#030807_100%)] text-teal-50">
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.12] [background-image:linear-gradient(rgba(94,234,212,0.15)_1px,transparent_1px),linear-gradient(90deg,rgba(94,234,212,0.15)_1px,transparent_1px)] [background-size:48px_48px] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_75%)]"
-        aria-hidden
-      />
-      <header className="relative z-10 flex items-start justify-between gap-4 px-6 pt-8 sm:px-10">
+    <div className="nova-shell flex flex-col">
+      <div className="nova-aurora" aria-hidden />
+      <div className="nova-grid" aria-hidden />
+      <div className="nova-vignette" aria-hidden />
+
+      <header className="relative z-10 flex items-start justify-between gap-6 px-6 pt-7 sm:px-10">
         <div>
           <Link
             href="/nexus"
-            className="text-xs uppercase tracking-[0.2em] text-teal-200/60 hover:text-teal-100"
+            className="text-[11px] uppercase tracking-[0.28em] text-teal-200/45 transition hover:text-teal-100/80"
           >
-            Nexus tools
+            Nexus
           </Link>
-          <h1 className="mt-2 font-display text-4xl font-semibold tracking-[0.18em] text-teal-50 sm:text-5xl">
+          <h1 className="mt-3 font-display text-5xl font-semibold tracking-[0.22em] text-teal-50 sm:text-6xl">
             NOVA
           </h1>
-          <p className="mt-2 max-w-md text-sm text-teal-100/55">
-            Always listening — say{" "}
-            <span className="text-teal-100/90">“Hey Nova…”</span> like Alexa.
+          <p className="mt-3 max-w-sm text-sm leading-relaxed text-teal-100/45">
+            Say <span className="text-teal-100/80">“Hey Nova”</span> — she
+            answers and keeps listening.
           </p>
         </div>
-        <div className="rounded-lg border border-teal-400/20 bg-black/30 px-3 py-2 text-right text-[11px] leading-relaxed text-teal-100/70">
-          <div>
-            Mic{" "}
-            <strong className="text-teal-50">
-              {listeningOn ? "ALWAYS ON" : "MUTED"}
-            </strong>
+
+        <div className="flex flex-col items-end gap-2 pt-1 text-[11px] tracking-wide text-teal-100/55">
+          <div className="flex items-center gap-2">
+            <span
+              className={
+                listeningOn
+                  ? "nova-status-dot nova-status-dot-on"
+                  : "nova-status-dot nova-status-dot-off"
+              }
+            />
+            <span>{listeningOn ? "Mic live" : "Mic muted"}</span>
           </div>
-          <div>
-            Nova{" "}
-            <strong className="text-teal-50">
-              {status?.novaArmed ? "ARMED" : "PAUSED"}
-            </strong>
-            {" · "}
-            target {status?.dailyTarget ?? "—"}/day
+          <div className="flex items-center gap-2">
+            <span
+              className={
+                status?.novaArmed
+                  ? "nova-status-dot nova-status-dot-on"
+                  : "nova-status-dot"
+              }
+            />
+            <span>
+              {status?.novaArmed ? "Armed" : "Paused"} ·{" "}
+              {status?.dailyTarget ?? "—"}/day
+            </span>
           </div>
-          <div>
-            Env send {status?.sendEnabled ? "ON" : "OFF"}
+          <div className="text-right text-teal-100/35">
+            Send {status?.sendEnabled ? "on" : "off"}
             {status?.mailtrapConfigured ? "" : " · no Mailtrap"}
-            {status && !status.voiceConfigured ? " · voice key missing" : ""}
+            {status && !status.voiceConfigured ? " · voice missing" : ""}
           </div>
         </div>
       </header>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 py-10">
-        <button
-          type="button"
-          onClick={toggleListening}
-          className={orbClass}
-          aria-label={listeningOn ? "Mute Nova mic" : "Enable always-on listening"}
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 py-8">
+        <div className="nova-orb-wrap">
+          <span className="nova-ring nova-ring-a" aria-hidden />
+          <span className="nova-ring nova-ring-b" aria-hidden />
+          <span className="nova-ring nova-ring-c" aria-hidden />
+          <button
+            type="button"
+            onClick={toggleListening}
+            className={orbClass}
+            aria-label={
+              listeningOn ? "Mute Nova mic" : "Enable always-on listening"
+            }
+          >
+            <span className="nova-orb-core" />
+          </button>
+        </div>
+
+        <div
+          className={waveLive ? "nova-wave nova-wave-live" : "nova-wave"}
+          aria-hidden
         >
-          <span className="nova-orb-core" />
-        </button>
-        <p className="mt-6 text-xs uppercase tracking-[0.25em] text-teal-200/50">
-          {!listeningOn && "muted — tap orb to listen"}
-          {listeningOn && phase === "idle" && "starting mic…"}
-          {listeningOn && phase === "listening_wake" && "listening for “nova”"}
-          {listeningOn && phase === "listening_command" && "go ahead — i'm listening"}
-          {phase === "thinking" && "thinking"}
-          {phase === "speaking" && "speaking"}
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+
+        <p className="mt-4 text-[11px] uppercase tracking-[0.35em] text-teal-200/45">
+          {phaseLabel}
         </p>
         {needsGesture && (
           <p className="mt-2 text-xs text-amber-200/90">
-            Browser needs a tap — hit the orb once to unlock always-on.
+            Tap the orb once to unlock always-on listening.
           </p>
         )}
         {!micSupported && (
@@ -651,47 +698,63 @@ export function NovaConsole() {
         )}
       </div>
 
-      <section className="relative z-10 mx-auto w-full max-w-2xl flex-1 px-6 pb-4 sm:px-10">
-        <div className="nova-transcript max-h-56 space-y-3 overflow-y-auto pr-1">
+      <section className="relative z-10 mx-auto w-full max-w-xl flex-1 px-6 pb-3 sm:px-10">
+        <div className="nova-transcript max-h-52 space-y-4 overflow-y-auto pr-1">
           {lines.length === 0 && (
-            <p className="text-sm text-teal-100/40">
-              Say “Hey Nova” — she’ll answer “Hey” and keep listening.
+            <p className="text-center text-sm text-teal-100/30">
+              Waiting for your voice…
             </p>
           )}
           {lines.map((line) => (
             <div
               key={line.id}
-              className={
+              className={`nova-line-in ${
                 line.role === "user"
-                  ? "text-sm text-teal-100/80"
-                  : "text-sm text-teal-50"
-              }
+                  ? "ml-auto max-w-[90%] text-right"
+                  : "mr-auto max-w-[92%]"
+              }`}
             >
-              <span className="mr-2 text-[10px] uppercase tracking-wider text-teal-300/40">
+              <div
+                className={
+                  line.role === "user"
+                    ? "text-[10px] uppercase tracking-[0.2em] text-teal-300/35"
+                    : "text-[10px] uppercase tracking-[0.2em] text-teal-300/50"
+                }
+              >
                 {line.role === "user" ? "You" : "Nova"}
-              </span>
-              {line.content}
+              </div>
+              <p
+                className={
+                  line.role === "user"
+                    ? "mt-1 text-sm leading-relaxed text-teal-100/70"
+                    : "mt-1 font-display text-[1.05rem] leading-snug tracking-tight text-teal-50"
+                }
+              >
+                {line.content}
+              </p>
             </div>
           ))}
           <div ref={bottomRef} />
         </div>
-        {error && <p className="mt-3 text-xs text-rose-300/90">{error}</p>}
+        {error && (
+          <p className="mt-3 text-center text-xs text-rose-300/90">{error}</p>
+        )}
       </section>
 
       <form
         onSubmit={onSubmit}
-        className="relative z-10 mx-auto flex w-full max-w-2xl gap-2 px-6 pb-10 sm:px-10"
+        className="relative z-10 mx-auto flex w-full max-w-xl items-center gap-2 px-6 pb-9 sm:px-10"
       >
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Or type to Nova…"
-          className="flex-1 rounded-md border border-teal-400/25 bg-black/40 px-4 py-3 text-sm text-teal-50 placeholder:text-teal-200/30 focus:border-teal-300/50 focus:outline-none"
+          placeholder="Type to Nova…"
+          className="flex-1 rounded-full border border-teal-400/15 bg-black/35 px-5 py-3.5 text-sm text-teal-50 shadow-[inset_0_1px_0_rgba(94,234,212,0.06)] backdrop-blur-sm placeholder:text-teal-200/25 focus:border-teal-300/40 focus:outline-none"
         />
         <button
           type="submit"
           disabled={phase === "thinking"}
-          className="rounded-md bg-teal-400/20 px-4 py-3 text-sm font-medium text-teal-50 hover:bg-teal-400/30 disabled:opacity-40"
+          className="rounded-full border border-teal-300/25 bg-teal-400/15 px-5 py-3.5 text-sm font-medium tracking-wide text-teal-50 transition hover:bg-teal-400/25 disabled:opacity-40"
         >
           Send
         </button>
