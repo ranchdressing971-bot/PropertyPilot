@@ -10,6 +10,8 @@ type Phase =
   | "thinking"
   | "speaking";
 
+type ListenMode = "wake" | "command";
+
 interface ChatLine {
   id: string;
   role: "user" | "assistant";
@@ -75,6 +77,18 @@ function containsWake(text: string): boolean {
   return /\bhey\s+nova\b/i.test(text) || /\bnova\b/i.test(text);
 }
 
+/** True when the utterance is only the wake word (no real command yet). */
+function isWakeOnly(text: string): boolean {
+  const rest = stripWake(text);
+  if (rest.length >= 2) return false;
+  const cleaned = text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ");
+  return /^(hey )?nova$/.test(cleaned);
+}
+
 function beep() {
   try {
     const ctx = new AudioContext();
@@ -98,20 +112,24 @@ export function NovaConsole() {
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [micSupported, setMicSupported] = useState(true);
-  /** Always-on Alexa mode — default true; orb mutes/unmutes. */
   const [listeningOn, setListeningOn] = useState(true);
   const [needsGesture, setNeedsGesture] = useState(false);
 
   const phaseRef = useRef<Phase>("idle");
   const listeningOnRef = useRef(true);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const restartingRef = useRef(false);
   const commandBufferRef = useRef("");
   const commandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commandDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const audioUnlockedRef = useRef(false);
+  /** After TTS, restart mic in wake or command mode. */
+  const resumeModeRef = useRef<ListenMode>("wake");
   const askNovaRef = useRef<(message: string) => Promise<void>>(async () => {});
-  const resumeListenRef = useRef<() => void>(() => {});
+  const startMicRef = useRef<(mode?: ListenMode) => void>(() => {});
+  const acknowledgeWakeRef = useRef<() => void>(() => {});
 
   const unlockAudio = useCallback(() => {
     if (audioUnlockedRef.current) return;
@@ -167,98 +185,308 @@ export function NovaConsole() {
     void refreshStatus();
   }, [refreshStatus]);
 
-  const pauseMic = useCallback(() => {
+  /** Hard-kill mic. Chrome will not reliably restart a stopped instance. */
+  const killMic = useCallback(() => {
+    restartingRef.current = true;
     if (commandTimerRef.current) {
       clearTimeout(commandTimerRef.current);
       commandTimerRef.current = null;
     }
-    try {
-      recognitionRef.current?.stop();
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const speak = useCallback(async (text: string) => {
-    setPhase("speaking");
-    pauseMic();
-    try {
-      const res = await fetch("/api/nova/speak", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      if (res.status === 503) {
-        setError(
-          "Voice off — add ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID on Vercel, redeploy."
-        );
-        return;
-      }
-      if (!res.ok) {
-        let detail = "Voice request failed";
+    const rec = recognitionRef.current;
+    recognitionRef.current = null;
+    if (rec) {
+      rec.onresult = null;
+      rec.onerror = null;
+      rec.onend = null;
+      try {
+        rec.abort();
+      } catch {
         try {
-          const data = (await res.json()) as { error?: string };
-          if (data.error) detail = data.error;
+          rec.stop();
         } catch {
           /* ignore */
         }
-        setError(detail);
-        return;
       }
-      const blob = await res.blob();
-      if (!blob.size) {
-        setError("Voice returned empty audio.");
-        return;
-      }
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      await new Promise<void>((resolve) => {
-        audio.onended = () => {
-          URL.revokeObjectURL(url);
-          resolve();
-        };
-        audio.onerror = () => {
-          setError(
-            "Browser could not play the voice file. Tap the orb, check volume, try Chrome."
-          );
-          URL.revokeObjectURL(url);
-          resolve();
-        };
-        void audio.play().catch((err: unknown) => {
-          const msg = err instanceof Error ? err.message : "play blocked";
-          setError(
-            `Browser blocked playback (${msg}). Tap the orb once to unlock sound, then ask again.`
-          );
-          URL.revokeObjectURL(url);
-          resolve();
-        });
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Voice failed");
-    } finally {
-      setPhase("listening_wake");
-      resumeListenRef.current();
     }
-  }, [pauseMic]);
+    window.setTimeout(() => {
+      restartingRef.current = false;
+    }, 100);
+  }, []);
+
+  const clearCommandDeadline = useCallback(() => {
+    if (commandDeadlineRef.current) {
+      clearTimeout(commandDeadlineRef.current);
+      commandDeadlineRef.current = null;
+    }
+  }, []);
+
+  const armCommandDeadline = useCallback(() => {
+    clearCommandDeadline();
+    // If they only said "Hey Nova", wait for the real ask — then fall back.
+    commandDeadlineRef.current = setTimeout(() => {
+      if (phaseRef.current === "listening_command") {
+        setPhase("listening_wake");
+        resumeModeRef.current = "wake";
+        startMicRef.current("wake");
+      }
+    }, 10000);
+  }, [clearCommandDeadline]);
+
+  const startMic = useCallback(
+    (mode: ListenMode = "wake") => {
+      if (!listeningOnRef.current) return;
+      if (phaseRef.current === "thinking" || phaseRef.current === "speaking") {
+        return;
+      }
+
+      const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!Ctor) {
+        setMicSupported(false);
+        return;
+      }
+
+      killMic();
+
+      const recognition = new Ctor();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+      recognitionRef.current = recognition;
+
+      setPhase(mode === "command" ? "listening_command" : "listening_wake");
+      if (mode === "command") armCommandDeadline();
+      else clearCommandDeadline();
+
+      recognition.onresult = (event) => {
+        if (
+          phaseRef.current === "thinking" ||
+          phaseRef.current === "speaking"
+        ) {
+          return;
+        }
+
+        let chunk = "";
+        let isFinal = false;
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          chunk += event.results[i][0]?.transcript ?? "";
+          if (event.results[i].isFinal) isFinal = true;
+        }
+        const text = chunk.trim();
+        if (!text) return;
+
+        if (phaseRef.current === "listening_wake") {
+          if (!containsWake(text)) return;
+
+          // Wake word only — acknowledge and keep listening for the ask.
+          if (isWakeOnly(text) || stripWake(text).length < 2) {
+            if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+            commandBufferRef.current = "";
+            acknowledgeWakeRef.current();
+            return;
+          }
+
+          beep();
+          setPhase("listening_command");
+          armCommandDeadline();
+          const rest = stripWake(text);
+          commandBufferRef.current = rest;
+          if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+          if (rest.length > 6 && isFinal) {
+            clearCommandDeadline();
+            commandBufferRef.current = "";
+            void askNovaRef.current(rest);
+            return;
+          }
+          commandTimerRef.current = setTimeout(() => {
+            const cmd = commandBufferRef.current.trim();
+            if (cmd.length >= 2) {
+              clearCommandDeadline();
+              commandBufferRef.current = "";
+              void askNovaRef.current(cmd);
+            } else {
+              acknowledgeWakeRef.current();
+            }
+          }, 1600);
+          return;
+        }
+
+        if (phaseRef.current === "listening_command") {
+          // Ignore a second bare wake while already listening for the command
+          if (isWakeOnly(text)) {
+            beep();
+            armCommandDeadline();
+            return;
+          }
+          const rest = stripWake(text) || text;
+          if (rest.length < 2) return;
+          commandBufferRef.current = rest;
+          if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+          commandTimerRef.current = setTimeout(() => {
+            const cmd = commandBufferRef.current.trim();
+            if (cmd.length < 2) return;
+            clearCommandDeadline();
+            commandBufferRef.current = "";
+            void askNovaRef.current(cmd);
+          }, isFinal ? 450 : 1200);
+        }
+      };
+
+      recognition.onerror = (ev) => {
+        if (ev.error === "not-allowed") {
+          setError("Allow the microphone — Nova needs it to always listen.");
+          setNeedsGesture(true);
+          setListeningOn(false);
+          listeningOnRef.current = false;
+          setPhase("idle");
+          recognitionRef.current = null;
+        }
+      };
+
+      recognition.onend = () => {
+        if (restartingRef.current) return;
+        if (!listeningOnRef.current) return;
+        if (
+          phaseRef.current === "thinking" ||
+          phaseRef.current === "speaking"
+        ) {
+          return;
+        }
+        // Chrome drops continuous sessions — spawn a fresh one.
+        window.setTimeout(() => {
+          if (!listeningOnRef.current) return;
+          if (
+            phaseRef.current === "thinking" ||
+            phaseRef.current === "speaking"
+          ) {
+            return;
+          }
+          if (recognitionRef.current !== recognition) return;
+          recognitionRef.current = null;
+          startMicRef.current(
+            phaseRef.current === "listening_command" ? "command" : "wake"
+          );
+        }, 250);
+      };
+
+      try {
+        recognition.start();
+        setNeedsGesture(false);
+      } catch {
+        setNeedsGesture(true);
+        setError("Tap the orb once to enable always-on listening.");
+        recognitionRef.current = null;
+      }
+    },
+    [armCommandDeadline, clearCommandDeadline, killMic]
+  );
+
+  useEffect(() => {
+    startMicRef.current = startMic;
+  }, [startMic]);
+
+  const speak = useCallback(
+    async (text: string, after: ListenMode = "wake") => {
+      resumeModeRef.current = after;
+      setPhase("speaking");
+      killMic();
+      try {
+        const res = await fetch("/api/nova/speak", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (res.status === 503) {
+          setError(
+            "Voice off — add ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID on Vercel, redeploy."
+          );
+          return;
+        }
+        if (!res.ok) {
+          let detail = "Voice request failed";
+          try {
+            const data = (await res.json()) as { error?: string };
+            if (data.error) detail = data.error;
+          } catch {
+            /* ignore */
+          }
+          setError(detail);
+          return;
+        }
+        const blob = await res.blob();
+        if (!blob.size) {
+          setError("Voice returned empty audio.");
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        await new Promise<void>((resolve) => {
+          audio.onended = () => {
+            URL.revokeObjectURL(url);
+            resolve();
+          };
+          audio.onerror = () => {
+            setError(
+              "Browser could not play the voice file. Tap the orb, check volume, try Chrome."
+            );
+            URL.revokeObjectURL(url);
+            resolve();
+          };
+          void audio.play().catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : "play blocked";
+            setError(
+              `Browser blocked playback (${msg}). Tap the orb once to unlock sound.`
+            );
+            URL.revokeObjectURL(url);
+            resolve();
+          });
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Voice failed");
+      } finally {
+        const mode = resumeModeRef.current;
+        setPhase(mode === "command" ? "listening_command" : "listening_wake");
+        // Fresh mic session after TTS — old one is dead after killMic.
+        window.setTimeout(() => {
+          if (listeningOnRef.current) startMicRef.current(mode);
+        }, 350);
+      }
+    },
+    [killMic]
+  );
+
+  const acknowledgeWake = useCallback(() => {
+    beep();
+    setPhase("listening_command");
+    armCommandDeadline();
+    // Short ack, then keep listening for the real question.
+    void speak("Hey.", "command");
+  }, [armCommandDeadline, speak]);
+
+  useEffect(() => {
+    acknowledgeWakeRef.current = acknowledgeWake;
+  }, [acknowledgeWake]);
 
   const askNova = useCallback(
     async (message: string) => {
       const cleaned = message.trim();
-      if (!cleaned) return;
+      if (!cleaned || isWakeOnly(cleaned)) {
+        acknowledgeWake();
+        return;
+      }
 
       unlockAudio();
       setError(null);
+      clearCommandDeadline();
       setPhase("thinking");
-      pauseMic();
+      killMic();
+      resumeModeRef.current = "wake";
 
-      const userLine: ChatLine = {
-        id: `u-${Date.now()}`,
-        role: "user",
-        content: cleaned,
-      };
-      setLines((prev) => [...prev, userLine]);
+      setLines((prev) => [
+        ...prev,
+        { id: `u-${Date.now()}`, role: "user", content: cleaned },
+      ]);
 
       try {
         const res = await fetch("/api/nova/chat", {
@@ -276,179 +504,39 @@ export function NovaConsole() {
           { id: `a-${Date.now()}`, role: "assistant", content: reply },
         ]);
         await refreshStatus();
-        await speak(reply);
+        await speak(reply, "wake");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Nova failed";
         setError(msg);
         setPhase("listening_wake");
-        resumeListenRef.current();
+        window.setTimeout(() => {
+          if (listeningOnRef.current) startMicRef.current("wake");
+        }, 350);
       }
     },
-    [pauseMic, refreshStatus, speak, unlockAudio]
+    [
+      acknowledgeWake,
+      clearCommandDeadline,
+      killMic,
+      refreshStatus,
+      speak,
+      unlockAudio,
+    ]
   );
 
   useEffect(() => {
     askNovaRef.current = askNova;
   }, [askNova]);
 
-  const submitCommand = useCallback((raw: string) => {
-    const cmd = stripWake(raw) || raw.trim();
-    if (cmd.length < 2) {
-      setPhase("listening_wake");
-      return;
-    }
-    commandBufferRef.current = "";
-    void askNovaRef.current(cmd);
-  }, []);
-
-  const ensureListening = useCallback(() => {
-    if (!listeningOnRef.current) return;
-    const busy =
-      phaseRef.current === "thinking" || phaseRef.current === "speaking";
-    if (busy) return;
-
-    const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Ctor) {
-      setMicSupported(false);
-      return;
-    }
-
-    // Already running
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.start();
-      } catch {
-        /* already started */
-      }
-      if (
-        phaseRef.current !== "listening_command" &&
-        phaseRef.current !== "thinking" &&
-        phaseRef.current !== "speaking"
-      ) {
-        setPhase("listening_wake");
-      }
-      return;
-    }
-
-    const recognition = new Ctor();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-    recognitionRef.current = recognition;
-
-    recognition.onresult = (event) => {
-      if (
-        phaseRef.current === "thinking" ||
-        phaseRef.current === "speaking"
-      ) {
-        return;
-      }
-
-      let chunk = "";
-      let isFinal = false;
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        chunk += event.results[i][0]?.transcript ?? "";
-        if (event.results[i].isFinal) isFinal = true;
-      }
-      const text = chunk.trim();
-      if (!text) return;
-
-      if (phaseRef.current === "listening_wake") {
-        if (!containsWake(text)) return;
-        beep();
-        setPhase("listening_command");
-        const rest = stripWake(text);
-        commandBufferRef.current = rest;
-        if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
-        // If the whole ask came in one breath ("Hey Nova how are emails")
-        if (rest.length > 6 && isFinal) {
-          submitCommand(rest);
-          return;
-        }
-        // Else wait briefly for the rest of the sentence
-        commandTimerRef.current = setTimeout(() => {
-          submitCommand(commandBufferRef.current || rest);
-        }, 1600);
-        return;
-      }
-
-      if (phaseRef.current === "listening_command") {
-        const rest = stripWake(text) || text;
-        commandBufferRef.current = rest;
-        if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
-        commandTimerRef.current = setTimeout(() => {
-          submitCommand(commandBufferRef.current);
-        }, isFinal ? 400 : 1400);
-      }
-    };
-
-    recognition.onerror = (ev) => {
-      if (ev.error === "not-allowed") {
-        setError("Allow the microphone — Nova needs it to always listen.");
-        setNeedsGesture(true);
-        setListeningOn(false);
-        listeningOnRef.current = false;
-        setPhase("idle");
-        recognitionRef.current = null;
-        return;
-      }
-      // no-speech / aborted — onend will restart
-    };
-
-    recognition.onend = () => {
-      if (!listeningOnRef.current) return;
-      if (
-        phaseRef.current === "thinking" ||
-        phaseRef.current === "speaking"
-      ) {
-        return;
-      }
-      window.setTimeout(() => {
-        if (!listeningOnRef.current) return;
-        if (
-          phaseRef.current === "thinking" ||
-          phaseRef.current === "speaking"
-        ) {
-          return;
-        }
-        try {
-          recognition.start();
-          if (phaseRef.current === "idle") setPhase("listening_wake");
-        } catch {
-          /* ignore */
-        }
-      }, 200);
-    };
-
-    try {
-      recognition.start();
-      setPhase("listening_wake");
-      setNeedsGesture(false);
-      setError(null);
-    } catch {
-      setNeedsGesture(true);
-      setError("Tap the orb once to enable always-on listening.");
-    }
-  }, [submitCommand]);
-
-  useEffect(() => {
-    resumeListenRef.current = ensureListening;
-  }, [ensureListening]);
-
-  // Alexa mode: start listening as soon as the page loads
+  // Always-on on mount
   useEffect(() => {
     listeningOnRef.current = true;
     setListeningOn(true);
-    ensureListening();
+    startMic("wake");
     return () => {
       listeningOnRef.current = false;
-      try {
-        recognitionRef.current?.abort();
-      } catch {
-        /* ignore */
-      }
-      recognitionRef.current = null;
-      if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+      killMic();
+      clearCommandDeadline();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once
   }, []);
@@ -458,15 +546,15 @@ export function NovaConsole() {
     if (listeningOn) {
       setListeningOn(false);
       listeningOnRef.current = false;
-      pauseMic();
-      recognitionRef.current = null;
+      killMic();
+      clearCommandDeadline();
       setPhase("idle");
       return;
     }
     setListeningOn(true);
     listeningOnRef.current = true;
     setNeedsGesture(false);
-    ensureListening();
+    startMic("wake");
   };
 
   const onSubmit = (e: React.FormEvent) => {
@@ -547,7 +635,7 @@ export function NovaConsole() {
           {!listeningOn && "muted — tap orb to listen"}
           {listeningOn && phase === "idle" && "starting mic…"}
           {listeningOn && phase === "listening_wake" && "listening for “nova”"}
-          {listeningOn && phase === "listening_command" && "go ahead…"}
+          {listeningOn && phase === "listening_command" && "go ahead — i'm listening"}
           {phase === "thinking" && "thinking"}
           {phase === "speaking" && "speaking"}
         </p>
@@ -567,7 +655,7 @@ export function NovaConsole() {
         <div className="nova-transcript max-h-56 space-y-3 overflow-y-auto pr-1">
           {lines.length === 0 && (
             <p className="text-sm text-teal-100/40">
-              Just say: “Hey Nova, how are the emails going?”
+              Say “Hey Nova” — she’ll answer “Hey” and keep listening.
             </p>
           )}
           {lines.map((line) => (
