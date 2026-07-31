@@ -12,6 +12,7 @@ type OrbPhase =
 interface NovaMeshOrbProps {
   phase: OrbPhase;
   onClick: () => void;
+  onPointerDown?: () => void;
   ariaLabel: string;
 }
 
@@ -45,7 +46,12 @@ function lerpColor(
  * Animated neon mesh sphere inspired by the particle-wireframe reference —
  * not a still image. Cyan/pink dual glow, flowing surface distortion.
  */
-export function NovaMeshOrb({ phase, onClick, ariaLabel }: NovaMeshOrbProps) {
+export function NovaMeshOrb({
+  phase,
+  onClick,
+  onPointerDown,
+  ariaLabel,
+}: NovaMeshOrbProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLButtonElement | null>(null);
   const phaseRef = useRef(phase);
@@ -311,6 +317,7 @@ export function NovaMeshOrb({ phase, onClick, ariaLabel }: NovaMeshOrbProps) {
       ref={wrapRef}
       type="button"
       onClick={onClick}
+      onPointerDown={onPointerDown}
       className="nova-orb"
       aria-label={ariaLabel}
     >

@@ -166,17 +166,25 @@
 }
 
 .nova-tap-hear {
-  margin-top: 0.75rem;
-  padding: 0.65rem 1.25rem;
+  position: relative;
+  z-index: 50;
+  display: block;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.75rem 1.25rem;
   border-radius: 9999px;
-  border: 1px solid rgba(120, 220, 255, 0.45);
-  background: rgba(20, 60, 80, 0.55);
+  border: 1px solid rgba(120, 220, 255, 0.55);
+  background: rgba(20, 60, 80, 0.85);
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: rgba(180, 240, 255, 0.95);
   cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
