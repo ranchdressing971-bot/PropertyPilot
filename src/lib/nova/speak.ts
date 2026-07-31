@@ -1,9 +1,10 @@
 /**
  * ElevenLabs TTS for Nova voice replies.
  *
- * Free accounts cannot use Voice Library IDs via the API (that includes the
- * old "Rachel" default). Prefer ELEVENLABS_VOICE_ID from My Voices, otherwise
- * we pick the first voice ElevenLabs returns for this API key.
+ * Free accounts cannot use Voice Library IDs via the API. Set
+ * ELEVENLABS_VOICE_ID to the id from My Voices, OR ELEVENLABS_VOICE_NAME
+ * (e.g. "Nova") and we resolve it. If unset, we prefer a voice named Nova,
+ * then the first account voice.
  */
 
 let cachedVoiceId: string | null = null;
@@ -12,9 +13,9 @@ export function isElevenLabsConfigured(): boolean {
   return Boolean(process.env.ELEVENLABS_API_KEY?.trim());
 }
 
-async function listAccountVoices(apiKey: string): Promise<
-  Array<{ voice_id: string; name: string; category?: string }>
-> {
+type ElVoice = { voice_id: string; name: string; category?: string };
+
+async function listAccountVoices(apiKey: string): Promise<ElVoice[]> {
   const response = await fetch("https://api.elevenlabs.io/v1/voices", {
     headers: { "xi-api-key": apiKey },
     cache: "no-store",
@@ -25,29 +26,60 @@ async function listAccountVoices(apiKey: string): Promise<
       `ElevenLabs voices list failed (${response.status}): ${detail.slice(0, 200)}`
     );
   }
-  const data = (await response.json()) as {
-    voices?: Array<{ voice_id: string; name: string; category?: string }>;
-  };
+  const data = (await response.json()) as { voices?: ElVoice[] };
   return data.voices ?? [];
+}
+
+/** Voice IDs look like 20+ char alphanumeric; names are short words. */
+function looksLikeVoiceId(value: string): boolean {
+  return /^[a-zA-Z0-9]{16,}$/.test(value);
+}
+
+function findByName(voices: ElVoice[], name: string): ElVoice | undefined {
+  const want = name.trim().toLowerCase();
+  return (
+    voices.find((v) => v.name.trim().toLowerCase() === want) ??
+    voices.find((v) => v.name.trim().toLowerCase().includes(want))
+  );
 }
 
 /**
  * Resolve a voice the API key is allowed to use.
- * Env wins; else first premade/default/cloned voice on the account.
  */
 export async function resolveElevenLabsVoiceId(apiKey: string): Promise<string> {
-  const fromEnv = process.env.ELEVENLABS_VOICE_ID?.trim();
-  if (fromEnv) return fromEnv;
   if (cachedVoiceId) return cachedVoiceId;
+
+  const rawId = process.env.ELEVENLABS_VOICE_ID?.trim();
+  const rawName = process.env.ELEVENLABS_VOICE_NAME?.trim();
+
+  // Exact voice id from env — use directly (fast path).
+  if (rawId && looksLikeVoiceId(rawId)) {
+    cachedVoiceId = rawId;
+    return cachedVoiceId;
+  }
 
   const voices = await listAccountVoices(apiKey);
   if (voices.length === 0) {
     throw new Error(
-      "No ElevenLabs voices on this account. Open elevenlabs.io → Voices → pick one → Copy voice ID → set ELEVENLABS_VOICE_ID on Vercel."
+      "No ElevenLabs voices on this account. Create/clone one in My Voices, then set ELEVENLABS_VOICE_ID (the id, not the name)."
     );
   }
 
-  // Prefer non-library categories when present (premade / cloned / generated).
+  // Env was a name like "Nova" put in VOICE_ID by mistake — resolve by name.
+  const nameHint = rawName || (rawId && !looksLikeVoiceId(rawId) ? rawId : "Nova");
+  const byName = findByName(voices, nameHint);
+  if (byName) {
+    cachedVoiceId = byName.voice_id;
+    return cachedVoiceId;
+  }
+
+  if (rawId && !looksLikeVoiceId(rawId)) {
+    const available = voices.map((v) => v.name).slice(0, 8).join(", ");
+    throw new Error(
+      `No voice named "${rawId}" on this ElevenLabs account. Available: ${available}. Set ELEVENLABS_VOICE_ID to the voice ID (⋯ → Copy voice ID), not the display name.`
+    );
+  }
+
   const preferred =
     voices.find((v) =>
       /^(premade|cloned|generated|professional)$/i.test(v.category ?? "")
@@ -73,7 +105,7 @@ export async function synthesizeNovaSpeech(
   if (!clipped) throw new Error("Nothing to speak");
 
   const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
     {
       method: "POST",
       headers: {
@@ -95,16 +127,20 @@ export async function synthesizeNovaSpeech(
   if (!response.ok) {
     const detail = await response.text();
     const lower = detail.toLowerCase();
+    cachedVoiceId = null;
     if (
       lower.includes("paying") ||
       lower.includes("library") ||
       lower.includes("subscription") ||
       response.status === 402
     ) {
-      // Stale/cached library id — clear cache so next attempt re-lists
-      cachedVoiceId = null;
       throw new Error(
-        "That ElevenLabs voice needs a paid plan (Voice Library). In elevenlabs.io → Voices → My Voices, copy a free/default voice ID and set ELEVENLABS_VOICE_ID on Vercel, then redeploy."
+        "That ElevenLabs voice needs a paid plan. Use your custom “Nova” voice from My Voices — copy its voice ID (not the name) into ELEVENLABS_VOICE_ID."
+      );
+    }
+    if (response.status === 404) {
+      throw new Error(
+        "ElevenLabs voice not found. You probably set the name “Nova” instead of the voice ID. In Voices → Nova → ⋯ → Copy voice ID → ELEVENLABS_VOICE_ID."
       );
     }
     throw new Error(

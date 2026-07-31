@@ -220,13 +220,17 @@ export function NovaConsole() {
           resolve();
         };
         audio.onerror = () => {
-          setError("Could not play Nova audio.");
+          setError(
+            "Browser could not play the voice file. Tap the orb, check volume, try Chrome."
+          );
           URL.revokeObjectURL(url);
           resolve();
         };
         void audio.play().catch((err: unknown) => {
           const msg = err instanceof Error ? err.message : "play blocked";
-          setError(`Browser blocked audio (${msg}). Tap the orb once.`);
+          setError(
+            `Browser blocked playback (${msg}). Tap the orb once to unlock sound, then ask again.`
+          );
           URL.revokeObjectURL(url);
           resolve();
         });
