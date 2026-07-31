@@ -73,6 +73,10 @@ function stripWake(text: string): string {
   return text.replace(/^(hey\s+)?nova[,.\s!]*/i, "").trim();
 }
 
+function containsWake(text: string): boolean {
+  return /\bhey\s+nova\b/i.test(text) || /\bnova\b/i.test(text);
+}
+
 /** Normalize for intent matching. */
 function normalizeUtterance(text: string): string {
   return text
@@ -106,8 +110,8 @@ function isCloseIntent(text: string): boolean {
 }
 
 /**
- * Intentional speech worth treating as a request (no "Hey Nova" required).
- * Filters filler so ambient mutter doesn't constantly wake her.
+ * Intentional speech worth treating as a request once Nova is awake.
+ * Filters filler so ambient mutter doesn't spam commands mid-chat.
  */
 function looksLikeCommand(text: string): boolean {
   const raw = stripWake(text) || text.trim();
@@ -421,15 +425,25 @@ export function NovaConsole() {
         const text = chunk.trim();
         if (!text) return;
 
-        // Dormant: pick up intentional speech — no "Hey Nova" required.
+        // Dormant / not in a chat: ignore ambient talk until "Hey Nova".
         if (phaseRef.current === "listening_wake") {
-          if (isCloseIntent(text)) return;
-          if (isWakeOnly(text)) {
+          if (!containsWake(text)) return;
+
+          if (isWakeOnly(text) || stripWake(text).length < 2) {
+            if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+            commandBufferRef.current = "";
+            beep();
             openConversationRef.current();
             return;
           }
-          const rest = stripWake(text) || text;
-          if (!looksLikeCommand(rest)) return;
+
+          // "Hey Nova, what's the status" — wake + ask in one breath.
+          const rest = stripWake(text);
+          if (!looksLikeCommand(rest)) {
+            beep();
+            openConversationRef.current();
+            return;
+          }
 
           beep();
           phaseRef.current = "listening_command";
@@ -768,9 +782,9 @@ export function NovaConsole() {
     : phase === "idle"
       ? "starting…"
       : phase === "listening_wake"
-        ? "ready — just talk"
+        ? "say “hey nova”"
         : phase === "listening_command"
-          ? "listening"
+          ? "listening — no wake needed"
           : phase === "thinking"
             ? "thinking"
             : phase === "speaking"
@@ -830,7 +844,8 @@ export function NovaConsole() {
       <main className="nova-stage">
         <h1 className="nova-brand font-display">NOVA</h1>
         <p className="nova-tagline">
-          Just talk — she listens, then stops when you’re done.
+          Say <span>“Hey Nova”</span> to start. After that, just talk — she
+          stops when you’re done.
         </p>
 
         <div className={wrapClass}>
@@ -882,7 +897,7 @@ export function NovaConsole() {
         <div className="nova-transcript" ref={transcriptRef}>
           {lines.length === 0 && (
             <p className="text-center text-sm text-teal-100/30">
-              Ask anything — say “thanks” or go quiet when you’re done.
+              Say “Hey Nova” when you want her. Ambient talk is ignored.
             </p>
           )}
           {lines.map((line) => (
