@@ -17,6 +17,8 @@ function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setMode } = useAppMode();
+  const nextPath = searchParams.get("next");
+  const joiningViaInvite = Boolean(nextPath?.startsWith("/invite/"));
 
   const [fromFreeOffer, setFromFreeOffer] = useState(
     searchParams.get("offer") === "free-run"
@@ -56,7 +58,7 @@ function SignupForm() {
       setError("Please agree to the Terms and Privacy Policy.");
       return;
     }
-    if (!hoaName.trim()) {
+    if (!joiningViaInvite && !hoaName.trim()) {
       setError("Enter your HOA / community name.");
       return;
     }
@@ -71,14 +73,17 @@ function SignupForm() {
     try {
       const supabase = createClient();
       const trimmedHoa = hoaName.trim();
+      const afterAuth = joiningViaInvite
+        ? nextPath!
+        : "/dashboard/profile/setup";
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard/profile/setup`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(afterAuth)}`,
           data: {
             terms_accepted_at: new Date().toISOString(),
-            hoa_name: trimmedHoa,
+            ...(trimmedHoa ? { hoa_name: trimmedHoa } : {}),
             ...(fromFreeOffer ? { offer: "free-run" } : {}),
           },
         },
@@ -87,7 +92,7 @@ function SignupForm() {
       if (authError) throw authError;
 
       // Ensure metadata is set even if signUp options were ignored
-      if (authData.session) {
+      if (authData.session && trimmedHoa) {
         await supabase.auth.updateUser({
           data: { hoa_name: trimmedHoa },
         });
@@ -97,12 +102,12 @@ function SignupForm() {
         await supabase.from("profiles").upsert({
           id: authData.user.id,
           email: authData.user.email,
-          hoa_name: trimmedHoa,
+          ...(trimmedHoa ? { hoa_name: trimmedHoa } : {}),
           terms_accepted_at: new Date().toISOString(),
         });
       }
 
-      if (authData.session) {
+      if (authData.session && trimmedHoa && !joiningViaInvite) {
         const claimRes = await fetch("/api/community/claim-trial", {
           method: "POST",
           credentials: "include",
@@ -128,9 +133,11 @@ function SignupForm() {
       setMode("live");
 
       if (authData.user && authData.session) {
-        router.push(postAuthPath(authData.user, "/dashboard/profile/setup"));
+        router.push(postAuthPath(authData.user, afterAuth));
       } else {
-        router.push("/login?message=confirm-email");
+        router.push(
+          `/login?message=confirm-email&next=${encodeURIComponent(afterAuth)}`
+        );
       }
       router.refresh();
     } catch (err) {
@@ -184,21 +191,27 @@ function SignupForm() {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
-          <div>
-            <label className="text-sm font-medium text-ink-700">
-              HOA / community name
-            </label>
-            <Input
-              type="text"
-              required
-              value={hoaName}
-              onChange={(e) => setHoaName(e.target.value)}
-              placeholder="Oak Ridge Village HOA"
-            />
-            <p className="mt-1 text-xs text-ink-400">
-              One free inspection per account — use your real HOA name.
+          {joiningViaInvite ? (
+            <p className="rounded-xl border border-ink-100 bg-ink-50/80 px-3 py-2 text-xs text-ink-600">
+              You’re joining a shared HOA via invite — community name comes from the company.
             </p>
-          </div>
+          ) : (
+            <div>
+              <label className="text-sm font-medium text-ink-700">
+                HOA / community name
+              </label>
+              <Input
+                type="text"
+                required
+                value={hoaName}
+                onChange={(e) => setHoaName(e.target.value)}
+                placeholder="Oak Ridge Village HOA"
+              />
+              <p className="mt-1 text-xs text-ink-400">
+                One free inspection per account — use your real HOA name.
+              </p>
+            </div>
+          )}
 
           <label className="flex items-start gap-2 text-sm text-ink-600">
             <input

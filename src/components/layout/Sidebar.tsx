@@ -17,23 +17,28 @@ import { Logo } from "@/components/brand/Logo";
 import { useMobileNav } from "./MobileNavContext";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useCompanyRole } from "@/hooks/useCompanyRole";
 import { displayHoaName } from "@/lib/profile";
 
 const navItems = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/dashboard/inspections", label: "Inspections", icon: Video },
-  { href: "/dashboard/properties", label: "Properties", icon: Home },
-  { href: "/dashboard/violations", label: "Violations", icon: AlertTriangle },
-  { href: "/dashboard/reports", label: "Reports", icon: FileText },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard, roles: ["owner", "admin", "inspector"] as const },
+  { href: "/dashboard/inspections", label: "Inspections", icon: Video, roles: ["owner", "admin", "inspector"] as const },
+  { href: "/dashboard/properties", label: "Properties", icon: Home, roles: ["owner", "admin", "inspector"] as const },
+  { href: "/dashboard/violations", label: "Violations", icon: AlertTriangle, roles: ["owner", "admin", "inspector"] as const },
+  { href: "/dashboard/reports", label: "Reports", icon: FileText, roles: ["owner", "admin"] as const },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings, roles: ["owner", "admin", "inspector"] as const },
 ];
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const { role, loading } = useCompanyRole();
+  const effectiveRole = role ?? "owner";
 
   return (
     <>
-      {navItems.map((item) => {
+      {navItems
+        .filter((item) => loading || item.roles.includes(effectiveRole as "owner" | "admin" | "inspector"))
+        .map((item) => {
         const isActive =
           pathname === item.href ||
           (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -115,6 +120,7 @@ export function Sidebar() {
 
 function SidebarContent({ isDemo }: { isDemo: boolean }) {
   const { profile } = useUserProfile();
+  const { companyName, hoaName, role, isInspector } = useCompanyRole();
 
   return (
     <>
@@ -129,11 +135,18 @@ function SidebarContent({ isDemo }: { isDemo: boolean }) {
       <div className="border-t border-ink-800/80 p-4">
         <div className="rounded-xl border border-ink-800/80 bg-ink-900/50 px-3.5 py-3">
           <p className="text-[11px] font-medium uppercase tracking-wider text-ink-500">
-            {isDemo ? "Demo workspace" : "Your HOA"}
+            {isDemo
+              ? "Demo workspace"
+              : isInspector
+                ? "Inspector · shared HOA"
+                : "Your HOA"}
           </p>
           <p className="mt-1 truncate text-sm font-medium text-ink-200">
-            {displayHoaName(profile, isDemo)}
+            {companyName || hoaName || displayHoaName(profile, isDemo)}
           </p>
+          {role && !isDemo ? (
+            <p className="mt-1 text-[11px] capitalize text-ink-500">{role}</p>
+          ) : null}
         </div>
       </div>
     </>

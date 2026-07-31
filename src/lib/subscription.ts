@@ -28,10 +28,31 @@ export async function countCompletedInspections(userId: string): Promise<number>
   const admin = createAdminClient();
   if (!admin) return 0;
 
-  const { count } = await admin
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("active_company_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  const companyId = profile?.active_company_id as string | null | undefined;
+  let query = admin
     .from("inspections")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId);
+    .select("*", { count: "exact", head: true });
+
+  if (companyId) {
+    query = query.eq("company_id", companyId);
+  } else {
+    query = query.eq("user_id", userId);
+  }
+
+  const { count, error } = await query;
+  if (error?.message?.includes("company_id")) {
+    const fallback = await admin
+      .from("inspections")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId);
+    return fallback.count ?? 0;
+  }
 
   return count ?? 0;
 }
@@ -282,6 +303,14 @@ export async function claimCommunityTrial(
         );
       }
     }
+  }
+
+  // Company workspace for shared roster / inspectors
+  try {
+    const { ensureCompanyForUser } = await import("@/lib/company");
+    await ensureCompanyForUser(userId, trimmed);
+  } catch (err) {
+    console.error("claimCommunityTrial ensureCompany:", err);
   }
 
   // Dev/demo community names skip the global first-account lock

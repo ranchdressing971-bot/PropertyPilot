@@ -15,6 +15,7 @@ import {
   Settings,
   X,
 } from "lucide-react";
+import { useCompanyRole } from "@/hooks/useCompanyRole";
 
 const tabs = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: "/dashboard" },
@@ -24,16 +25,18 @@ const tabs = [
 ];
 
 const moreLinks = [
-  { href: "/dashboard/violations", label: "Violations", icon: AlertTriangle },
-  { href: "/dashboard/reports", label: "Reports", icon: FileText },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard/violations", label: "Violations", icon: AlertTriangle, adminOnly: false },
+  { href: "/dashboard/reports", label: "Reports", icon: FileText, adminOnly: true },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings, adminOnly: false },
 ];
 
 export function MobileBottomNav() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  const { isInspector } = useCompanyRole();
 
-  const moreActive = moreLinks.some((l) => pathname.startsWith(l.href));
+  const visibleMore = moreLinks.filter((l) => !(l.adminOnly && isInspector));
+  const moreActive = visibleMore.some((l) => pathname.startsWith(l.href));
 
   return (
     <>
@@ -61,7 +64,7 @@ export function MobileBottomNav() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            {moreLinks.map((link) => {
+            {visibleMore.map((link) => {
               const Icon = link.icon;
               const active = pathname.startsWith(link.href);
               return (

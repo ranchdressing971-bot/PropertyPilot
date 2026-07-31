@@ -8,6 +8,8 @@ import { CcrRulesCard } from "@/components/settings/CcrRulesCard";
 import { NotificationsCard } from "@/components/settings/NotificationsCard";
 import { BillingCard } from "@/components/settings/BillingCard";
 import { TrashCollectionCard } from "@/components/settings/TrashCollectionCard";
+import { TeamCard } from "@/components/settings/TeamCard";
+import { SettingsRoleGate } from "@/components/settings/SettingsRoleGate";
 
 export default function SettingsPage() {
   return (
@@ -16,12 +18,15 @@ export default function SettingsPage() {
       <PageContent className="max-w-2xl">
         <div className="space-y-5">
           <ProfileCard />
-          <Suspense fallback={null}>
-            <BillingCard />
-          </Suspense>
-          <TrashCollectionCard />
-          <NotificationsCard />
-          <CcrRulesCard />
+          <TeamCard />
+          <SettingsRoleGate adminOnly>
+            <Suspense fallback={null}>
+              <BillingCard />
+            </Suspense>
+            <TrashCollectionCard />
+            <NotificationsCard />
+            <CcrRulesCard />
+          </SettingsRoleGate>
         </div>
 
         <Suspense fallback={null}>
