@@ -122,7 +122,9 @@ export function NovaConsole() {
   const commandBufferRef = useRef("");
   const commandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commandDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const audioUnlockedRef = useRef(false);
   /** After TTS, restart mic in wake or command mode. */
@@ -132,22 +134,93 @@ export function NovaConsole() {
   const acknowledgeWakeRef = useRef<() => void>(() => {});
 
   const unlockAudio = useCallback(() => {
-    if (audioUnlockedRef.current) return;
     try {
-      const a = new Audio(
-        "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="
-      );
-      a.volume = 0.01;
-      void a
-        .play()
-        .then(() => {
-          a.pause();
-          audioUnlockedRef.current = true;
-        })
-        .catch(() => {});
+      const AC =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (AC) {
+        if (!audioCtxRef.current) audioCtxRef.current = new AC();
+        const ctx = audioCtxRef.current;
+        if (ctx.state === "suspended") void ctx.resume();
+      }
     } catch {
       /* ignore */
     }
+
+    const el = audioElRef.current;
+    if (!el) return;
+    if (audioUnlockedRef.current) return;
+
+    // Warm the persistent <audio> inside a user gesture so later TTS can play.
+    try {
+      el.muted = true;
+      el.src =
+        "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=";
+      void el
+        .play()
+        .then(() => {
+          el.pause();
+          el.muted = false;
+          el.removeAttribute("src");
+          el.load();
+          audioUnlockedRef.current = true;
+          setNeedsGesture(false);
+        })
+        .catch(() => {
+          el.muted = false;
+        });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const playVoiceBlob = useCallback(async (blob: Blob) => {
+    const el = audioElRef.current;
+    if (!el) throw new Error("Audio element missing");
+
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+
+    const url = URL.createObjectURL(blob);
+    objectUrlRef.current = url;
+    el.muted = false;
+    el.src = url;
+    el.load();
+
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        el.onended = null;
+        el.onerror = null;
+      };
+      el.onended = () => {
+        cleanup();
+        if (objectUrlRef.current === url) {
+          URL.revokeObjectURL(url);
+          objectUrlRef.current = null;
+        }
+        resolve();
+      };
+      el.onerror = () => {
+        cleanup();
+        if (objectUrlRef.current === url) {
+          URL.revokeObjectURL(url);
+          objectUrlRef.current = null;
+        }
+        reject(new Error("Browser could not play the voice file"));
+      };
+      void el.play().catch((err: unknown) => {
+        cleanup();
+        if (objectUrlRef.current === url) {
+          URL.revokeObjectURL(url);
+          objectUrlRef.current = null;
+        }
+        const msg = err instanceof Error ? err.message : "play blocked";
+        reject(new Error(msg));
+      });
+    });
   }, []);
 
   useEffect(() => {
@@ -389,6 +462,7 @@ export function NovaConsole() {
       resumeModeRef.current = after;
       setPhase("speaking");
       killMic();
+      unlockAudio();
       try {
         const res = await fetch("/api/nova/speak", {
           method: "POST",
@@ -418,32 +492,20 @@ export function NovaConsole() {
           setError("Voice returned empty audio.");
           return;
         }
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        await new Promise<void>((resolve) => {
-          audio.onended = () => {
-            URL.revokeObjectURL(url);
-            resolve();
-          };
-          audio.onerror = () => {
-            setError(
-              "Browser could not play the voice file. Tap the orb, check volume, try Chrome."
-            );
-            URL.revokeObjectURL(url);
-            resolve();
-          };
-          void audio.play().catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : "play blocked";
-            setError(
-              `Browser blocked playback (${msg}). Tap the orb once to unlock sound.`
-            );
-            URL.revokeObjectURL(url);
-            resolve();
-          });
-        });
+        // Ensure MPEG type — some browsers refuse generic blobs.
+        const typed =
+          blob.type && blob.type !== "application/octet-stream"
+            ? blob
+            : new Blob([blob], { type: "audio/mpeg" });
+        await playVoiceBlob(typed);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Voice failed");
+        const msg = err instanceof Error ? err.message : "Voice failed";
+        if (/play|NotAllowed|interact/i.test(msg)) {
+          setNeedsGesture(true);
+          setError("Tap the orb once to unlock sound, then try again.");
+        } else {
+          setError(msg);
+        }
       } finally {
         const mode = resumeModeRef.current;
         setPhase(mode === "command" ? "listening_command" : "listening_wake");
@@ -453,16 +515,17 @@ export function NovaConsole() {
         }, 350);
       }
     },
-    [killMic]
+    [killMic, playVoiceBlob, unlockAudio]
   );
 
   const acknowledgeWake = useCallback(() => {
+    unlockAudio();
     beep();
     setPhase("listening_command");
     armCommandDeadline();
     // Short ack, then keep listening for the real question.
     void speak("Hey.", "command");
-  }, [armCommandDeadline, speak]);
+  }, [armCommandDeadline, speak, unlockAudio]);
 
   useEffect(() => {
     acknowledgeWakeRef.current = acknowledgeWake;
@@ -599,61 +662,62 @@ export function NovaConsole() {
               : "";
 
   return (
-    <div className="nova-shell flex flex-col">
+    <div
+      className="nova-shell"
+      onPointerDown={unlockAudio}
+    >
+      <audio ref={audioElRef} playsInline preload="auto" className="hidden" />
       <div className="nova-aurora" aria-hidden />
       <div className="nova-grid" aria-hidden />
       <div className="nova-vignette" aria-hidden />
 
-      <header className="relative z-10 flex items-start justify-between gap-6 px-6 pt-7 sm:px-10">
-        <div>
+      <header className="nova-top">
+        <div className="nova-top-inner">
           <Link
             href="/nexus"
             className="text-[11px] uppercase tracking-[0.28em] text-teal-200/45 transition hover:text-teal-100/80"
           >
             Nexus
           </Link>
-          <h1 className="mt-3 font-display text-5xl font-semibold tracking-[0.22em] text-teal-50 sm:text-6xl">
-            NOVA
-          </h1>
-          <p className="mt-3 max-w-sm text-sm leading-relaxed text-teal-100/45">
-            Say <span className="text-teal-100/80">“Hey Nova”</span> — she
-            answers and keeps listening.
-          </p>
-        </div>
-
-        <div className="flex flex-col items-end gap-2 pt-1 text-[11px] tracking-wide text-teal-100/55">
-          <div className="flex items-center gap-2">
-            <span
-              className={
-                listeningOn
-                  ? "nova-status-dot nova-status-dot-on"
-                  : "nova-status-dot nova-status-dot-off"
-              }
-            />
-            <span>{listeningOn ? "Mic live" : "Mic muted"}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={
-                status?.novaArmed
-                  ? "nova-status-dot nova-status-dot-on"
-                  : "nova-status-dot"
-              }
-            />
-            <span>
-              {status?.novaArmed ? "Armed" : "Paused"} ·{" "}
-              {status?.dailyTarget ?? "—"}/day
-            </span>
-          </div>
-          <div className="text-right text-teal-100/35">
-            Send {status?.sendEnabled ? "on" : "off"}
-            {status?.mailtrapConfigured ? "" : " · no Mailtrap"}
-            {status && !status.voiceConfigured ? " · voice missing" : ""}
+          <div className="flex flex-col items-end gap-1.5 text-[11px] tracking-wide text-teal-100/55">
+            <div className="flex items-center gap-2">
+              <span
+                className={
+                  listeningOn
+                    ? "nova-status-dot nova-status-dot-on"
+                    : "nova-status-dot nova-status-dot-off"
+                }
+              />
+              <span>{listeningOn ? "Mic live" : "Mic muted"}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={
+                  status?.novaArmed
+                    ? "nova-status-dot nova-status-dot-on"
+                    : "nova-status-dot"
+                }
+              />
+              <span>
+                {status?.novaArmed ? "Armed" : "Paused"} ·{" "}
+                {status?.dailyTarget ?? "—"}/day
+              </span>
+            </div>
+            <div className="text-right text-teal-100/35">
+              Send {status?.sendEnabled ? "on" : "off"}
+              {status?.mailtrapConfigured ? "" : " · no Mailtrap"}
+              {status && !status.voiceConfigured ? " · voice missing" : ""}
+            </div>
           </div>
         </div>
       </header>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 py-8">
+      <main className="nova-stage">
+        <h1 className="nova-brand font-display">NOVA</h1>
+        <p className="nova-tagline">
+          Say <span>“Hey Nova”</span> — she answers and keeps listening.
+        </p>
+
         <div className="nova-orb-wrap">
           <span className="nova-ring nova-ring-a" aria-hidden />
           <span className="nova-ring nova-ring-b" aria-hidden />
@@ -683,23 +747,21 @@ export function NovaConsole() {
           <span />
         </div>
 
-        <p className="mt-4 text-[11px] uppercase tracking-[0.35em] text-teal-200/45">
-          {phaseLabel}
-        </p>
+        <p className="nova-phase">{phaseLabel}</p>
         {needsGesture && (
-          <p className="mt-2 text-xs text-amber-200/90">
-            Tap the orb once to unlock always-on listening.
+          <p className="nova-hint">
+            Tap the orb once to unlock mic + sound.
           </p>
         )}
         {!micSupported && (
-          <p className="mt-2 text-xs text-amber-200/80">
+          <p className="nova-hint">
             Wake word unavailable here — use the keyboard.
           </p>
         )}
-      </div>
+      </main>
 
-      <section className="relative z-10 mx-auto w-full max-w-xl flex-1 px-6 pb-3 sm:px-10">
-        <div className="nova-transcript max-h-52 space-y-4 overflow-y-auto pr-1">
+      <footer className="nova-dock">
+        <div className="nova-transcript">
           {lines.length === 0 && (
             <p className="text-center text-sm text-teal-100/30">
               Waiting for your voice…
@@ -737,28 +799,24 @@ export function NovaConsole() {
           <div ref={bottomRef} />
         </div>
         {error && (
-          <p className="mt-3 text-center text-xs text-rose-300/90">{error}</p>
+          <p className="mt-2 text-center text-xs text-rose-300/90">{error}</p>
         )}
-      </section>
-
-      <form
-        onSubmit={onSubmit}
-        className="relative z-10 mx-auto flex w-full max-w-xl items-center gap-2 px-6 pb-9 sm:px-10"
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type to Nova…"
-          className="flex-1 rounded-full border border-teal-400/15 bg-black/35 px-5 py-3.5 text-sm text-teal-50 shadow-[inset_0_1px_0_rgba(94,234,212,0.06)] backdrop-blur-sm placeholder:text-teal-200/25 focus:border-teal-300/40 focus:outline-none"
-        />
-        <button
-          type="submit"
-          disabled={phase === "thinking"}
-          className="rounded-full border border-teal-300/25 bg-teal-400/15 px-5 py-3.5 text-sm font-medium tracking-wide text-teal-50 transition hover:bg-teal-400/25 disabled:opacity-40"
-        >
-          Send
-        </button>
-      </form>
+        <form onSubmit={onSubmit} className="nova-compose">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type to Nova…"
+            className="nova-input"
+          />
+          <button
+            type="submit"
+            disabled={phase === "thinking"}
+            className="nova-send"
+          >
+            Send
+          </button>
+        </form>
+      </footer>
     </div>
   );
 }
