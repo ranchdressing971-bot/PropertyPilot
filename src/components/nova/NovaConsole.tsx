@@ -4,6 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { NovaMeshOrb } from "@/components/nova/NovaMeshOrb";
+import {
+  NovaBarChart,
+  NovaDonut,
+  NovaFunnel,
+  NovaGauge,
+  NovaRadarBars,
+  NovaSparkline,
+} from "@/components/nova/NovaHudViz";
 
 type Phase =
   | "idle"
@@ -861,6 +869,12 @@ export function NovaConsole() {
       timeZone: "America/New_York",
     })
   );
+  const [telemetry, setTelemetry] = useState<{
+    mrr: number[];
+    inspect7: number[];
+    convert: number[];
+    queued: number[];
+  }>({ mrr: [], inspect7: [], convert: [], queued: [] });
 
   const phaseRef = useRef<Phase>("idle");
   const listeningOnRef = useRef(true);
@@ -1072,6 +1086,8 @@ export function NovaConsole() {
 
   useEffect(() => {
     void refreshStatus();
+    const poll = window.setInterval(() => void refreshStatus(), 45000);
+    return () => window.clearInterval(poll);
   }, [refreshStatus]);
 
   useEffect(() => {
@@ -1089,6 +1105,29 @@ export function NovaConsole() {
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!status) return;
+    const mrr = status.business?.mrr ?? 0;
+    const inspect7 = status.business?.activation?.inspectionsLast7d ?? 0;
+    const convert = status.conversionRate ?? 0;
+    const queued = status.queuedJobs ?? 0;
+    setTelemetry((prev) => {
+      const lastSame =
+        prev.mrr[prev.mrr.length - 1] === mrr &&
+        prev.inspect7[prev.inspect7.length - 1] === inspect7 &&
+        prev.convert[prev.convert.length - 1] === convert &&
+        prev.queued[prev.queued.length - 1] === queued;
+      if (lastSame && prev.mrr.length > 0) return prev;
+      const push = (arr: number[], v: number) => [...arr, v].slice(-24);
+      return {
+        mrr: push(prev.mrr, mrr),
+        inspect7: push(prev.inspect7, inspect7),
+        convert: push(prev.convert, convert),
+        queued: push(prev.queued, queued),
+      };
+    });
+  }, [status]);
 
   /** Hard-kill mic. Chrome will not reliably restart a stopped instance. */
   const killMic = useCallback((opts?: { keepSpeech?: boolean }) => {
@@ -1822,6 +1861,75 @@ export function NovaConsole() {
               ? "speaking"
               : "";
 
+  const pipelineBars = [
+    { label: "Lds", value: status?.companies ?? 0, tone: "cyan" as const },
+    { label: "Appr", value: status?.approvedDrafts ?? 0, tone: "violet" as const },
+    { label: "Q", value: status?.queuedJobs ?? 0, tone: "pink" as const },
+    { label: "Sent", value: status?.sentDrafts ?? 0, tone: "cyan" as const },
+    { label: "Pend", value: status?.pendingDrafts ?? 0, tone: "amber" as const },
+  ];
+  const clientSegments = [
+    {
+      value: status?.business?.payingClients ?? 0,
+      color: "#56d6ff",
+    },
+    {
+      value: status?.business?.trialingClients ?? 0,
+      color: "#7c5cff",
+    },
+    {
+      value: status?.business?.pastDueClients ?? 0,
+      color: "#ffb347",
+    },
+    {
+      value: status?.business?.canceledClients ?? 0,
+      color: "#ff4fd8",
+    },
+  ];
+  const clientTotal =
+    clientSegments.reduce((s, seg) => s + seg.value, 0) ||
+    status?.business?.totalProfiles ||
+    0;
+  const funnelSteps = [
+    {
+      label: "Sent",
+      value: status?.sentInWindow ?? status?.sentDrafts ?? 0,
+      tone: "tone-cyan",
+    },
+    {
+      label: "Signup",
+      value: status?.conversionsMatched ?? 0,
+      tone: "tone-violet",
+    },
+    {
+      label: "Paid",
+      value: status?.subscribedCount ?? 0,
+      tone: "tone-pink",
+    },
+  ];
+  const activityRadar = [
+    {
+      label: "Signups 7d",
+      value: status?.business?.activation?.signupsLast7d ?? 0,
+      max: Math.max(status?.business?.activation?.signupsLast7d ?? 0, 5),
+    },
+    {
+      label: "Inspect 7d",
+      value: status?.business?.activation?.inspectionsLast7d ?? 0,
+      max: Math.max(status?.business?.activation?.inspectionsLast7d ?? 0, 5),
+    },
+    {
+      label: "Queue",
+      value: status?.queuedJobs ?? 0,
+      max: Math.max(status?.queuedJobs ?? 0, status?.dailyTarget ?? 10, 5),
+    },
+    {
+      label: "Target",
+      value: status?.dailyTarget ?? 0,
+      max: Math.max(status?.dailyTarget ?? 0, 50),
+    },
+  ];
+
   return (
     <div
       className="nova-shell"
@@ -1907,79 +2015,98 @@ export function NovaConsole() {
 
       <aside className="nova-hud nova-hud-left" aria-label="Pipeline HUD">
         <div className="nova-hud-title">Pipeline</div>
+        <NovaBarChart items={pipelineBars} height={64} />
+        <div className="nova-hud-caption">Stage volume</div>
+        <div className="nova-hud-divider" />
         <div className="nova-hud-row">
-          <span>Leads</span>
-          <strong>{status?.companies ?? "—"}</strong>
+          <span>Queue trend</span>
+          <strong>{status?.queuedJobs ?? 0}</strong>
         </div>
-        <div className="nova-hud-row">
-          <span>Approved</span>
-          <strong>{status?.approvedDrafts ?? "—"}</strong>
-        </div>
-        <div className="nova-hud-row">
-          <span>Queued</span>
-          <strong>{status?.queuedJobs ?? "—"}</strong>
-        </div>
-        <div className="nova-hud-row">
-          <span>Sent</span>
-          <strong>{status?.sentDrafts ?? "—"}</strong>
-        </div>
-        <div className="nova-hud-row">
-          <span>Pending</span>
-          <strong>{status?.pendingDrafts ?? "—"}</strong>
-        </div>
+        <NovaSparkline
+          values={
+            telemetry.queued.length
+              ? telemetry.queued
+              : [0, status?.queuedJobs ?? 0]
+          }
+          stroke="rgba(255,79,216,0.95)"
+          fill="rgba(255,79,216,0.18)"
+          height={32}
+        />
+        <div className="nova-hud-divider" />
+        <NovaRadarBars items={activityRadar} />
         <div className="nova-hud-divider" />
         <div className="nova-hud-row">
           <span>Window</span>
-          <strong>{status?.withinWindow ? "OPEN" : "CLOSED"}</strong>
+          <strong className={status?.withinWindow ? "nova-ok" : "nova-warn"}>
+            {status?.withinWindow ? "OPEN" : "CLOSED"}
+          </strong>
         </div>
         <div className="nova-hud-row">
           <span>Send env</span>
           <strong>{status?.sendEnabled ? "ON" : "OFF"}</strong>
         </div>
         <div className="nova-hud-note">
-          Mailtrap unverified · live path = Resend + domain
+          Prep only · Resend after domain
         </div>
       </aside>
 
       <aside className="nova-hud nova-hud-right" aria-label="Business HUD">
         <div className="nova-hud-title">Business</div>
-        <div className="nova-hud-row nova-hud-row-hero">
-          <span>MRR</span>
-          <strong>${status?.business?.mrr ?? 0}</strong>
+        <div className="nova-hud-donut-row">
+          <NovaDonut
+            segments={clientSegments}
+            size={78}
+            centerLabel={`$${status?.business?.mrr ?? 0}`}
+            centerSub="MRR"
+          />
+          <div className="nova-hud-legend">
+            <div>
+              <i className="tone-cyan" /> Active{" "}
+              {status?.business?.payingClients ?? 0}
+            </div>
+            <div>
+              <i className="tone-violet" /> Trial{" "}
+              {status?.business?.trialingClients ?? 0}
+            </div>
+            <div>
+              <i className="tone-amber" /> Past due{" "}
+              {status?.business?.pastDueClients ?? 0}
+            </div>
+            <div>
+              <i className="tone-pink" /> Cancel{" "}
+              {status?.business?.canceledClients ?? 0}
+            </div>
+          </div>
         </div>
-        <div className="nova-hud-row">
+        <div className="nova-hud-row nova-hud-row-hero">
           <span>ARR</span>
           <strong>${status?.business?.arr ?? 0}</strong>
         </div>
-        <div className="nova-hud-row">
-          <span>Active</span>
-          <strong>{status?.business?.payingClients ?? 0}</strong>
-        </div>
-        <div className="nova-hud-row">
-          <span>Trialing</span>
-          <strong>{status?.business?.trialingClients ?? 0}</strong>
-        </div>
-        <div className="nova-hud-row">
-          <span>Past due</span>
-          <strong>{status?.business?.pastDueClients ?? 0}</strong>
+        <div className="nova-hud-caption">MRR signal</div>
+        <NovaSparkline
+          values={
+            telemetry.mrr.length
+              ? telemetry.mrr
+              : [0, status?.business?.mrr ?? 0]
+          }
+          height={34}
+        />
+        <div className="nova-hud-divider" />
+        <div className="nova-gauge-row">
+          <NovaGauge
+            value={status?.conversionRate ?? 0}
+            label="Convert"
+          />
+          <NovaGauge
+            value={status?.subscriptionRate ?? 0}
+            label="Subscribe"
+          />
         </div>
         <div className="nova-hud-divider" />
         <div className="nova-hud-row">
           <span>Dead paid</span>
           <strong>
-            {status?.business?.activation?.payingWithZeroInspections ??
-              status?.business?.watchlistCounts?.deadPaid ??
-              0}
-          </strong>
-        </div>
-        <div className="nova-hud-row">
-          <span>7d signups</span>
-          <strong>{status?.business?.activation?.signupsLast7d ?? 0}</strong>
-        </div>
-        <div className="nova-hud-row">
-          <span>7d inspect</span>
-          <strong>
-            {status?.business?.activation?.inspectionsLast7d ?? 0}
+            {status?.business?.activation?.payingWithZeroInspections ?? 0}
           </strong>
         </div>
         <div className="nova-hud-row">
@@ -1989,18 +2116,9 @@ export function NovaConsole() {
             {status?.business?.trials?.claimed ?? 0}
           </strong>
         </div>
-        <div className="nova-hud-divider" />
         <div className="nova-hud-row">
-          <span>Companies</span>
-          <strong>{status?.business?.productCompanies ?? 0}</strong>
-        </div>
-        <div className="nova-hud-row">
-          <span>Multi-seat</span>
-          <strong>{status?.business?.teams?.multiSeatCompanies ?? 0}</strong>
-        </div>
-        <div className="nova-hud-row">
-          <span>Inspections</span>
-          <strong>{status?.business?.inspectionsTotal ?? 0}</strong>
+          <span>Clients</span>
+          <strong>{clientTotal}</strong>
         </div>
         {(status?.business?.trust?.flaggedForReview ?? 0) > 0 && (
           <div className="nova-hud-note">
@@ -2018,6 +2136,7 @@ export function NovaConsole() {
         <div className={wrapClass}>
           <span className="nova-ring nova-ring-a" aria-hidden />
           <span className="nova-ring nova-ring-b" aria-hidden />
+          <span className="nova-ring nova-ring-c" aria-hidden />
           <span className="nova-orb-halo nova-orb-halo-a" aria-hidden />
           <span className="nova-orb-halo nova-orb-halo-b" aria-hidden />
           <NovaMeshOrb
@@ -2066,6 +2185,90 @@ export function NovaConsole() {
           </p>
         )}
       </main>
+
+      <section className="nova-telemetry" aria-label="Telemetry">
+        <div className="nova-tele-card">
+          <div className="nova-tele-head">
+            <span>Outreach funnel</span>
+            <strong>{status?.conversionRate ?? 0}%</strong>
+          </div>
+          <NovaFunnel steps={funnelSteps} />
+        </div>
+        <div className="nova-tele-card">
+          <div className="nova-tele-head">
+            <span>Inspect 7d</span>
+            <strong>
+              {status?.business?.activation?.inspectionsLast7d ?? 0}
+            </strong>
+          </div>
+          <NovaSparkline
+            values={
+              telemetry.inspect7.length
+                ? telemetry.inspect7
+                : [0, status?.business?.activation?.inspectionsLast7d ?? 0]
+            }
+            height={40}
+            stroke="rgba(124,92,255,0.95)"
+            fill="rgba(124,92,255,0.18)"
+          />
+        </div>
+        <div className="nova-tele-card">
+          <div className="nova-tele-head">
+            <span>Convert trend</span>
+            <strong>{status?.conversionRate ?? 0}%</strong>
+          </div>
+          <NovaSparkline
+            values={
+              telemetry.convert.length
+                ? telemetry.convert
+                : [0, status?.conversionRate ?? 0]
+            }
+            height={40}
+            stroke="rgba(86,214,255,0.95)"
+            fill="rgba(86,214,255,0.16)"
+          />
+        </div>
+        <div className="nova-tele-card nova-tele-card-wide">
+          <div className="nova-tele-head">
+            <span>Live ops mix</span>
+            <strong>
+              {status?.novaArmed ? "ARMED" : "STANDBY"} ·{" "}
+              {status?.dailyTarget ?? "—"}/day
+            </strong>
+          </div>
+          <NovaBarChart
+            items={[
+              {
+                label: "Sent",
+                value: status?.sentDrafts ?? 0,
+                tone: "cyan",
+              },
+              {
+                label: "Sign",
+                value: status?.conversionsMatched ?? 0,
+                tone: "violet",
+              },
+              {
+                label: "Sub",
+                value: status?.subscribedCount ?? 0,
+                tone: "pink",
+              },
+              {
+                label: "Dead",
+                value:
+                  status?.business?.activation?.payingWithZeroInspections ?? 0,
+                tone: "amber",
+              },
+              {
+                label: "Seat",
+                value: status?.business?.teams?.multiSeatCompanies ?? 0,
+                tone: "cyan",
+              },
+            ]}
+            height={52}
+          />
+        </div>
+      </section>
 
       {mounted &&
         isIOS() &&

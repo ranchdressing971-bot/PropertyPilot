@@ -662,12 +662,228 @@
   }
 }
 
-/* Jarvis HUD — desktop only */
+/* Jarvis HUD + telemetry charts */
 .nova-grid,
 .nova-scanlines,
 .nova-hud,
-.nova-ring {
+.nova-ring,
+.nova-telemetry {
   display: none;
+}
+
+.nova-spark {
+  display: block;
+  overflow: visible;
+}
+
+.nova-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.nova-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+  height: 100%;
+}
+
+.nova-bar-track {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 0.2rem;
+  background: rgba(80, 100, 140, 0.12);
+  overflow: hidden;
+}
+
+.nova-bar-fill {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 0.15rem 0.15rem 0 0;
+  transition: height 0.55s ease;
+}
+
+.nova-bar-fill.tone-cyan {
+  background: linear-gradient(180deg, #9aebff, #56d6ff);
+  box-shadow: 0 0 10px rgba(86, 214, 255, 0.35);
+}
+.nova-bar-fill.tone-pink {
+  background: linear-gradient(180deg, #ff9ae8, #ff4fd8);
+  box-shadow: 0 0 10px rgba(255, 79, 216, 0.35);
+}
+.nova-bar-fill.tone-violet {
+  background: linear-gradient(180deg, #b39cff, #7c5cff);
+  box-shadow: 0 0 10px rgba(124, 92, 255, 0.35);
+}
+.nova-bar-fill.tone-amber {
+  background: linear-gradient(180deg, #ffd08a, #ffb347);
+  box-shadow: 0 0 10px rgba(255, 179, 71, 0.3);
+}
+
+.nova-bar-col span {
+  font-size: 0.5rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(170, 180, 210, 0.45);
+}
+
+.nova-donut-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.nova-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.nova-donut-center strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  color: #e8fbff;
+  text-shadow: 0 0 12px rgba(86, 214, 255, 0.45);
+}
+
+.nova-donut-center span {
+  font-size: 0.5rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(160, 190, 220, 0.5);
+}
+
+.nova-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.nova-gauge-readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -0.35rem;
+}
+
+.nova-gauge-readout strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  color: #e8fbff;
+}
+
+.nova-gauge-readout span {
+  font-size: 0.5rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(160, 180, 210, 0.45);
+}
+
+.nova-funnel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.nova-funnel-row {
+  display: grid;
+  grid-template-columns: 3.2rem 1fr 1.6rem;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.62rem;
+  color: rgba(180, 195, 220, 0.55);
+}
+
+.nova-funnel-row strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-align: right;
+  color: rgba(220, 245, 255, 0.9);
+}
+
+.nova-funnel-track {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: rgba(80, 100, 140, 0.15);
+  overflow: hidden;
+}
+
+.nova-funnel-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #56d6ff, #7c5cff);
+  transition: width 0.55s ease;
+}
+
+.nova-funnel-fill.tone-cyan {
+  background: linear-gradient(90deg, #56d6ff, #7adfff);
+}
+.nova-funnel-fill.tone-violet {
+  background: linear-gradient(90deg, #7c5cff, #b39cff);
+}
+.nova-funnel-fill.tone-pink {
+  background: linear-gradient(90deg, #ff4fd8, #ff9ae8);
+}
+
+.nova-radar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+}
+
+.nova-radar-row {
+  display: grid;
+  grid-template-columns: 4.2rem 1fr;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.55rem;
+  letter-spacing: 0.04em;
+  color: rgba(170, 185, 215, 0.5);
+}
+
+.nova-radar-track {
+  height: 0.32rem;
+  border-radius: 999px;
+  background: rgba(80, 100, 140, 0.14);
+  overflow: hidden;
+}
+
+.nova-radar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(86, 214, 255, 0.85), rgba(255, 79, 216, 0.75));
+  box-shadow: 0 0 8px rgba(86, 214, 255, 0.35);
+  transition: width 0.55s ease;
+}
+
+@media (min-width: 900px) {
+  .nova-telemetry {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 0.65rem;
+    position: absolute;
+    left: 50%;
+    bottom: calc(9.5rem + env(safe-area-inset-bottom, 0px));
+    z-index: 16;
+    width: min(46rem, calc(100vw - 2rem));
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+
+  .nova-tele-card-wide {
+    display: none;
+  }
 }
 
 @media (min-width: 1024px) {
@@ -675,7 +891,7 @@
     display: block;
     position: absolute;
     inset: 0;
-    opacity: 0.14;
+    opacity: 0.16;
     background-image:
       linear-gradient(rgba(86, 214, 255, 0.12) 1px, transparent 1px),
       linear-gradient(90deg, rgba(86, 214, 255, 0.12) 1px, transparent 1px);
@@ -710,7 +926,7 @@
   }
 
   .nova-dock {
-    max-width: min(52rem, calc(100vw - 22rem));
+    max-width: min(54rem, calc(100vw - 28rem));
   }
 
   .nova-dock-chrome {
@@ -720,38 +936,59 @@
   .nova-hud {
     display: flex;
     flex-direction: column;
-    gap: 0.45rem;
+    gap: 0.4rem;
     position: absolute;
     top: 50%;
-    transform: translateY(-52%);
+    transform: translateY(-58%);
     z-index: 15;
-    width: 11.5rem;
-    padding: 1rem 1.05rem;
-    border: 1px solid rgba(86, 214, 255, 0.22);
-    border-radius: 0.4rem;
+    width: 13.75rem;
+    max-height: min(72vh, 36rem);
+    overflow: hidden;
+    padding: 1rem 1.05rem 1.1rem;
+    border: 1px solid rgba(86, 214, 255, 0.28);
+    border-radius: 0.45rem;
     background:
-      linear-gradient(160deg, rgba(10, 28, 42, 0.72), rgba(8, 6, 20, 0.55));
+      linear-gradient(165deg, rgba(8, 26, 40, 0.82), rgba(8, 6, 20, 0.62));
     box-shadow:
-      0 0 0 1px rgba(255, 79, 216, 0.06) inset,
-      0 12px 40px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(12px);
+      0 0 0 1px rgba(255, 79, 216, 0.07) inset,
+      0 0 40px rgba(86, 214, 255, 0.06),
+      0 16px 48px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(14px);
     pointer-events: none;
   }
 
+  .nova-hud::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #56d6ff, #ff4fd8, transparent);
+    opacity: 0.7;
+  }
+
   .nova-hud-left {
-    left: 1.75rem;
+    left: 1.25rem;
   }
 
   .nova-hud-right {
-    right: 1.75rem;
+    right: 1.25rem;
   }
 
   .nova-hud-title {
     font-size: 0.62rem;
     letter-spacing: 0.32em;
     text-transform: uppercase;
-    color: rgba(86, 214, 255, 0.7);
-    margin-bottom: 0.25rem;
+    color: rgba(86, 214, 255, 0.75);
+    margin-bottom: 0.15rem;
+  }
+
+  .nova-hud-caption {
+    font-size: 0.5rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(150, 170, 200, 0.4);
   }
 
   .nova-hud-row {
@@ -759,27 +996,35 @@
     align-items: baseline;
     justify-content: space-between;
     gap: 0.75rem;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     color: rgba(190, 200, 230, 0.55);
   }
 
   .nova-hud-row strong {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     font-weight: 600;
     letter-spacing: 0.04em;
     color: rgba(220, 245, 255, 0.92);
   }
 
   .nova-hud-row-hero strong {
-    font-size: 1.15rem;
+    font-size: 1.05rem;
     color: #56d6ff;
     text-shadow: 0 0 16px rgba(86, 214, 255, 0.45);
   }
 
+  .nova-hud-row strong.nova-ok {
+    color: #7dffb2;
+  }
+
+  .nova-hud-row strong.nova-warn {
+    color: #ffb347;
+  }
+
   .nova-hud-divider {
     height: 1px;
-    margin: 0.25rem 0;
+    margin: 0.15rem 0;
     background: linear-gradient(
       90deg,
       transparent,
@@ -789,11 +1034,97 @@
   }
 
   .nova-hud-note {
-    margin-top: 0.2rem;
-    font-size: 0.58rem;
+    margin-top: 0.15rem;
+    font-size: 0.55rem;
     line-height: 1.35;
     letter-spacing: 0.04em;
     color: rgba(255, 180, 120, 0.65);
+  }
+
+  .nova-hud-donut-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+  }
+
+  .nova-hud-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 0.22rem;
+    font-size: 0.58rem;
+    color: rgba(180, 195, 220, 0.55);
+  }
+
+  .nova-hud-legend i {
+    display: inline-block;
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 999px;
+    margin-right: 0.25rem;
+    vertical-align: middle;
+  }
+
+  .nova-hud-legend i.tone-cyan {
+    background: #56d6ff;
+    box-shadow: 0 0 6px rgba(86, 214, 255, 0.6);
+  }
+  .nova-hud-legend i.tone-violet {
+    background: #7c5cff;
+  }
+  .nova-hud-legend i.tone-amber {
+    background: #ffb347;
+  }
+  .nova-hud-legend i.tone-pink {
+    background: #ff4fd8;
+  }
+
+  .nova-gauge-row {
+    display: flex;
+    justify-content: space-around;
+    gap: 0.25rem;
+  }
+
+  .nova-telemetry {
+    grid-template-columns: 1.15fr 0.9fr 0.9fr 1.15fr;
+    bottom: calc(10.25rem + env(safe-area-inset-bottom, 0px));
+    width: min(58rem, calc(100vw - 28rem));
+  }
+
+  .nova-tele-card {
+    padding: 0.7rem 0.8rem 0.75rem;
+    border: 1px solid rgba(86, 214, 255, 0.22);
+    border-radius: 0.4rem;
+    background: linear-gradient(
+      160deg,
+      rgba(8, 24, 38, 0.78),
+      rgba(8, 6, 18, 0.55)
+    );
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(12px);
+  }
+
+  .nova-tele-card-wide {
+    display: block;
+  }
+
+  .nova-tele-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.45rem;
+    font-size: 0.55rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(150, 180, 210, 0.5);
+  }
+
+  .nova-tele-head strong {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    color: rgba(210, 240, 255, 0.9);
   }
 
   .nova-ring {
@@ -817,13 +1148,21 @@
     animation: nova-ring-spin 40s linear infinite reverse;
   }
 
+  .nova-ring-c {
+    inset: -8%;
+    border-color: rgba(124, 92, 255, 0.16);
+    border-style: dotted;
+    animation: nova-ring-spin 55s linear infinite;
+  }
+
   .nova-tagline {
     max-width: 28rem;
   }
 
   .nova-stage {
-    padding-left: 13rem;
-    padding-right: 13rem;
+    padding-left: 15rem;
+    padding-right: 15rem;
+    padding-bottom: 16.5rem;
   }
 
   .nova-input {
@@ -839,6 +1178,36 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     font-size: 0.72rem;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1023px) {
+  .nova-tele-card {
+    padding: 0.65rem 0.7rem;
+    border: 1px solid rgba(86, 214, 255, 0.2);
+    border-radius: 0.35rem;
+    background: rgba(8, 18, 30, 0.72);
+    backdrop-filter: blur(10px);
+  }
+
+  .nova-tele-head {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.35rem;
+    font-size: 0.52rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(150, 180, 210, 0.5);
+  }
+
+  .nova-tele-head strong {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.68rem;
+    color: rgba(210, 240, 255, 0.9);
+  }
+
+  .nova-stage {
+    padding-bottom: 15rem;
   }
 }
 
