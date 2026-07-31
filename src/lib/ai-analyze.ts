@@ -20,6 +20,28 @@ export interface AddressReviewItem {
   reasoning?: string;
 }
 
+/** Soft community fingerprint check attached after analysis. */
+export interface CommunityVerificationSummary {
+  outcome:
+    | "bootstrap"
+    | "match"
+    | "small_expansion"
+    | "large_difference"
+    | "ignored_new"
+    | "expanded"
+    | "new_community_suggested";
+  eventId: string | null;
+  fingerprintId: string | null;
+  matchRatio: number;
+  knownCount: number;
+  newCount: number;
+  newAddresses: string[];
+  helpfulMessage: string;
+  needsUserAction: boolean;
+  flaggedForReview: boolean;
+  communityName: string;
+}
+
 export interface AIInspectionData {
   id: string;
   name: string;
@@ -42,6 +64,8 @@ export interface AIInspectionData {
   propertyImages?: Record<string, string>;
   /** Homes skipped because they were already inspected in a prior session */
   previouslyInspectedCount?: number;
+  /** Soft community verification vs fingerprint (never blocks save) */
+  communityVerification?: CommunityVerificationSummary;
 }
 
 const VIOLATION_RULES: Record<string, string> = {

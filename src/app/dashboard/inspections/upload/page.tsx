@@ -19,6 +19,8 @@ import { cacheInspectionClient } from "@/lib/inspection-cache";
 import type { AIInspectionData } from "@/lib/ai-analyze";
 import { captureUploadGeo } from "@/lib/geo/capture-geo";
 import { rosterFromStorage } from "@/lib/roster";
+import { CommunityDriveBriefing } from "@/components/inspections/CommunityDriveBriefing";
+import { CommunityVerificationPanel } from "@/components/inspections/CommunityVerificationPanel";
 import {
   Upload,
   Film,
@@ -48,6 +50,7 @@ export default function UploadPage() {
   const router = useRouter();
   const { isDemo, ready } = useAppMode();
   const { profile } = useUserProfile();
+  const [briefingDone, setBriefingDone] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -55,8 +58,15 @@ export default function UploadPage() {
   const [statusDetail, setStatusDetail] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingVerification, setPendingVerification] = useState<
+    AIInspectionData["communityVerification"] | null
+  >(null);
+  const [pendingInspectionId, setPendingInspectionId] = useState<string | null>(
+    null
+  );
 
   const steps = isDemo ? DEMO_STEPS : LIVE_STEPS;
+  const communityName = profile?.hoaName?.trim() || "Your Community";
 
   const startProcessing = useCallback(
     async (file: File) => {
@@ -66,6 +76,8 @@ export default function UploadPage() {
       setIsComplete(false);
       setError(null);
       setStatusDetail(null);
+      setPendingVerification(null);
+      setPendingInspectionId(null);
 
       try {
         if (isDemo) {
@@ -90,6 +102,7 @@ export default function UploadPage() {
 
         setCurrentStep(1);
         setStatusDetail("Capturing GPS and video frames...");
+        // Sample a short GPS track while frames extract for community route/boundary
         const [frames, geo] = await Promise.all([
           extractVideoFrames(file, {
             intervalSec: 1.8,
@@ -97,7 +110,7 @@ export default function UploadPage() {
             maxWidth: 960,
             quality: 0.68,
           }),
-          captureUploadGeo(),
+          captureUploadGeo({ trackMs: 8_000 }),
         ]);
         setStatusDetail(
           geo
@@ -128,7 +141,7 @@ export default function UploadPage() {
             })),
             // Backup if Supabase roster is empty (CSV only in localStorage)
             properties: localRoster.length > 0 ? localRoster : undefined,
-            neighborhood: profile?.hoaName || "Your Community",
+            neighborhood: communityName,
             ccrRules,
             trashCollectionDays,
           }),
@@ -184,7 +197,22 @@ export default function UploadPage() {
           return;
         }
 
+        const verification =
+          (data.communityVerification ??
+            data.inspection?.communityVerification) as
+            | AIInspectionData["communityVerification"]
+            | undefined;
+
         setIsComplete(true);
+
+        // Soft verification needs a decision — pause before redirect
+        if (verification?.needsUserAction && verification.eventId) {
+          setPendingVerification(verification);
+          setPendingInspectionId(data.id as string);
+          setIsProcessing(false);
+          return;
+        }
+
         setTimeout(
           () => router.push(`/dashboard/inspections/${data.id}`),
           1200
@@ -194,7 +222,7 @@ export default function UploadPage() {
         setIsProcessing(false);
       }
     },
-    [router, isDemo, profile]
+    [router, isDemo, communityName]
   );
 
   const handleDrop = useCallback(
@@ -216,6 +244,8 @@ export default function UploadPage() {
 
   if (!ready) return null;
 
+  const showBriefing = !isDemo && !briefingDone && !isProcessing && !pendingVerification;
+
   return (
     <DashboardLayout>
       <Header
@@ -228,7 +258,7 @@ export default function UploadPage() {
       />
       <PageContent className="flex min-h-[calc(100vh-12rem)] items-center">
         <div className="w-full max-w-2xl">
-          {!isDemo && (
+          {!isDemo && !showBriefing && (
             <p className="mb-4 rounded-xl border border-brand-200 bg-brand-50/70 px-4 py-3 text-sm text-ink-700">
               Tip: Import your community CSV under{" "}
               <a href="/dashboard/properties" className="font-medium text-brand-800 underline">
@@ -248,7 +278,59 @@ export default function UploadPage() {
           )}
 
           <AnimatePresence mode="wait">
-            {!isProcessing ? (
+            {showBriefing ? (
+              <motion.div
+                key="briefing"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+              >
+                <CommunityDriveBriefing
+                  communityName={communityName}
+                  onContinue={() => setBriefingDone(true)}
+                />
+              </motion.div>
+            ) : pendingVerification && pendingInspectionId ? (
+              <motion.div
+                key="verify"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="space-y-4"
+              >
+                <Card padding="lg">
+                  <div className="flex flex-col items-center text-center">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 ring-4 ring-emerald-100">
+                      <CheckCircle2 className="h-7 w-7 text-emerald-600" />
+                    </div>
+                    <h3 className="mt-4 font-display text-lg font-semibold text-ink-900">
+                      Analysis complete
+                    </h3>
+                    <p className="mt-2 text-sm text-ink-500">
+                      Quick community check before we open results
+                    </p>
+                  </div>
+                </Card>
+                <CommunityVerificationPanel
+                  verification={pendingVerification}
+                  onResolved={() => {
+                    router.push(
+                      `/dashboard/inspections/${pendingInspectionId}`
+                    );
+                  }}
+                />
+                <button
+                  type="button"
+                  className="w-full text-center text-sm text-ink-500 underline hover:text-ink-800"
+                  onClick={() =>
+                    router.push(
+                      `/dashboard/inspections/${pendingInspectionId}`
+                    )
+                  }
+                >
+                  Skip for now — view results
+                </button>
+              </motion.div>
+            ) : !isProcessing ? (
               <motion.div
                 key="upload"
                 initial={{ opacity: 0, scale: 0.98 }}
@@ -278,6 +360,11 @@ export default function UploadPage() {
                     <p className="mt-2 text-center text-sm text-ink-500">
                       Phone drive-through · AI finds addresses · .mp4 & .mov
                     </p>
+                    {!isDemo && (
+                      <p className="mt-2 max-w-sm text-center text-xs text-ink-400">
+                        Recording for {communityName} — stay on its main streets
+                      </p>
+                    )}
                     <div
                       className={`mt-4 flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
                         isDemo

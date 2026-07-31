@@ -49,6 +49,9 @@ import {
   shouldEnforceTrashBins,
   type Weekday,
 } from "@/lib/trash-collection";
+import { getActiveCompanyContext } from "@/lib/company";
+import { normalizeCommunityKey } from "@/lib/community-key";
+import { runCommunityVerification } from "@/lib/community-verification";
 
 export const maxDuration = 120;
 
@@ -164,6 +167,7 @@ export async function POST(request: NextRequest) {
     const ccrRules = body.ccrRules as typeof DEFAULT_CCR_RULES | undefined;
     const ruleMap = rulesToMap(ccrRules ?? DEFAULT_CCR_RULES);
     const frames = body.frames as VideoFrameInput[] | undefined;
+    const uploadGeo = body.geo as UploadGeoContext | undefined;
     const collectionDays = (Array.isArray(body.trashCollectionDays)
       ? body.trashCollectionDays
       : []) as Weekday[];
@@ -271,7 +275,7 @@ export async function POST(request: NextRequest) {
       frameCount = extractedFrames.length;
       const imageUrls = extractedFrames.map((f) => f.dataUrl);
 
-      const geo = body.geo as UploadGeoContext | undefined;
+      const geo = uploadGeo;
       const hasGps = Boolean(geo?.lat && geo?.lng);
       const candidateCtx = await buildAddressCandidates({ roster, geo, neighborhood });
       const addressMatchResults = await runAddressMatchPipeline(
@@ -495,6 +499,67 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Soft community fingerprint (never blocks save)
+    let communityVerification: AIInspectionData["communityVerification"];
+    try {
+      const company = await getActiveCompanyContext();
+      const sub = subscription ?? (await getUserSubscription(userId));
+      const communityName =
+        sub.hoaName?.trim() ||
+        company?.hoaName?.trim() ||
+        neighborhood ||
+        "Your Community";
+      const communityKey =
+        sub.communityKey ||
+        normalizeCommunityKey(communityName) ||
+        "unknown";
+      const routePoints =
+        uploadGeo?.route?.map((p) => ({
+          lat: p.lat,
+          lng: p.lng,
+          accuracyM: p.accuracyM,
+          heading: p.heading,
+          t: p.t,
+        })) ??
+        (uploadGeo?.lat != null && uploadGeo?.lng != null
+          ? [
+              {
+                lat: uploadGeo.lat,
+                lng: uploadGeo.lng,
+                accuracyM: uploadGeo.accuracyM,
+                heading: uploadGeo.heading,
+              },
+            ]
+          : []);
+
+      const verification = await runCommunityVerification({
+        inspectionId: id,
+        communityName,
+        communityKey,
+        companyId: company?.companyId ?? null,
+        userId,
+        addresses: results.map((r) => r.address),
+        geo: uploadGeo,
+        routePoints,
+      });
+
+      communityVerification = {
+        outcome: verification.outcome,
+        eventId: verification.eventId,
+        fingerprintId: verification.fingerprintId,
+        matchRatio: verification.matchRatio,
+        knownCount: verification.knownCount,
+        newCount: verification.newCount,
+        newAddresses: verification.newAddresses,
+        helpfulMessage: verification.helpfulMessage,
+        needsUserAction: verification.needsUserAction,
+        flaggedForReview: verification.flaggedForReview,
+        communityName: verification.communityName,
+      };
+    } catch (err) {
+      console.error("community verification skipped:", err);
+    }
+
     const inspection: AIInspectionData = {
       id,
       name: `AI Inspection — ${date}`,
@@ -511,6 +576,7 @@ export async function POST(request: NextRequest) {
       addressReviews: addressReviews.length > 0 ? addressReviews : undefined,
       propertyImages,
       previouslyInspectedCount: priorSkipped.length,
+      communityVerification,
     };
 
     const lean = stripInspectionForStorage(inspection);
@@ -526,6 +592,7 @@ export async function POST(request: NextRequest) {
         usedVideoFrames: Boolean(frames?.length),
         usedGpsPipeline,
         addressReviewCount: addressReviews.filter((r) => r.needsReview).length,
+        communityVerification: communityVerification?.outcome,
         persisted: saveResult.ok,
         persistError: saveResult.error,
       });
@@ -542,6 +609,7 @@ export async function POST(request: NextRequest) {
       usedVideoFrames: Boolean(frames?.length),
       usedGpsPipeline,
       addressReviewCount: addressReviews.filter((r) => r.needsReview).length,
+      communityVerification,
       saved: saveResult.ok,
       saveError: saveResult.error,
       inspection: lean,

@@ -5,6 +5,14 @@ export interface UploadGeoContext {
   /** Degrees 0–360, if available from device */
   heading?: number;
   accuracyM?: number;
+  /** Optional short track sampled while frames are extracted */
+  route?: Array<{
+    lat: number;
+    lng: number;
+    accuracyM?: number;
+    heading?: number;
+    t?: number;
+  }>;
 }
 
 /** Optional per-frame geo (future: GPS track sync). */

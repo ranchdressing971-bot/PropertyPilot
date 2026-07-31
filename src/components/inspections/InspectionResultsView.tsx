@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { InspectionResultCard } from "@/components/inspections/InspectionResultCard";
+import { CommunityVerificationPanel } from "@/components/inspections/CommunityVerificationPanel";
 import type { InspectionDisplayData } from "@/lib/inspection-display";
 import { getCachedInspectionClient } from "@/lib/inspection-cache";
 import { CheckCircle2, AlertTriangle, MapPin, History, Trash2 } from "lucide-react";
@@ -215,6 +216,27 @@ export function InspectionResultsView({ id }: { id: string }) {
           </div>
         ) : (
           <>
+        {data.communityVerification && (
+          <div className="mb-4">
+            <CommunityVerificationPanel
+              verification={data.communityVerification}
+              onResolved={() => {
+                setData((prev) =>
+                  prev?.communityVerification
+                    ? {
+                        ...prev,
+                        communityVerification: {
+                          ...prev.communityVerification,
+                          needsUserAction: false,
+                        },
+                      }
+                    : prev
+                );
+              }}
+            />
+          </div>
+        )}
+
         {scheduleNote && (
           <motion.div
             initial={fadeUp.initial}

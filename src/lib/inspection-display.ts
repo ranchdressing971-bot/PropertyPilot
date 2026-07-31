@@ -1,4 +1,8 @@
-import type { AIInspectionData, AddressReviewItem } from "./ai-analyze";
+import type {
+  AIInspectionData,
+  AddressReviewItem,
+  CommunityVerificationSummary,
+} from "./ai-analyze";
 import type { Property } from "./mock-data";
 
 export interface InspectionDisplayData {
@@ -14,6 +18,7 @@ export interface InspectionDisplayData {
   addressReviews?: AddressReviewItem[];
   previouslyInspectedCount?: number;
   trashScheduleNote?: string;
+  communityVerification?: CommunityVerificationSummary;
   results: {
     propertyId: string;
     property: Property;
@@ -40,6 +45,7 @@ export function formatInspectionForDisplay(
     usedGpsPipeline: aiInspection.usedGpsPipeline,
     addressReviews: aiInspection.addressReviews,
     previouslyInspectedCount: aiInspection.previouslyInspectedCount,
+    communityVerification: aiInspection.communityVerification,
     results: aiInspection.results.map((r) => {
       const violation =
         aiInspection.violations.find((v) => v.propertyId === r.propertyId) ?? null;

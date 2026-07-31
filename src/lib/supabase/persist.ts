@@ -55,6 +55,7 @@ export async function persistInspection(
       usedGpsPipeline: lean.usedGpsPipeline,
       addressReviews: lean.addressReviews,
       propertyImages: lean.propertyImages ?? {},
+      communityVerification: lean.communityVerification,
     },
   };
 
@@ -136,6 +137,7 @@ function mapInspectionRow(row: {
     usedGpsPipeline?: boolean;
     addressReviews?: AIInspectionData["addressReviews"];
     propertyImages?: Record<string, string>;
+    communityVerification?: AIInspectionData["communityVerification"];
   } | null;
 }): AIInspectionData {
   const meta = row.metadata ?? {};
@@ -154,6 +156,7 @@ function mapInspectionRow(row: {
     usedGpsPipeline: meta.usedGpsPipeline,
     addressReviews: meta.addressReviews,
     propertyImages: meta.propertyImages,
+    communityVerification: meta.communityVerification,
   };
 }
 
