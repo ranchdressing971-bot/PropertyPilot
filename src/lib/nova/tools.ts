@@ -412,9 +412,9 @@ async function toolSendToday(args: Record<string, unknown>) {
           ? `Queued ${queued}. Waiting on Mailtrap + domain before real inboxes.`
           : isMailtrapSandbox()
             ? `Queued ${queued}. Sandbox on — not real HOA inboxes until live domain + sandbox off.`
-          : !isNexusSendEnabled()
-            ? `Queued ${queued}. Prep only until domain is live and NEXUS_SEND_ENABLED=true.`
-            : `Queued ${queued} sends (override), paced every 5–15 minutes.`,
+            : !isNexusSendEnabled()
+              ? `Queued ${queued}. Prep only until domain is live and NEXUS_SEND_ENABLED=true.`
+              : `Queued ${queued} sends (override), paced every 5–15 minutes.`,
   };
 }
 
