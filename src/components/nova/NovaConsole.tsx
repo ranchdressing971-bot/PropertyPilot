@@ -105,6 +105,105 @@ function stopNativeTts() {
   }
 }
 
+function isSafariBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return (
+    /iPhone|iPad|iPod/i.test(ua) ||
+    (/Safari/i.test(ua) && !/Chrome|CriOS|Chromium|Edg|OPR|Android/i.test(ua))
+  );
+}
+
+function getAudioContextClass(): typeof AudioContext | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext
+  );
+}
+
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=";
+
+/** Safari often returns [] until voiceschanged — poll instead of failing early. */
+function waitForSpeechVoices(
+  synth: SpeechSynthesis,
+  maxMs = 2500
+): Promise<SpeechSynthesisVoice[]> {
+  const existing = synth.getVoices();
+  if (existing.length > 0) return Promise.resolve(existing);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (voices: SpeechSynthesisVoice[]) => {
+      if (settled) return;
+      settled = true;
+      synth.removeEventListener("voiceschanged", onVoices);
+      clearInterval(poll);
+      clearTimeout(hardStop);
+      resolve(voices);
+    };
+    const onVoices = () => {
+      const voices = synth.getVoices();
+      if (voices.length > 0) finish(voices);
+    };
+    synth.addEventListener("voiceschanged", onVoices);
+    const poll = window.setInterval(() => {
+      const voices = synth.getVoices();
+      if (voices.length > 0) finish(voices);
+    }, 120);
+    const hardStop = window.setTimeout(() => finish(synth.getVoices()), maxMs);
+    synth.getVoices();
+  });
+}
+
+function primeSpeechSynthesis(synth: SpeechSynthesis) {
+  try {
+    synth.getVoices();
+    synth.resume();
+  } catch {
+    /* ignore */
+  }
+}
+
+function pickPreferredVoice(
+  voices: SpeechSynthesisVoice[]
+): SpeechSynthesisVoice | undefined {
+  return (
+    voices.find((v) =>
+      /samantha|karen|moira|victoria|susan|zira|google us english|Samantha/i.test(
+        v.name
+      )
+    ) ||
+    voices.find((v) => /^en(-|_)/i.test(v.lang)) ||
+    voices.find((v) => v.lang.toLowerCase().startsWith("en"))
+  );
+}
+
+async function playBlobViaWebAudio(
+  blob: Blob,
+  ctx: AudioContext | null
+): Promise<void> {
+  const AC = getAudioContextClass();
+  if (!AC) throw new Error("Web Audio unavailable");
+  const audioCtx = ctx ?? new AC();
+  if (audioCtx.state === "suspended") await audioCtx.resume();
+  const buffer = await blob.arrayBuffer();
+  const decoded = await audioCtx.decodeAudioData(buffer.slice(0));
+  await new Promise<void>((resolve, reject) => {
+    const source = audioCtx.createBufferSource();
+    source.buffer = decoded;
+    source.connect(audioCtx.destination);
+    source.onended = () => resolve();
+    try {
+      source.start(0);
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error("Web Audio playback failed"));
+    }
+  });
+}
+
 interface SpeechRecognition extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
@@ -239,45 +338,49 @@ export function NovaConsole() {
   const openConversationRef = useRef<() => void>(() => {});
   const goDormantRef = useRef<() => void>(() => {});
 
-  const unlockAudio = useCallback(() => {
+  const unlockAudio = useCallback(async (): Promise<boolean> => {
     try {
-      const AC =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext })
-          .webkitAudioContext;
+      const AC = getAudioContextClass();
       if (AC) {
         if (!audioCtxRef.current) audioCtxRef.current = new AC();
         const ctx = audioCtxRef.current;
-        if (ctx.state === "suspended") void ctx.resume();
+        if (ctx.state === "suspended") await ctx.resume();
       }
     } catch {
       /* ignore */
     }
 
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      primeSpeechSynthesis(window.speechSynthesis);
+    }
+
+    if (audioUnlockedRef.current) return true;
+
     const el = audioElRef.current;
-    if (!el) return;
-    if (audioUnlockedRef.current) return;
+    if (!el) return false;
 
     // Warm the persistent <audio> inside a user gesture so later TTS can play.
     try {
       el.muted = true;
-      el.src =
-        "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=";
-      void el
-        .play()
-        .then(() => {
-          el.pause();
-          el.muted = false;
-          el.removeAttribute("src");
-          el.load();
-          audioUnlockedRef.current = true;
-          setNeedsGesture(false);
-        })
-        .catch(() => {
-          el.muted = false;
-        });
+      el.setAttribute("playsinline", "");
+      el.src = SILENT_WAV;
+      await el.play();
+      el.pause();
+      el.muted = false;
+      el.removeAttribute("src");
+      el.load();
+      audioUnlockedRef.current = true;
+      setNeedsGesture(false);
+      if (window.speechSynthesis) {
+        void waitForSpeechVoices(
+          window.speechSynthesis,
+          isSafariBrowser() ? 3000 : 1200
+        );
+      }
+      return true;
     } catch {
-      /* ignore */
+      el.muted = false;
+      return false;
     }
   }, []);
 
@@ -307,107 +410,130 @@ export function NovaConsole() {
       throw new Error("This browser has no free device voice.");
     }
 
-    await new Promise<void>((resolve) => {
-      const ready = window.speechSynthesis.getVoices();
-      if (ready.length > 0) {
-        resolve();
-        return;
-      }
-      const onVoices = () => {
-        window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
-        resolve();
-      };
-      window.speechSynthesis.addEventListener("voiceschanged", onVoices);
-      window.setTimeout(() => {
-        window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
-        resolve();
-      }, 600);
-    });
+    await waitForSpeechVoices(
+      window.speechSynthesis,
+      isSafariBrowser() ? 3000 : 900
+    );
 
     const voices = window.speechSynthesis.getVoices();
     if (voices.length === 0 && hasNativeTts()) {
       await speakWithNative(clipped);
       return;
     }
-    if (voices.length === 0) {
-      throw new Error("This browser has no free device voice.");
-    }
 
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(clipped);
-    const preferred =
-      voices.find((v) =>
-        /samantha|karen|moira|victoria|susan|zira|google us english|Samantha/i.test(
-          v.name
-        )
-      ) ||
-      voices.find((v) => /^en(-|_)/i.test(v.lang)) ||
-      voices.find((v) => v.lang.toLowerCase().startsWith("en"));
+    const preferred = pickPreferredVoice(voices);
     if (preferred) utterance.voice = preferred;
     utterance.rate = 1.05;
     utterance.pitch = 1.08;
     utterance.volume = 1;
 
     await new Promise<void>((resolve, reject) => {
-      utterance.onend = () => resolve();
+      let spoke = false;
+      const watchdog = window.setTimeout(() => {
+        if (!spoke && !window.speechSynthesis.speaking) {
+          reject(new Error("Device voice did not start"));
+        }
+      }, 2500);
+      utterance.onstart = () => {
+        spoke = true;
+      };
+      utterance.onend = () => {
+        window.clearTimeout(watchdog);
+        resolve();
+      };
       utterance.onerror = (event) => {
+        window.clearTimeout(watchdog);
         if (event.error === "interrupted" || event.error === "canceled") {
           resolve();
           return;
         }
         reject(new Error(event.error || "Device voice failed"));
       };
+      window.speechSynthesis.resume();
       window.speechSynthesis.speak(utterance);
+      // iOS Safari: kick the queue so speak actually starts.
+      if (isSafariBrowser()) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      }
     });
   }, []);
 
-  const playVoiceBlob = useCallback(async (blob: Blob) => {
-    const el = audioElRef.current;
-    if (!el) throw new Error("Audio element missing");
+  const playVoiceBlob = useCallback(
+    async (blob: Blob) => {
+      const unlocked = await unlockAudio();
+      const el = audioElRef.current;
+      if (!el) throw new Error("Audio element missing");
 
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
 
-    const url = URL.createObjectURL(blob);
-    objectUrlRef.current = url;
-    el.muted = false;
-    el.src = url;
-    el.load();
+      const typed =
+        blob.type && blob.type !== "application/octet-stream"
+          ? blob
+          : new Blob([blob], { type: "audio/mpeg" });
 
-    await new Promise<void>((resolve, reject) => {
-      const cleanup = () => {
-        el.onended = null;
-        el.onerror = null;
-      };
-      el.onended = () => {
-        cleanup();
-        if (objectUrlRef.current === url) {
-          URL.revokeObjectURL(url);
-          objectUrlRef.current = null;
+      const playViaElement = () =>
+        new Promise<void>((resolve, reject) => {
+          const url = URL.createObjectURL(typed);
+          objectUrlRef.current = url;
+          el.muted = false;
+          el.setAttribute("playsinline", "");
+          el.src = url;
+          el.load();
+
+          const cleanup = () => {
+            el.onended = null;
+            el.onerror = null;
+          };
+          el.onended = () => {
+            cleanup();
+            if (objectUrlRef.current === url) {
+              URL.revokeObjectURL(url);
+              objectUrlRef.current = null;
+            }
+            resolve();
+          };
+          el.onerror = () => {
+            cleanup();
+            if (objectUrlRef.current === url) {
+              URL.revokeObjectURL(url);
+              objectUrlRef.current = null;
+            }
+            reject(new Error("Browser could not play the voice file"));
+          };
+          void el.play().catch((err: unknown) => {
+            cleanup();
+            if (objectUrlRef.current === url) {
+              URL.revokeObjectURL(url);
+              objectUrlRef.current = null;
+            }
+            const msg = err instanceof Error ? err.message : "play blocked";
+            reject(new Error(msg));
+          });
+        });
+
+      try {
+        await playViaElement();
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "";
+        if (!unlocked && /NotAllowed|interact|gesture|play blocked/i.test(msg)) {
+          throw err;
         }
-        resolve();
-      };
-      el.onerror = () => {
-        cleanup();
-        if (objectUrlRef.current === url) {
-          URL.revokeObjectURL(url);
-          objectUrlRef.current = null;
+        try {
+          await playBlobViaWebAudio(typed, audioCtxRef.current);
+        } catch {
+          throw err instanceof Error ? err : new Error("Voice playback failed");
         }
-        reject(new Error("Browser could not play the voice file"));
-      };
-      void el.play().catch((err: unknown) => {
-        cleanup();
-        if (objectUrlRef.current === url) {
-          URL.revokeObjectURL(url);
-          objectUrlRef.current = null;
-        }
-        const msg = err instanceof Error ? err.message : "play blocked";
-        reject(new Error(msg));
-      });
-    });
-  }, []);
+      }
+    },
+    [unlockAudio]
+  );
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -690,7 +816,7 @@ export function NovaConsole() {
       resumeModeRef.current = after;
       setPhase("speaking");
       killMic();
-      unlockAudio();
+      const audioReady = await unlockAudio();
       try {
         if (typeof window !== "undefined") {
           stopNativeTts();
@@ -754,18 +880,33 @@ export function NovaConsole() {
             : new Blob([blob], { type: "audio/mpeg" });
         try {
           await playVoiceBlob(typed);
-        } catch {
+        } catch (playErr) {
+          const playMsg =
+            playErr instanceof Error ? playErr.message : "Voice playback failed";
+          if (
+            !audioReady &&
+            /NotAllowed|interact|gesture|play blocked/i.test(playMsg)
+          ) {
+            setNeedsGesture(true);
+          }
           await speakWithFreeVoice(text);
         }
       } catch (err) {
         try {
           await speakWithFreeVoice(text);
           setError(null);
-        } catch {
+        } catch (fallbackErr) {
           const msg = err instanceof Error ? err.message : "Voice failed";
-          if (/play|NotAllowed|interact/i.test(msg)) {
+          const fbMsg =
+            fallbackErr instanceof Error ? fallbackErr.message : "";
+          if (
+            /NotAllowed|interact|gesture|play blocked/i.test(msg) ||
+            /NotAllowed|interact|gesture|play blocked|did not start/i.test(fbMsg)
+          ) {
             setNeedsGesture(true);
             setError("Tap the orb once to unlock sound, then try again.");
+          } else if (/no free device voice|Native voice bridge/i.test(fbMsg)) {
+            setError(fbMsg);
           } else {
             setError(msg);
           }
@@ -803,7 +944,7 @@ export function NovaConsole() {
   }, [clearSilenceEnd]);
 
   const openConversation = useCallback(() => {
-    unlockAudio();
+    void unlockAudio();
     if (phaseRef.current === "thinking" || phaseRef.current === "speaking") {
       return;
     }
@@ -836,7 +977,7 @@ export function NovaConsole() {
         return;
       }
 
-      unlockAudio();
+      void unlockAudio();
       setError(null);
       clearSilenceEnd();
       setPhase("thinking");
@@ -905,7 +1046,7 @@ export function NovaConsole() {
   }, []);
 
   const toggleListening = () => {
-    unlockAudio();
+    void unlockAudio();
     if (listeningOn) {
       setListeningOn(false);
       listeningOnRef.current = false;
@@ -922,7 +1063,7 @@ export function NovaConsole() {
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    unlockAudio();
+    void unlockAudio();
     const msg = input.trim();
     if (!msg) return;
     setInput("");
@@ -964,7 +1105,9 @@ export function NovaConsole() {
   return (
     <div
       className="nova-shell"
-      onPointerDown={unlockAudio}
+      onPointerDown={() => {
+        void unlockAudio();
+      }}
     >
       <audio ref={audioElRef} playsInline preload="auto" className="hidden" />
       <div className="nova-void" aria-hidden />
