@@ -5,8 +5,11 @@ import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.view.View;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -21,6 +24,9 @@ import androidx.core.content.ContextCompat;
 import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewFeature;
 
+import java.util.Locale;
+import java.util.UUID;
+
 /**
  * Full-screen Nova shell for a burner phone — Alexa-style always-on mic page.
  */
@@ -28,6 +34,10 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_MIC = 42;
     private WebView webView;
     private PermissionRequest pendingWebPermission;
+    private TextToSpeech tts;
+    private boolean ttsReady = false;
+    private String pendingSpeakText = null;
+    private String currentUtteranceId = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,7 +60,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     private void setupWebView() {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -64,6 +74,9 @@ public class MainActivity extends AppCompatActivity {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
             WebSettingsCompat.setForceDark(settings, WebSettingsCompat.FORCE_DARK_OFF);
         }
+
+        initTts();
+        webView.addJavascriptInterface(new NovaNativeBridge(), "NovaNative");
 
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
@@ -94,6 +107,129 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         });
+    }
+
+    private void initTts() {
+        tts = new TextToSpeech(this, status -> {
+            if (status != TextToSpeech.SUCCESS || tts == null) {
+                ttsReady = false;
+                notifySpeakDone();
+                return;
+            }
+            int lang = tts.setLanguage(Locale.US);
+            if (lang == TextToSpeech.LANG_MISSING_DATA || lang == TextToSpeech.LANG_NOT_SUPPORTED) {
+                lang = tts.setLanguage(Locale.getDefault());
+            }
+            ttsReady = lang != TextToSpeech.LANG_MISSING_DATA
+                && lang != TextToSpeech.LANG_NOT_SUPPORTED;
+
+            tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override
+                public void onStart(String utteranceId) {
+                    // no-op
+                }
+
+                @Override
+                public void onDone(String utteranceId) {
+                    onUtteranceFinished(utteranceId);
+                }
+
+                @Override
+                @Deprecated
+                public void onError(String utteranceId) {
+                    onUtteranceFinished(utteranceId);
+                }
+
+                @Override
+                public void onError(String utteranceId, int errorCode) {
+                    onUtteranceFinished(utteranceId);
+                }
+
+                @Override
+                public void onStop(String utteranceId, boolean interrupted) {
+                    onUtteranceFinished(utteranceId);
+                }
+            });
+
+            if (pendingSpeakText != null) {
+                String queued = pendingSpeakText;
+                pendingSpeakText = null;
+                if (ttsReady) {
+                    speakInternal(queued);
+                } else {
+                    notifySpeakDone();
+                }
+            }
+        });
+    }
+
+    private void speakInternal(String text) {
+        if (text == null) return;
+        String clipped = text.trim();
+        if (clipped.isEmpty()) {
+            notifySpeakDone();
+            return;
+        }
+        if (clipped.length() > 2500) {
+            clipped = clipped.substring(0, 2500);
+        }
+
+        if (tts == null || !ttsReady) {
+            pendingSpeakText = clipped;
+            return;
+        }
+
+        currentUtteranceId = UUID.randomUUID().toString();
+        Bundle params = new Bundle();
+        tts.speak(clipped, TextToSpeech.QUEUE_FLUSH, params, currentUtteranceId);
+    }
+
+    private void stopTts() {
+        pendingSpeakText = null;
+        String id = currentUtteranceId;
+        currentUtteranceId = null;
+        if (tts != null) {
+            tts.stop();
+        }
+        if (id != null) {
+            notifySpeakDone();
+        }
+    }
+
+    private void onUtteranceFinished(String utteranceId) {
+        if (utteranceId == null) return;
+        synchronized (this) {
+            if (!utteranceId.equals(currentUtteranceId)) return;
+            currentUtteranceId = null;
+        }
+        notifySpeakDone();
+    }
+
+    private void notifySpeakDone() {
+        runOnUiThread(() -> {
+            if (webView == null) return;
+            webView.evaluateJavascript(
+                "(function(){try{if(typeof window.__novaOnSpeakDone==='function')"
+                    + "{window.__novaOnSpeakDone();}}catch(e){}})();",
+                null
+            );
+        });
+    }
+
+    /**
+     * Bridge for free device TTS when Web Speech API has no voices in WebView.
+     * JS: window.NovaNative.speak(text) / stop(); done via window.__novaOnSpeakDone.
+     */
+    private class NovaNativeBridge {
+        @JavascriptInterface
+        public void speak(String text) {
+            runOnUiThread(() -> speakInternal(text));
+        }
+
+        @JavascriptInterface
+        public void stop() {
+            runOnUiThread(() -> stopTts());
+        }
     }
 
     private void loadNova() {
@@ -170,5 +306,18 @@ public class MainActivity extends AppCompatActivity {
         } else {
             super.onBackPressed();
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        pendingSpeakText = null;
+        currentUtteranceId = null;
+        if (tts != null) {
+            tts.stop();
+            tts.shutdown();
+            tts = null;
+        }
+        ttsReady = false;
+        super.onDestroy();
     }
 }

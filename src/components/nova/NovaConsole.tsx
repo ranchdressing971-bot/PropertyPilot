@@ -48,6 +48,60 @@ declare global {
   interface Window {
     webkitSpeechRecognition?: new () => SpeechRecognition;
     SpeechRecognition?: new () => SpeechRecognition;
+    /** Android APK bridge — TextToSpeech via MainActivity JavascriptInterface. */
+    NovaNative?: {
+      speak: (text: string) => void;
+      stop: () => void;
+    };
+    __novaOnSpeakDone?: (() => void) | null;
+  }
+}
+
+function isNovaApk(): boolean {
+  return (
+    typeof navigator !== "undefined" && /RideByNova/i.test(navigator.userAgent)
+  );
+}
+
+function hasNativeTts(): boolean {
+  return typeof window !== "undefined" && typeof window.NovaNative?.speak === "function";
+}
+
+/** Promise wrapper around Android TextToSpeech (window.NovaNative). */
+function speakWithNative(text: string): Promise<void> {
+  const native = window.NovaNative;
+  if (!native?.speak) {
+    return Promise.reject(new Error("Native voice bridge unavailable."));
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (window.__novaOnSpeakDone === finish) {
+        window.__novaOnSpeakDone = null;
+      }
+      resolve();
+    };
+    window.__novaOnSpeakDone = finish;
+    try {
+      native.speak(text);
+    } catch (err) {
+      window.__novaOnSpeakDone = null;
+      reject(err instanceof Error ? err : new Error("Native voice failed"));
+      return;
+    }
+    // Safety net so the mic session never hangs if TTS never callbacks.
+    window.setTimeout(finish, Math.min(120_000, Math.max(8_000, text.length * 80)));
+  });
+}
+
+function stopNativeTts() {
+  try {
+    window.NovaNative?.stop?.();
+  } catch {
+    /* ignore */
   }
 }
 
@@ -227,13 +281,31 @@ export function NovaConsole() {
     }
   }, []);
 
-  /** Free device TTS (Web Speech API) when ElevenLabs is missing or out of credits. */
-  const speakWithBrowser = useCallback(async (text: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) {
-      throw new Error("This browser has no free device voice.");
-    }
+  /**
+   * Free device TTS when ElevenLabs is missing or out of credits.
+   * Prefer Android TextToSpeech in the RideByNova APK (WebView often has no voices).
+   */
+  const speakWithFreeVoice = useCallback(async (text: string) => {
     const clipped = text.trim().slice(0, 2500);
     if (!clipped) return;
+
+    const preferNative =
+      isNovaApk() ||
+      typeof window === "undefined" ||
+      !window.speechSynthesis;
+
+    if (preferNative && hasNativeTts()) {
+      await speakWithNative(clipped);
+      return;
+    }
+
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      if (hasNativeTts()) {
+        await speakWithNative(clipped);
+        return;
+      }
+      throw new Error("This browser has no free device voice.");
+    }
 
     await new Promise<void>((resolve) => {
       const ready = window.speechSynthesis.getVoices();
@@ -252,9 +324,17 @@ export function NovaConsole() {
       }, 600);
     });
 
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length === 0 && hasNativeTts()) {
+      await speakWithNative(clipped);
+      return;
+    }
+    if (voices.length === 0) {
+      throw new Error("This browser has no free device voice.");
+    }
+
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(clipped);
-    const voices = window.speechSynthesis.getVoices();
     const preferred =
       voices.find((v) =>
         /samantha|karen|moira|victoria|susan|zira|google us english|Samantha/i.test(
@@ -373,6 +453,7 @@ export function NovaConsole() {
       clearTimeout(commandTimerRef.current);
       commandTimerRef.current = null;
     }
+    stopNativeTts();
     try {
       window.speechSynthesis?.cancel();
     } catch {
@@ -612,6 +693,7 @@ export function NovaConsole() {
       unlockAudio();
       try {
         if (typeof window !== "undefined") {
+          stopNativeTts();
           window.speechSynthesis?.cancel();
         }
         const res = await fetch("/api/nova/speak", {
@@ -631,7 +713,7 @@ export function NovaConsole() {
             /* ignore */
           }
           if (code === "FALLBACK_BROWSER" || !code) {
-            await speakWithBrowser(text);
+            await speakWithFreeVoice(text);
             setError(null);
             return;
           }
@@ -644,7 +726,7 @@ export function NovaConsole() {
         if (!res.ok) {
           // Any ElevenLabs failure: try free voice before surfacing an error.
           try {
-            await speakWithBrowser(text);
+            await speakWithFreeVoice(text);
             setError(null);
             return;
           } catch {
@@ -662,7 +744,7 @@ export function NovaConsole() {
         }
         const blob = await res.blob();
         if (!blob.size) {
-          await speakWithBrowser(text);
+          await speakWithFreeVoice(text);
           return;
         }
         // Ensure MPEG type — some browsers refuse generic blobs.
@@ -673,11 +755,11 @@ export function NovaConsole() {
         try {
           await playVoiceBlob(typed);
         } catch {
-          await speakWithBrowser(text);
+          await speakWithFreeVoice(text);
         }
       } catch (err) {
         try {
-          await speakWithBrowser(text);
+          await speakWithFreeVoice(text);
           setError(null);
         } catch {
           const msg = err instanceof Error ? err.message : "Voice failed";
@@ -697,7 +779,7 @@ export function NovaConsole() {
         }, 350);
       }
     },
-    [killMic, playVoiceBlob, speakWithBrowser, unlockAudio]
+    [killMic, playVoiceBlob, speakWithFreeVoice, unlockAudio]
   );
 
   const goDormant = useCallback(() => {
