@@ -11,9 +11,8 @@ import {
 import { runLeadSearch, runLeadScore } from "./hands/lead";
 import { runResearchCompany } from "./hands/research";
 import { runOutreachDraft, runOutreachReview } from "./hands/outreach";
-import { enqueueOutreachSend, runOutreachSend } from "./hands/send";
+import { runOutreachSend } from "./hands/send";
 import { maxReviewCount } from "./lead-filter";
-import { nextOutreachSendDelaySeconds } from "./outreach-policy";
 import type {
   LeadSearchPayload,
   LeadScorePayload,
@@ -133,21 +132,7 @@ export async function runTick(): Promise<TickResult> {
     if (scoreQueued >= 15) break;
   }
 
-  // Approved drafts without a send job (pre-send-hand leftovers) get paced in.
-  const { data: approvedDrafts } = await db
-    .from("nexus_drafts")
-    .select("id")
-    .eq("status", "approved")
-    .limit(20);
-  let sendQueued = 0;
-  for (const row of approvedDrafts ?? []) {
-    await enqueueOutreachSend(
-      row.id,
-      db,
-      nextOutreachSendDelaySeconds() * (sendQueued + 1)
-    );
-    sendQueued += 1;
-  }
+  // Delivery is Nova-gated: only process outreach.send jobs she already queued.
 
   while (Date.now() - startedAt < TIME_BUDGET_MS) {
     const jobs = await claimJobs(BATCH_SIZE, db);

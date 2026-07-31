@@ -2,11 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createChatCompletion } from "@/lib/openai-retry";
 import { getOpenAIApiKey } from "@/lib/openai-env";
 import { enqueueJob, logAction } from "../jobs";
-import { enqueueOutreachSend } from "./send";
-import {
-  OUTREACH_AUTO_APPROVE_MIN_SCORE,
-  nextOutreachSendDelaySeconds,
-} from "../outreach-policy";
+import { OUTREACH_AUTO_APPROVE_MIN_SCORE } from "../outreach-policy";
 import type {
   HandResult,
   NexusCompany,
@@ -615,14 +611,11 @@ export async function runOutreachReview(
     db
   );
 
-  if (approving) {
-    // Pace into the Mailtrap send queue — not an immediate spray.
-    await enqueueOutreachSend(draftId, db, nextOutreachSendDelaySeconds());
-  }
+  // Nova decides when/how many to send — do not auto-enqueue delivery here.
 
   return {
     summary: approving
-      ? `auto-approved (${score}) for ${draft.to_email} — send queued`
+      ? `auto-approved (${score}) for ${draft.to_email} — waiting on Nova send plan`
       : `auto-rejected (${score}): ${reason}`,
     metadata: { draftId, decision, score, reason },
   };

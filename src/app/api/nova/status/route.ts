@@ -8,6 +8,7 @@ import {
 import { loadNexusState } from "@/lib/nexus/state";
 import { isElevenLabsConfigured } from "@/lib/nova/speak";
 import { loadRecentNovaMessages } from "@/lib/nova/memory";
+import { getNovaSendPlan } from "@/lib/nova/send-plan";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +23,12 @@ export async function GET() {
 
   const state = await loadNexusState(30);
   const messages = await loadRecentNovaMessages(20);
+  const plan = await getNovaSendPlan();
 
   return NextResponse.json({
     sendEnabled: isNexusSendEnabled(),
+    novaArmed: plan.armed,
+    dailyTarget: plan.dailyTarget,
     withinWindow: isWithinOutreachWindow(),
     mailtrapConfigured: isMailtrapConfigured(),
     mailtrapSandbox: isMailtrapSandbox(),

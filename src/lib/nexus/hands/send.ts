@@ -5,6 +5,7 @@ import {
   isMailtrapSandbox,
   sendViaMailtrap,
 } from "../mailtrap";
+import { getNovaSendPlan } from "@/lib/nova/send-plan";
 import {
   isNexusSendEnabled,
   isWithinOutreachWindow,
@@ -17,8 +18,9 @@ import type { HandResult, OutreachSendPayload } from "../types";
 /**
  * Delivery Hand — transmits an approved draft via Mailtrap.
  *
- * Kill switch, daily cap, suppressions, and (outside sandbox) the 10–3 window
- * all gate the send. Failures requeue with backoff via the job runner.
+ * Nova chooses how many to queue. Hard gates still apply: env kill switch,
+ * Nova armed flag, Nova daily target, suppressions, and (outside sandbox)
+ * the 10–3 window.
  */
 
 async function findSuppression(
@@ -87,13 +89,34 @@ export async function runOutreachSend(
 
   if (!isNexusSendEnabled()) {
     return {
-      summary: "skipped — NEXUS_SEND_ENABLED is off",
+      summary: "skipped — NEXUS_SEND_ENABLED is off (env kill switch)",
       metadata: { draftId, reason: "kill_switch" },
     };
   }
 
+  const plan = await getNovaSendPlan();
+  if (!plan.armed) {
+    return {
+      summary: "skipped — Nova has sending disarmed",
+      metadata: { draftId, reason: "nova_disarmed" },
+    };
+  }
+
   if (!isMailtrapConfigured()) {
-    throw new Error("MAILTRAP_API_TOKEN is not configured");
+    // Don't fail the job hard — Isaac may wire Mailtrap later. Requeue gently.
+    await enqueueJob(
+      {
+        type: "outreach.send",
+        payload: { draftId } satisfies OutreachSendPayload,
+        dedupeKey: `outreach.send:${draftId}:mailtrap`,
+        delaySeconds: 3600,
+      },
+      db
+    );
+    return {
+      summary: "waiting — MAILTRAP_API_TOKEN not configured yet",
+      metadata: { draftId, reason: "mailtrap_missing" },
+    };
   }
 
   const sandbox = isMailtrapSandbox();
@@ -116,7 +139,8 @@ export async function runOutreachSend(
   }
 
   const today = await sentTodayCount(db);
-  if (today >= OUTREACH_MAX_SENDS_PER_DAY) {
+  const dayCap = Math.min(OUTREACH_MAX_SENDS_PER_DAY, plan.dailyTarget);
+  if (today >= dayCap) {
     const wait = secondsUntilOutreachWindow(/* nextDay */ true);
     await enqueueJob(
       {
@@ -128,8 +152,8 @@ export async function runOutreachSend(
       db
     );
     return {
-      summary: `daily cap ${OUTREACH_MAX_SENDS_PER_DAY} hit — requeued`,
-      metadata: { draftId, reason: "daily_cap", today },
+      summary: `Nova daily target ${dayCap} hit (${today} sent) — requeued`,
+      metadata: { draftId, reason: "daily_cap", today, dayCap },
     };
   }
 

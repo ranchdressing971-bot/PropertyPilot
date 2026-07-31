@@ -13,6 +13,8 @@ interface ChatLine {
 
 interface StatusPayload {
   sendEnabled: boolean;
+  novaArmed: boolean;
+  dailyTarget: number;
   withinWindow: boolean;
   mailtrapConfigured: boolean;
   mailtrapSandbox: boolean;
@@ -340,19 +342,21 @@ export function NovaConsole() {
         </div>
         <div className="rounded-lg border border-teal-400/20 bg-black/30 px-3 py-2 text-right text-[11px] leading-relaxed text-teal-100/70">
           <div>
-            Send{" "}
+            Nova{" "}
             <strong className="text-teal-50">
-              {status?.sendEnabled ? "ON" : "OFF"}
+              {status?.novaArmed ? "ARMED" : "PAUSED"}
             </strong>
+            {" · "}
+            target {status?.dailyTarget ?? "—"}/day
+          </div>
+          <div>
+            Env send {status?.sendEnabled ? "ON" : "OFF"}
+            {status?.mailtrapConfigured ? "" : " · no Mailtrap"}
             {status?.mailtrapSandbox ? " · sandbox" : ""}
           </div>
           <div>
             Queue {status?.queuedJobs ?? "—"} · Approved{" "}
             {status?.approvedDrafts ?? "—"} · Sent {status?.sentDrafts ?? "—"}
-          </div>
-          <div>
-            Leads {status?.companies ?? "—"}
-            {status?.voiceConfigured ? "" : " · voice unset"}
           </div>
         </div>
       </header>

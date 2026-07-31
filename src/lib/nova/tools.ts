@@ -11,6 +11,11 @@ import {
 import { runTick } from "@/lib/nexus/runner";
 import type { LeadSearchPayload } from "@/lib/nexus/types";
 import { upsertNovaMemory } from "./memory";
+import {
+  getNovaSendPlan,
+  setNovaSendArmed,
+  setNovaSendPlan,
+} from "./send-plan";
 
 /**
  * Tool implementations Nova (OpenAI) can call. Nexus executes; Nova decides.
@@ -22,7 +27,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "get_outreach_status",
       description:
-        "Live snapshot: companies, drafts, queue, sends, kill switch, Mailtrap mode.",
+        "Live snapshot: companies, drafts, queue, Nova send plan, kill switch, Mailtrap.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
@@ -83,18 +88,64 @@ export const NOVA_TOOL_DEFS = [
   {
     type: "function" as const,
     function: {
+      name: "set_send_plan",
+      description:
+        "YOU decide today's send volume. Sets how many emails to aim for today (0–hard ceiling). Does not send by itself — call queue_approved_sends after.",
+      parameters: {
+        type: "object",
+        properties: {
+          dailyTarget: {
+            type: "number",
+            description: "How many emails to send today",
+          },
+          note: {
+            type: "string",
+            description: "Why this volume (strategy note)",
+          },
+        },
+        required: ["dailyTarget"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "set_send_armed",
+      description:
+        "Arm or disarm sending. Disarmed = Nova pause (no transmits). Env NEXUS_SEND_ENABLED must also be true for real delivery.",
+      parameters: {
+        type: "object",
+        properties: {
+          armed: { type: "boolean" },
+          reason: { type: "string" },
+        },
+        required: ["armed"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "queue_approved_sends",
       description:
-        "Enqueue Mailtrap send jobs for all approved drafts (paced).",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
+        "Queue up to N approved drafts for paced delivery (5–15 min jitter). YOU choose count. Safe to call before Mailtrap is wired — jobs wait.",
+      parameters: {
+        type: "object",
+        properties: {
+          count: {
+            type: "number",
+            description:
+              "How many approved drafts to queue now (default = remaining daily target)",
+          },
+        },
+      },
     },
   },
   {
     type: "function" as const,
     function: {
       name: "pause_outreach",
-      description:
-        "Remember that Isaac wants sending paused. Does not flip env kill switch — reminds operator to set NEXUS_SEND_ENABLED=false.",
+      description: "Disarm sending and store the reason.",
       parameters: {
         type: "object",
         properties: {
@@ -142,6 +193,7 @@ export async function runNovaTool(
   switch (name) {
     case "get_outreach_status": {
       const state = await loadNexusState(40);
+      const plan = await getNovaSendPlan();
       const sent = state.drafts.filter((d) => d.status === "sent").length;
       const approved = state.drafts.filter((d) => d.status === "approved").length;
       const pending = state.pendingDraftCount;
@@ -156,11 +208,12 @@ export async function runNovaTool(
         draftsApproved: approved,
         draftsSentListed: sent,
         queuedJobs: state.queuedCount,
-        sendEnabled: isNexusSendEnabled(),
+        novaPlan: plan,
+        envSendEnabled: isNexusSendEnabled(),
         withinWindow: isWithinOutreachWindow(),
         mailtrapConfigured: isMailtrapConfigured(),
         mailtrapSandbox: isMailtrapSandbox(),
-        dailyCap: OUTREACH_MAX_SENDS_PER_DAY,
+        hardDailyCeiling: OUTREACH_MAX_SENDS_PER_DAY,
         recentActions: state.actions.slice(0, 8).map((a) => ({
           action: a.action,
           at: a.created_at,
@@ -231,20 +284,57 @@ export async function runNovaTool(
         results: tick.results.slice(0, 10),
       });
     }
-    case "queue_approved_sends": {
-      if (!isNexusSendEnabled()) {
-        return JSON.stringify({
-          error: "NEXUS_SEND_ENABLED is not true — flip it in env to send.",
-        });
+    case "set_send_plan": {
+      const dailyTarget = Number(args.dailyTarget);
+      if (!Number.isFinite(dailyTarget)) {
+        return JSON.stringify({ error: "dailyTarget required" });
       }
+      const plan = await setNovaSendPlan({
+        dailyTarget,
+        note: args.note ? String(args.note) : undefined,
+      });
+      return JSON.stringify({ ok: true, plan });
+    }
+    case "set_send_armed": {
+      const armed = Boolean(args.armed);
+      const plan = await setNovaSendArmed(
+        armed,
+        args.reason ? String(args.reason) : undefined
+      );
+      return JSON.stringify({
+        ok: true,
+        plan,
+        envSendEnabled: isNexusSendEnabled(),
+        mailtrapConfigured: isMailtrapConfigured(),
+        tip: !isNexusSendEnabled()
+          ? "Armed in Nova, but env NEXUS_SEND_ENABLED is still false — no real sends until Isaac flips it."
+          : !isMailtrapConfigured()
+            ? "Armed, but Mailtrap is not wired yet — queued jobs will wait."
+            : "Ready to transmit when you queue sends.",
+      });
+    }
+    case "queue_approved_sends": {
+      const plan = await getNovaSendPlan();
       const db = requireNexusDb();
       const { data } = await db
         .from("nexus_drafts")
         .select("id")
         .eq("status", "approved")
-        .limit(30);
+        .order("created_at", { ascending: true })
+        .limit(50);
+
+      const available = data ?? [];
+      const requested =
+        args.count != null && Number.isFinite(Number(args.count))
+          ? Math.floor(Number(args.count))
+          : plan.dailyTarget;
+      const count = Math.max(
+        0,
+        Math.min(available.length, requested, OUTREACH_MAX_SENDS_PER_DAY)
+      );
+
       let n = 0;
-      for (const row of data ?? []) {
+      for (const row of available.slice(0, count)) {
         await enqueueOutreachSend(
           row.id,
           db,
@@ -252,19 +342,39 @@ export async function runNovaTool(
         );
         n += 1;
       }
-      return JSON.stringify({ queued: n });
+
+      return JSON.stringify({
+        queued: n,
+        approvedAvailable: available.length,
+        dailyTarget: plan.dailyTarget,
+        armed: plan.armed,
+        envSendEnabled: isNexusSendEnabled(),
+        mailtrapConfigured: isMailtrapConfigured(),
+        note:
+          n === 0
+            ? "Nothing queued — need approved drafts, or count was 0."
+            : !isMailtrapConfigured()
+              ? "Queued. Delivery waits until Mailtrap is configured."
+              : !plan.armed
+                ? "Queued, but Nova is disarmed — arm before they transmit."
+                : !isNexusSendEnabled()
+                  ? "Queued, but NEXUS_SEND_ENABLED is false."
+                  : "Queued with 5–15 min pacing.",
+      });
     }
     case "pause_outreach": {
       const reason = String(args.reason ?? "operator asked to pause");
+      const plan = await setNovaSendArmed(false, reason);
       await upsertNovaMemory({
         kind: "preference",
         key: "outreach.pause",
-        content: `Paused: ${reason}. Operator should set NEXUS_SEND_ENABLED=false on Vercel.`,
+        content: `Paused: ${reason}`,
         metadata: { reason, at: new Date().toISOString() },
       });
       return JSON.stringify({
         remembered: true,
-        note: "Kill switch is an env var — set NEXUS_SEND_ENABLED=false and redeploy to hard-stop sends.",
+        plan,
+        note: "Nova disarmed. Optional hard stop: NEXUS_SEND_ENABLED=false on Vercel.",
       });
     }
     case "remember": {
