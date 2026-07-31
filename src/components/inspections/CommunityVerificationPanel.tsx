@@ -28,12 +28,8 @@ export function CommunityVerificationPanel({
 
   if (dismissed) return null;
 
-  // Quiet outcomes — show only optional map tips / soft review notes
-  if (
-    !verification.needsUserAction &&
-    verification.outcome !== "bootstrap" &&
-    !verification.flaggedForReview
-  ) {
+  // Quiet outcomes — show only optional map tips
+  if (!verification.needsUserAction && verification.outcome !== "bootstrap") {
     return null;
   }
 

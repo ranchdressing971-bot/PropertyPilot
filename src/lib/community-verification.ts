@@ -21,8 +21,6 @@ export const SMALL_NEW_HOME_MAX = 8;
 export const SMALL_NEW_HOME_RATIO = 0.18;
 export const MATCH_RATIO_OK = 0.55;
 export const LARGE_DIFF_MATCH_RATIO = 0.35;
-/** Consecutive unresolved large diffs before a soft manual-review flag (never blocks). */
-export const MISUSE_STREAK_TO_FLAG = 3;
 
 /**
  * Opt-in gate. Production stays off until explicitly enabled after SQL is applied.
@@ -667,11 +665,8 @@ export async function runCommunityVerification(
   }
 
   const cmp = compareSnapshots(existing.snapshot, observed);
-  let misuseStreak = existing.misuse_streak;
-  let flagged = existing.flagged_for_review;
 
   if (cmp.outcome === "match") {
-    misuseStreak = 0;
     // Quietly absorb route/road coverage from honest partial drives
     const merged = mergeSnapshots(existing.snapshot, {
       ...observed,
@@ -687,27 +682,15 @@ export async function runCommunityVerification(
       sampleCountInc: 1,
       misuseStreak: 0,
     });
-  } else if (cmp.outcome === "small_expansion") {
-    // Honest growth — reset streak; wait for optional confirm before expanding
-    misuseStreak = 0;
+  } else if (
+    cmp.outcome === "large_difference" ||
+    cmp.outcome === "small_expansion"
+  ) {
+    // Learn-and-ask only — never auto-flag or punish. Wait for optional user choice.
     await updateFingerprint(existing.id, existing.snapshot, {
       misuseStreak: 0,
+      flaggedForReview: false,
     });
-  } else if (cmp.outcome === "large_difference") {
-    // Soft anti-abuse: count unresolved unrelated drives; never block or suspend
-    misuseStreak += 1;
-    if (misuseStreak >= MISUSE_STREAK_TO_FLAG) {
-      flagged = true;
-      await updateFingerprint(existing.id, existing.snapshot, {
-        misuseStreak,
-        flaggedForReview: true,
-        reviewNote: `Several drives look unrelated to ${communityName}. Soft flag for manual review only — inspection still saved, no account action.`,
-      });
-    } else {
-      await updateFingerprint(existing.id, existing.snapshot, {
-        misuseStreak,
-      });
-    }
   }
 
   // Optional prompts only; large diffs are dismissible and never lock anyone out
@@ -731,14 +714,13 @@ export async function runCommunityVerification(
     geo_lat: observed.centroidLat,
     geo_lng: observed.centroidLng,
     route_points: observed.routePoints,
-    flagged_for_review: flagged && cmp.outcome === "large_difference",
+    flagged_for_review: false,
     helpful_message: helpfulMessageFor(
       cmp.outcome,
       communityName,
       cmp.newCount
     ),
     metadata: {
-      misuseStreak,
       roads: observed.roadsCovered,
       entrances: observed.entrances,
       softOnly: true,
@@ -762,7 +744,7 @@ export async function runCommunityVerification(
       cmp.newCount
     ),
     needsUserAction,
-    flaggedForReview: flagged && cmp.outcome === "large_difference",
+    flaggedForReview: false,
     communityName,
   };
 }
