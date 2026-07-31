@@ -3,6 +3,7 @@ package com.rideby.nova;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
@@ -120,6 +121,16 @@ public class MainActivity extends AppCompatActivity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) enterImmersive();
+    }
+
+    @Override
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // Keep immersive fullscreen after rotate; WebView resizes in place.
+        enterImmersive();
+        if (webView != null) {
+            webView.requestLayout();
+        }
     }
 
     @Override
