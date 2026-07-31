@@ -21,7 +21,7 @@ import {
 } from "./send-plan";
 
 /**
- * Small, obvious tools. Nova should not need a playbook to use them.
+ * Small, obvious tools. Nova uses them to decide — and to back up pushback with data.
  *
  * Everyday verbs:
  *   status | find_leads | work | send_today | learn | pause | remember
@@ -33,7 +33,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "status",
       description:
-        "How outreach is going right now — counts, send plan, blockers, a few drafts/companies.",
+        "Pipeline snapshot: counts, send plan, blockers, draft/lead previews. Call before recommending sends or refusing bad ones — cite blockers and numbers in your reply.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
@@ -72,7 +72,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "send_today",
       description:
-        "ONE call for today's send plan: arms Nova and queues that many approved drafts (paced). YOU usually pick the count — keep it at least 20, up to 50. Omit count to use your current plan / default 20+.",
+        "Arm and queue today's batch (paced). YOU pick the count (floor 20, ceiling 50) when you stand behind the drafts. Refuse to call this if copy is weak, blockers exist, or learn data says wait — use pause instead. Omit count to use your current plan / default 20+.",
       parameters: {
         type: "object",
         properties: {
@@ -90,7 +90,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "learn",
       description:
-        "Deep learning dossier: who signed up or subscribed after your emails, timing lag (sent→signup→subscribe), WHY hints per convert, converts vs non-converts (themes/subjects that convert and subscribe, length, hour/weekday ET, city/state, review bands), soft name matches, funnel, rejections, trials, recent subscribers, and auto insights. Call this often; then remember winning hypotheses.",
+        "Evidence dossier: converts vs non-converts, subscribers, timing lag, why-hints, theme/subject/city/hour slices, funnel, rejections, trials, auto insights. Call before arguing with Isaac or changing strategy — use numbers to recommend or refuse. Then remember kind=trial with a testable hypothesis.",
       parameters: {
         type: "object",
         properties: {
@@ -110,7 +110,8 @@ export const NOVA_TOOL_DEFS = [
     type: "function" as const,
     function: {
       name: "pause",
-      description: "Stop sending. Nova disarms until send_today (or arm) again.",
+      description:
+        "Stop sending — use when quality is off, data is thin, or Isaac's push is premature. Disarms until send_today again. Give Isaac the reason.",
       parameters: {
         type: "object",
         properties: {
@@ -123,7 +124,8 @@ export const NOVA_TOOL_DEFS = [
     type: "function" as const,
     function: {
       name: "remember",
-      description: "Save a note/trial so future Nova sessions know it.",
+      description:
+        "Save a note/trial/preference/fact — especially after learn (hypotheses, what worked, what to stop doing).",
       parameters: {
         type: "object",
         properties: {
@@ -183,7 +185,7 @@ async function toolStatus() {
       city: c.city,
       reviews: c.metadata?.userRatingCount ?? null,
     })),
-    tip: "Call learn for converts, subscribers, why-hints, and what differs from non-converts.",
+    tip: "Call learn before recommending volume or copy changes — use converts vs non-converts to justify the call.",
   };
 }
 
@@ -305,10 +307,10 @@ async function toolLearn(args: Record<string, unknown>) {
     appContext: report.appContext,
     plainEnglish:
       report.sentCount === 0
-        ? "No sent outreach in this window yet — nothing to learn from."
+        ? "Nothing sent in this window — I can't argue from data yet. Run a small batch or widen the window."
         : report.matchedCount === 0
-          ? `Sent ${report.sentCount}. No hard email→signup matches yet. Soft name matches: ${report.softNameMatches.length}. Subscribers after outreach: ${report.subscribedCount}. Read insights + nonConvertedSample, then experiment and remember.`
-          : `${report.matchedCount} signup convert(s) (${report.conversionRate}%), ${report.subscribedCount} subscribed (${report.subscriptionRate}%). Read matches[].whyHints, daysToSubscribe, and byThemeSubscribed — then remember the hypothesis.`,
+          ? `Sent ${report.sentCount}, zero hard converts. ${report.softNameMatches.length} soft name matches; ${report.subscribedCount} subscribed. Read insights + nonConvertedSample before scaling — I'd experiment, not blast.`
+          : `${report.matchedCount} signup convert(s) (${report.conversionRate}%), ${report.subscribedCount} subscribed (${report.subscriptionRate}%). matches[].whyHints and byThemeSubscribed are your leverage — remember a hypothesis before the next batch.`,
   };
 }
 

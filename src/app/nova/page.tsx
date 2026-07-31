@@ -7,7 +7,7 @@ import { checkNexusAdmin } from "@/lib/nexus/admin";
 
 export const metadata: Metadata = {
   title: "Nova — Outreach Manager",
-  description: "Talk to Nova, RideBy's outreach manager.",
+  description: "Nova runs RideBy outreach — your peer on the pipeline, not a helper bot.",
   robots: { index: false, follow: false },
 };
 

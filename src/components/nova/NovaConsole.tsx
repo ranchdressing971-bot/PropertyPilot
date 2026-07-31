@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { NovaMeshOrb } from "@/components/nova/NovaMeshOrb";
 
@@ -113,6 +114,28 @@ function isSafariBrowser(): boolean {
   return (
     /iPhone|iPad|iPod/i.test(ua) ||
     (/Safari/i.test(ua) && !/Chrome|CriOS|Chromium|Edg|OPR|Android/i.test(ua))
+  );
+}
+
+/** iPhone / iPad — stricter audio gesture rules than desktop Safari. */
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  // iPadOS 13+ may report MacIntel
+  return (
+    navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1
+  );
+}
+
+function isMobileTouchDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return (
+    isIOS() ||
+    /Android/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 0 &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 768px)").matches)
   );
 }
 
@@ -448,9 +471,11 @@ function playBlobOnElement(
 function primeAudioElement(el: HTMLAudioElement) {
   el.muted = false;
   el.volume = 1;
-  el.setAttribute("playsinline", "");
+  el.setAttribute("playsinline", "true");
   el.setAttribute("webkit-playsinline", "true");
+  el.setAttribute("x-webkit-airplay", "allow");
   (el as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+  el.controls = false;
 }
 
 /**
@@ -521,7 +546,7 @@ function playPreparedInGesture(
       if (!started && (el.paused || el.currentTime < 0.01)) {
         finish(false, new Error("Voice did not start"));
       }
-    }, 2000);
+    }, isIOS() ? 4000 : 2000);
   });
 }
 
@@ -685,7 +710,57 @@ export function NovaConsole() {
   const openConversationRef = useRef<() => void>(() => {});
   const goDormantRef = useRef<() => void>(() => {});
 
+  const unlockAudioInGesture = useCallback((): boolean => {
+    const el = audioElRef.current;
+    if (!el) return false;
+
+    if (audioUnlockedRef.current) return true;
+
+    // iOS requires play() in the same synchronous turn as touchstart — no await.
+    try {
+      primeAudioElement(el);
+      el.muted = true;
+      el.src = SILENT_WAV;
+      const playPromise = el.play();
+      playPromise
+        ?.then(() => {
+          el.pause();
+          el.muted = false;
+          el.removeAttribute("src");
+          if (!isIOS()) el.load();
+          audioUnlockedRef.current = true;
+          setNeedsGesture(false);
+          const synth = window.speechSynthesis;
+          if (synth && isSafariBrowser()) {
+            primeSpeechSynthesisInGesture(synth);
+            void waitForSpeechVoices(synth, isIOS() ? 3000 : 1200);
+          }
+        })
+        .catch(() => {
+          el.muted = false;
+          setNeedsGesture(true);
+        });
+      return true;
+    } catch {
+      el.muted = false;
+      setNeedsGesture(true);
+      return false;
+    }
+  }, []);
+
   const unlockAudio = useCallback(async (): Promise<boolean> => {
+    if (audioUnlockedRef.current) {
+      const synth =
+        typeof window !== "undefined" ? window.speechSynthesis : undefined;
+      if (synth) primeSpeechSynthesis(synth);
+      return true;
+    }
+
+    // If we're somehow in a gesture context, prefer the sync path on mobile.
+    if (isMobileTouchDevice()) {
+      return unlockAudioInGesture();
+    }
+
     try {
       const AC = getAudioContextClass();
       if (AC) {
@@ -700,11 +775,6 @@ export function NovaConsole() {
     const el = audioElRef.current;
     const synth =
       typeof window !== "undefined" ? window.speechSynthesis : undefined;
-
-    if (audioUnlockedRef.current) {
-      if (synth) primeSpeechSynthesis(synth);
-      return true;
-    }
 
     if (!el) return false;
 
@@ -730,7 +800,7 @@ export function NovaConsole() {
       setNeedsGesture(true);
       return false;
     }
-  }, []);
+  }, [unlockAudioInGesture]);
 
   /**
    * Free device TTS when ElevenLabs is missing or out of credits.
@@ -883,10 +953,24 @@ export function NovaConsole() {
     if (el) {
       primeAudioElement(el);
       el.src = url;
-      el.load();
+      // iOS: avoid load() before gesture — it can reset playback permission.
+      if (!isIOS()) el.load();
     }
     return url;
   }, []);
+
+  const handleGestureUnlock = useCallback(
+    (e: React.SyntheticEvent) => {
+      e.stopPropagation();
+      unlockAudioInGesture();
+      const AC = getAudioContextClass();
+      if (AC) {
+        if (!audioCtxRef.current) audioCtxRef.current = new AC();
+        void audioCtxRef.current.resume();
+      }
+    },
+    [unlockAudioInGesture]
+  );
 
   const queueTapToHear = useCallback(
     (pending: PendingVoice) => {
@@ -988,8 +1072,19 @@ export function NovaConsole() {
       });
   }, [killMic, resumeAfterSpeech]);
 
+  const onTapToHearTouch = useCallback(
+    (e: React.TouchEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      playPendingNow();
+    },
+    [playPendingNow]
+  );
+
   const onTapToHear = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
+      // iOS fires touchstart first — skip duplicate pointerdown.
+      if (isIOS() && e.pointerType === "touch") return;
       e.preventDefault();
       e.stopPropagation();
       playPendingNow();
@@ -1586,8 +1681,8 @@ export function NovaConsole() {
       <main className="nova-stage">
         <h1 className="nova-brand font-display">NOVA</h1>
         <p className="nova-tagline">
-          Say <span>“Hey Nova”</span> to start. After that, just talk — she
-          stops when you’re done.
+          Nova runs outreach. Say <span>“Hey Nova”</span> — talk like a
+          colleague. She’ll push back if the plan’s weak.
         </p>
 
         <div className={wrapClass}>
@@ -1651,7 +1746,8 @@ export function NovaConsole() {
         <div className="nova-transcript" ref={transcriptRef}>
           {lines.length === 0 && (
             <p className="text-center text-sm text-white/25">
-              Say “Hey Nova” when you want her. Ambient talk is ignored.
+              Say “Hey Nova” for a pipeline read or a decision. Ambient talk is
+              ignored.
             </p>
           )}
           {lines.map((line) => (
