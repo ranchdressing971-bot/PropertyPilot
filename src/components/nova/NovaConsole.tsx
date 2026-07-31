@@ -31,6 +31,10 @@ interface StatusPayload {
   approvedDrafts: number;
   sentDrafts: number;
   pendingDrafts: number;
+  conversionsMatched?: number;
+  conversionRate?: number;
+  sentInWindow?: number;
+  recentSignupCount?: number;
   messages: Array<{
     id: string;
     role: string;
@@ -836,6 +840,18 @@ export function NovaConsole() {
               Send {status?.sendEnabled ? "on" : "off"}
               {status?.mailtrapConfigured ? "" : " · no Mailtrap"}
               {status && !status.voiceConfigured ? " · voice missing" : ""}
+            </div>
+            <div className="text-right text-teal-100/45">
+              Signups{" "}
+              <span className="text-teal-50/80">
+                {status?.conversionsMatched ?? 0}
+              </span>
+              {status?.sentInWindow != null
+                ? ` / ${status.sentInWindow} sent`
+                : ""}
+              {status?.conversionRate != null
+                ? ` · ${status.conversionRate}%`
+                : ""}
             </div>
           </div>
         </div>

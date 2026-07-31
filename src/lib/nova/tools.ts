@@ -12,6 +12,7 @@ import {
 } from "@/lib/nexus/outreach-policy";
 import { runTick } from "@/lib/nexus/runner";
 import type { LeadSearchPayload } from "@/lib/nexus/types";
+import { loadConversionReport, loadConversionSummary } from "./conversions";
 import { upsertNovaMemory } from "./memory";
 import {
   getNovaSendPlan,
@@ -23,7 +24,7 @@ import {
  * Small, obvious tools. Nova should not need a playbook to use them.
  *
  * Everyday verbs:
- *   status | find_leads | work | send_today | pause | remember
+ *   status | find_leads | work | send_today | conversions | pause | remember
  */
 
 export const NOVA_TOOL_DEFS = [
@@ -87,6 +88,27 @@ export const NOVA_TOOL_DEFS = [
   {
     type: "function" as const,
     function: {
+      name: "conversions",
+      description:
+        "See who signed up for RideBy after your outreach emails. Matches sent draft emails to app profiles. Returns conversion rate, who converted, which subjects/cities work, recent signups, and how the app DB is wired. Use this to learn and remember what works.",
+      parameters: {
+        type: "object",
+        properties: {
+          sinceDays: {
+            type: "number",
+            description: "Lookback window in days (default 90, max 365)",
+          },
+          limit: {
+            type: "number",
+            description: "Max matched rows to return (default 20)",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "pause",
       description: "Stop sending. Nova disarms until send_today (or arm) again.",
       parameters: {
@@ -120,6 +142,7 @@ export const NOVA_TOOL_DEFS = [
 async function toolStatus() {
   const state = await loadNexusState(40);
   const plan = await getNovaSendPlan();
+  const conversions = await loadConversionSummary(90);
   const approved = state.drafts.filter((d) => d.status === "approved");
   const sent = state.drafts.filter((d) => d.status === "sent");
   const active = state.companies.filter((c) => c.status === "active");
@@ -142,6 +165,10 @@ async function toolStatus() {
       jobsQueued: state.queuedCount,
       todayTarget: plan.dailyTarget,
       novaArmed: plan.armed,
+      conversionsMatched: conversions.matchedCount,
+      conversionRate: conversions.conversionRate,
+      sentInWindow: conversions.sentCount,
+      recentSignups: conversions.recentSignupCount,
     },
     blockers,
     draftPreview: approved.slice(0, 5).map((d) => ({
@@ -154,6 +181,67 @@ async function toolStatus() {
       city: c.city,
       reviews: c.metadata?.userRatingCount ?? null,
     })),
+    tip: "Call conversions for who signed up and which subjects/cities convert.",
+  };
+}
+
+async function toolConversions(args: Record<string, unknown>) {
+  const sinceDays =
+    args.sinceDays != null && Number.isFinite(Number(args.sinceDays))
+      ? Number(args.sinceDays)
+      : 90;
+  const limit =
+    args.limit != null && Number.isFinite(Number(args.limit))
+      ? Number(args.limit)
+      : 20;
+
+  const report = await loadConversionReport({
+    sinceDays,
+    limit,
+    syncWins: true,
+  });
+
+  // Persist a compact learning note when there is signal.
+  if (report.matchedCount > 0) {
+    const topSubject = report.bySubject.find((s) => s.converted > 0);
+    const topCity = report.byCity.find((c) => c.converted > 0);
+    const bits = [
+      `${report.matchedCount}/${report.sentCount} converts (${report.conversionRate}%) last ${report.sinceDays}d`,
+    ];
+    if (topSubject) {
+      bits.push(
+        `best subject so far: "${topSubject.subject.slice(0, 80)}" (${topSubject.converted}/${topSubject.sent})`
+      );
+    }
+    if (topCity) {
+      bits.push(
+        `best city so far: ${topCity.city} (${topCity.converted}/${topCity.sent})`
+      );
+    }
+    if (report.avgDaysToSignup != null) {
+      bits.push(`avg days to signup: ${report.avgDaysToSignup}`);
+    }
+    await upsertNovaMemory({
+      kind: "trial",
+      key: "outreach.conversions",
+      content: bits.join(" · "),
+      metadata: {
+        matchedCount: report.matchedCount,
+        sentCount: report.sentCount,
+        conversionRate: report.conversionRate,
+        at: new Date().toISOString(),
+      },
+    });
+  }
+
+  return {
+    ...report,
+    plainEnglish:
+      report.sentCount === 0
+        ? "No sent outreach in this window yet — nothing to measure."
+        : report.matchedCount === 0
+          ? `Sent ${report.sentCount} emails; none of those addresses have signed up yet (matched on email). Soft name matches: ${report.softNameMatches.length}.`
+          : `${report.matchedCount} signup(s) matched to your emails (${report.conversionRate}% of ${report.sentCount} sends). Companies marked won when matched.`,
   };
 }
 
@@ -299,6 +387,11 @@ export async function runNovaTool(
       }
       return JSON.stringify(await toolSendToday(args));
     }
+
+    case "conversions":
+    case "check_signups":
+    case "who_signed_up":
+      return JSON.stringify(await toolConversions(args));
 
     case "pause":
     case "pause_outreach":

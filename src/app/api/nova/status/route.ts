@@ -6,6 +6,7 @@ import {
   isWithinOutreachWindow,
 } from "@/lib/nexus/outreach-policy";
 import { loadNexusState } from "@/lib/nexus/state";
+import { loadConversionSummary } from "@/lib/nova/conversions";
 import { isElevenLabsConfigured } from "@/lib/nova/speak";
 import { loadRecentNovaMessages } from "@/lib/nova/memory";
 import { getNovaSendPlan } from "@/lib/nova/send-plan";
@@ -24,6 +25,7 @@ export async function GET() {
   const state = await loadNexusState(30);
   const messages = await loadRecentNovaMessages(20);
   const plan = await getNovaSendPlan();
+  const conversions = await loadConversionSummary(90);
 
   return NextResponse.json({
     sendEnabled: isNexusSendEnabled(),
@@ -38,6 +40,10 @@ export async function GET() {
     approvedDrafts: state.drafts.filter((d) => d.status === "approved").length,
     sentDrafts: state.drafts.filter((d) => d.status === "sent").length,
     pendingDrafts: state.pendingDraftCount,
+    conversionsMatched: conversions.matchedCount,
+    conversionRate: conversions.conversionRate,
+    sentInWindow: conversions.sentCount,
+    recentSignupCount: conversions.recentSignupCount,
     messages: messages.map((m) => ({
       id: m.id,
       role: m.role,
