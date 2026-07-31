@@ -126,12 +126,13 @@ export function NovaConsole() {
   const objectUrlRef = useRef<string | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
   const audioUnlockedRef = useRef(false);
   /** After TTS, restart mic in wake or command mode. */
   const resumeModeRef = useRef<ListenMode>("wake");
   const askNovaRef = useRef<(message: string) => Promise<void>>(async () => {});
   const startMicRef = useRef<(mode?: ListenMode) => void>(() => {});
-  const acknowledgeWakeRef = useRef<() => void>(() => {});
+  const openCommandWindowRef = useRef<() => void>(() => {});
 
   const unlockAudio = useCallback(() => {
     try {
@@ -232,7 +233,9 @@ export function NovaConsole() {
   }, [listeningOn]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = transcriptRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
   }, [lines, phase]);
 
   const refreshStatus = useCallback(async () => {
@@ -350,11 +353,11 @@ export function NovaConsole() {
         if (phaseRef.current === "listening_wake") {
           if (!containsWake(text)) return;
 
-          // Wake word only — acknowledge and keep listening for the ask.
+          // Wake only — open a 10s listen window (no spoken "Hey").
           if (isWakeOnly(text) || stripWake(text).length < 2) {
             if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
             commandBufferRef.current = "";
-            acknowledgeWakeRef.current();
+            openCommandWindowRef.current();
             return;
           }
 
@@ -377,7 +380,7 @@ export function NovaConsole() {
               commandBufferRef.current = "";
               void askNovaRef.current(cmd);
             } else {
-              acknowledgeWakeRef.current();
+              openCommandWindowRef.current();
             }
           }, 1600);
           return;
@@ -518,24 +521,30 @@ export function NovaConsole() {
     [killMic, playVoiceBlob, unlockAudio]
   );
 
-  const acknowledgeWake = useCallback(() => {
+  const openCommandWindow = useCallback(() => {
     unlockAudio();
+    if (phaseRef.current === "thinking" || phaseRef.current === "speaking") {
+      return;
+    }
     beep();
+    // Flip into command mode without killing the live mic (avoids visual/audio glitch).
+    phaseRef.current = "listening_command";
     setPhase("listening_command");
     armCommandDeadline();
-    // Short ack, then keep listening for the real question.
-    void speak("Hey.", "command");
-  }, [armCommandDeadline, speak, unlockAudio]);
+    if (!recognitionRef.current && listeningOnRef.current) {
+      startMicRef.current("command");
+    }
+  }, [armCommandDeadline, unlockAudio]);
 
   useEffect(() => {
-    acknowledgeWakeRef.current = acknowledgeWake;
-  }, [acknowledgeWake]);
+    openCommandWindowRef.current = openCommandWindow;
+  }, [openCommandWindow]);
 
   const askNova = useCallback(
     async (message: string) => {
       const cleaned = message.trim();
       if (!cleaned || isWakeOnly(cleaned)) {
-        acknowledgeWake();
+        openCommandWindow();
         return;
       }
 
@@ -544,7 +553,8 @@ export function NovaConsole() {
       clearCommandDeadline();
       setPhase("thinking");
       killMic();
-      resumeModeRef.current = "wake";
+      // After she finishes talking, keep listening ~10s for a follow-up.
+      resumeModeRef.current = "command";
 
       setLines((prev) => [
         ...prev,
@@ -567,7 +577,7 @@ export function NovaConsole() {
           { id: `a-${Date.now()}`, role: "assistant", content: reply },
         ]);
         await refreshStatus();
-        await speak(reply, "wake");
+        await speak(reply, "command");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Nova failed";
         setError(msg);
@@ -578,9 +588,9 @@ export function NovaConsole() {
       }
     },
     [
-      acknowledgeWake,
       clearCommandDeadline,
       killMic,
+      openCommandWindow,
       refreshStatus,
       speak,
       unlockAudio,
@@ -631,14 +641,25 @@ export function NovaConsole() {
 
   const orbClass =
     phase === "listening_wake"
-      ? "nova-orb nova-orb-wake"
+      ? "nova-orb is-wake"
       : phase === "listening_command"
-        ? "nova-orb nova-orb-command"
+        ? "nova-orb is-command"
         : phase === "thinking"
-          ? "nova-orb nova-orb-think"
+          ? "nova-orb is-think"
           : phase === "speaking"
-            ? "nova-orb nova-orb-speak"
+            ? "nova-orb is-speak"
             : "nova-orb";
+
+  const wrapClass =
+    phase === "listening_wake"
+      ? "nova-orb-wrap is-wake"
+      : phase === "listening_command"
+        ? "nova-orb-wrap is-command"
+        : phase === "thinking"
+          ? "nova-orb-wrap is-think"
+          : phase === "speaking"
+            ? "nova-orb-wrap is-speak"
+            : "nova-orb-wrap";
 
   const waveLive =
     listeningOn &&
@@ -652,9 +673,9 @@ export function NovaConsole() {
     : phase === "idle"
       ? "starting…"
       : phase === "listening_wake"
-        ? "listening for nova"
+        ? "say nova"
         : phase === "listening_command"
-          ? "go ahead"
+          ? "listening — 10s"
           : phase === "thinking"
             ? "thinking"
             : phase === "speaking"
@@ -668,7 +689,6 @@ export function NovaConsole() {
     >
       <audio ref={audioElRef} playsInline preload="auto" className="hidden" />
       <div className="nova-aurora" aria-hidden />
-      <div className="nova-grid" aria-hidden />
       <div className="nova-vignette" aria-hidden />
 
       <header className="nova-top">
@@ -715,13 +735,11 @@ export function NovaConsole() {
       <main className="nova-stage">
         <h1 className="nova-brand font-display">NOVA</h1>
         <p className="nova-tagline">
-          Say <span>“Hey Nova”</span> — she answers and keeps listening.
+          Say <span>“Nova”</span>, then speak — she keeps listening.
         </p>
 
-        <div className="nova-orb-wrap">
-          <span className="nova-ring nova-ring-a" aria-hidden />
-          <span className="nova-ring nova-ring-b" aria-hidden />
-          <span className="nova-ring nova-ring-c" aria-hidden />
+        <div className={wrapClass}>
+          <span className="nova-orb-glow" aria-hidden />
           <button
             type="button"
             onClick={toggleListening}
@@ -730,8 +748,13 @@ export function NovaConsole() {
               listeningOn ? "Mute Nova mic" : "Enable always-on listening"
             }
           >
-            <span className="nova-orb-core" />
+            <span className="nova-orb-sphere" aria-hidden>
+              <span className="nova-orb-shade" />
+              <span className="nova-orb-specular" />
+              <span className="nova-orb-rim" />
+            </span>
           </button>
+          <span className="nova-orb-floor" aria-hidden />
         </div>
 
         <div
@@ -761,7 +784,7 @@ export function NovaConsole() {
       </main>
 
       <footer className="nova-dock">
-        <div className="nova-transcript">
+        <div className="nova-transcript" ref={transcriptRef}>
           {lines.length === 0 && (
             <p className="text-center text-sm text-teal-100/30">
               Waiting for your voice…
