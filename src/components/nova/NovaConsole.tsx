@@ -801,18 +801,16 @@ export function NovaConsole() {
       onPointerDown={unlockAudio}
     >
       <audio ref={audioElRef} playsInline preload="auto" className="hidden" />
-      <div className="nova-aurora" aria-hidden />
+      <div className="nova-void" aria-hidden />
+      <div className="nova-stars" aria-hidden />
       <div className="nova-vignette" aria-hidden />
 
       <header className="nova-top">
         <div className="nova-top-inner">
-          <Link
-            href="/nexus"
-            className="text-[11px] uppercase tracking-[0.28em] text-teal-200/45 transition hover:text-teal-100/80"
-          >
+          <Link href="/nexus" className="nova-link">
             Nexus
           </Link>
-          <div className="flex flex-col items-end gap-1.5 text-[11px] tracking-wide text-teal-100/55">
+          <div className="nova-meta">
             <div className="flex items-center gap-2">
               <span
                 className={
@@ -836,16 +834,13 @@ export function NovaConsole() {
                 {status?.dailyTarget ?? "—"}/day
               </span>
             </div>
-            <div className="text-right text-teal-100/35">
+            <div className="nova-meta-dim">
               Send {status?.sendEnabled ? "on" : "off"}
               {status?.mailtrapConfigured ? "" : " · no Mailtrap"}
               {status && !status.voiceConfigured ? " · voice missing" : ""}
             </div>
-            <div className="text-right text-teal-100/45">
-              Signups{" "}
-              <span className="text-teal-50/80">
-                {status?.conversionsMatched ?? 0}
-              </span>
+            <div className="nova-meta-dim">
+              Signups {status?.conversionsMatched ?? 0}
               {status?.sentInWindow != null
                 ? ` / ${status.sentInWindow} sent`
                 : ""}
@@ -865,7 +860,9 @@ export function NovaConsole() {
         </p>
 
         <div className={wrapClass}>
-          <span className="nova-orb-glow" aria-hidden />
+          <span className="nova-orb-halo nova-orb-halo-a" aria-hidden />
+          <span className="nova-orb-halo nova-orb-halo-b" aria-hidden />
+          <span className="nova-orb-particles" aria-hidden />
           <button
             type="button"
             onClick={toggleListening}
@@ -874,13 +871,14 @@ export function NovaConsole() {
               listeningOn ? "Mute Nova mic" : "Enable always-on listening"
             }
           >
-            <span className="nova-orb-sphere" aria-hidden>
-              <span className="nova-orb-shade" />
-              <span className="nova-orb-specular" />
-              <span className="nova-orb-rim" />
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/nova-sphere.png"
+              alt=""
+              className="nova-orb-img"
+              draggable={false}
+            />
           </button>
-          <span className="nova-orb-floor" aria-hidden />
         </div>
 
         <div
@@ -912,7 +910,7 @@ export function NovaConsole() {
       <footer className="nova-dock">
         <div className="nova-transcript" ref={transcriptRef}>
           {lines.length === 0 && (
-            <p className="text-center text-sm text-teal-100/30">
+            <p className="text-center text-sm text-white/25">
               Say “Hey Nova” when you want her. Ambient talk is ignored.
             </p>
           )}
@@ -928,8 +926,8 @@ export function NovaConsole() {
               <div
                 className={
                   line.role === "user"
-                    ? "text-[10px] uppercase tracking-[0.2em] text-teal-300/35"
-                    : "text-[10px] uppercase tracking-[0.2em] text-teal-300/50"
+                    ? "text-[10px] uppercase tracking-[0.2em] text-fuchsia-200/35"
+                    : "text-[10px] uppercase tracking-[0.2em] text-cyan-200/50"
                 }
               >
                 {line.role === "user" ? "You" : "Nova"}
@@ -937,8 +935,8 @@ export function NovaConsole() {
               <p
                 className={
                   line.role === "user"
-                    ? "mt-1 text-sm leading-relaxed text-teal-100/70"
-                    : "mt-1 font-display text-[1.05rem] leading-snug tracking-tight text-teal-50"
+                    ? "mt-1 text-sm leading-relaxed text-white/65"
+                    : "mt-1 font-display text-[1.05rem] leading-snug tracking-tight text-white"
                 }
               >
                 {line.content}
