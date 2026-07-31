@@ -1886,10 +1886,6 @@ export function NovaConsole() {
       color: "#ff4fd8",
     },
   ];
-  const clientTotal =
-    clientSegments.reduce((s, seg) => s + seg.value, 0) ||
-    status?.business?.totalProfiles ||
-    0;
   const funnelSteps = [
     {
       label: "Sent",
@@ -1949,6 +1945,7 @@ export function NovaConsole() {
       <div className="nova-scanlines" aria-hidden />
       <div className="nova-vignette" aria-hidden />
 
+      <div className="nova-layout">
       <header className="nova-top">
         <div className="nova-top-inner">
           <div className="flex flex-col gap-2">
@@ -1989,24 +1986,14 @@ export function NovaConsole() {
               </span>
             </div>
             <div className="nova-meta-dim">
-              Transmit prep · Resend after domain
-              {status?.resendConfigured ? " · key set" : " · Resend pending"}
-              {status && !status.voiceConfigured
-                ? " · free device voice"
-                : status?.voiceConfigured
-                  ? " · ElevenLabs"
-                  : ""}
+              {status?.voiceConfigured ? "ElevenLabs" : "Device voice"}
+              {" · "}
+              {status?.resendConfigured ? "Resend key set" : "waiting on domain"}
             </div>
             <div className="nova-meta-dim">
-              Signups {status?.conversionsMatched ?? 0}
-              {status?.sentInWindow != null
-                ? ` / ${status.sentInWindow} sent`
-                : ""}
+              {status?.conversionsMatched ?? 0} signups
               {status?.conversionRate != null
                 ? ` · ${status.conversionRate}%`
-                : ""}
-              {(status?.subscribedCount ?? 0) > 0
-                ? ` · ${status?.subscribedCount} subscribed`
                 : ""}
             </div>
           </div>
@@ -2015,11 +2002,11 @@ export function NovaConsole() {
 
       <aside className="nova-hud nova-hud-left" aria-label="Pipeline HUD">
         <div className="nova-hud-title">Pipeline</div>
-        <NovaBarChart items={pipelineBars} height={64} />
+        <NovaBarChart items={pipelineBars} height={52} />
         <div className="nova-hud-caption">Stage volume</div>
         <div className="nova-hud-divider" />
         <div className="nova-hud-row">
-          <span>Queue trend</span>
+          <span>Queue</span>
           <strong>{status?.queuedJobs ?? 0}</strong>
         </div>
         <NovaSparkline
@@ -2030,10 +2017,10 @@ export function NovaConsole() {
           }
           stroke="rgba(255,79,216,0.95)"
           fill="rgba(255,79,216,0.18)"
-          height={32}
+          height={28}
         />
         <div className="nova-hud-divider" />
-        <NovaRadarBars items={activityRadar} />
+        <NovaRadarBars items={activityRadar.slice(0, 3)} />
         <div className="nova-hud-divider" />
         <div className="nova-hud-row">
           <span>Window</span>
@@ -2042,12 +2029,10 @@ export function NovaConsole() {
           </strong>
         </div>
         <div className="nova-hud-row">
-          <span>Send env</span>
+          <span>Send</span>
           <strong>{status?.sendEnabled ? "ON" : "OFF"}</strong>
         </div>
-        <div className="nova-hud-note">
-          Prep only · Resend after domain
-        </div>
+        <div className="nova-hud-note">Prep · Resend after domain</div>
       </aside>
 
       <aside className="nova-hud nova-hud-right" aria-label="Business HUD">
@@ -2055,7 +2040,7 @@ export function NovaConsole() {
         <div className="nova-hud-donut-row">
           <NovaDonut
             segments={clientSegments}
-            size={78}
+            size={70}
             centerLabel={`$${status?.business?.mrr ?? 0}`}
             centerSub="MRR"
           />
@@ -2069,7 +2054,7 @@ export function NovaConsole() {
               {status?.business?.trialingClients ?? 0}
             </div>
             <div>
-              <i className="tone-amber" /> Past due{" "}
+              <i className="tone-amber" /> Due{" "}
               {status?.business?.pastDueClients ?? 0}
             </div>
             <div>
@@ -2078,29 +2063,21 @@ export function NovaConsole() {
             </div>
           </div>
         </div>
-        <div className="nova-hud-row nova-hud-row-hero">
+        <div className="nova-hud-row">
           <span>ARR</span>
           <strong>${status?.business?.arr ?? 0}</strong>
         </div>
-        <div className="nova-hud-caption">MRR signal</div>
         <NovaSparkline
           values={
             telemetry.mrr.length
               ? telemetry.mrr
               : [0, status?.business?.mrr ?? 0]
           }
-          height={34}
+          height={28}
         />
-        <div className="nova-hud-divider" />
         <div className="nova-gauge-row">
-          <NovaGauge
-            value={status?.conversionRate ?? 0}
-            label="Convert"
-          />
-          <NovaGauge
-            value={status?.subscriptionRate ?? 0}
-            label="Subscribe"
-          />
+          <NovaGauge value={status?.conversionRate ?? 0} label="Convert" />
+          <NovaGauge value={status?.subscriptionRate ?? 0} label="Sub" />
         </div>
         <div className="nova-hud-divider" />
         <div className="nova-hud-row">
@@ -2116,13 +2093,9 @@ export function NovaConsole() {
             {status?.business?.trials?.claimed ?? 0}
           </strong>
         </div>
-        <div className="nova-hud-row">
-          <span>Clients</span>
-          <strong>{clientTotal}</strong>
-        </div>
         {(status?.business?.trust?.flaggedForReview ?? 0) > 0 && (
           <div className="nova-hud-note">
-            {status?.business?.trust?.flaggedForReview} fingerprint(s) flagged
+            {status?.business?.trust?.flaggedForReview} flagged
           </div>
         )}
       </aside>
@@ -2359,6 +2332,7 @@ export function NovaConsole() {
           </button>
         </form>
       </footer>
+      </div>
     </div>
   );
 }

@@ -66,19 +66,27 @@
   background: #05030a;
 }
 
+.nova-layout {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
 .nova-top {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: relative;
   z-index: 20;
-  padding: 1.5rem 1.5rem 0;
+  flex: 0 0 auto;
+  padding: 1rem 1.25rem 0.5rem;
 }
 
 @media (min-width: 640px) {
   .nova-top {
-    padding-left: 2.5rem;
-    padding-right: 2.5rem;
+    padding-left: 1.75rem;
+    padding-right: 1.75rem;
   }
 }
 
@@ -107,14 +115,14 @@
 
 .nova-clock {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 1.35rem;
+  font-size: 1.2rem;
   letter-spacing: 0.18em;
   color: rgba(180, 240, 255, 0.85);
   text-shadow: 0 0 18px rgba(86, 214, 255, 0.35);
 }
 
 .nova-clock-sub {
-  font-size: 0.58rem;
+  font-size: 0.55rem;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: rgba(160, 150, 210, 0.4);
@@ -124,12 +132,14 @@
   position: relative;
   z-index: 10;
   display: flex;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4.25rem 1rem 10.5rem;
+  padding: 0.5rem 1rem 0.75rem;
   text-align: center;
+  overflow: hidden;
 }
 
 .nova-link {
@@ -331,15 +341,13 @@
 }
 
 .nova-dock {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
   z-index: 20;
+  flex: 0 0 auto;
   margin: 0 auto;
   width: 100%;
   max-width: 36rem;
-  padding: 0 1.5rem 1.75rem;
+  padding: 0.5rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
   background: linear-gradient(
     180deg,
     transparent 0%,
@@ -597,7 +605,7 @@
 }
 
 .nova-transcript {
-  max-height: 9.5rem;
+  max-height: 7.5rem;
   overflow-y: auto;
   padding-right: 0.25rem;
   scrollbar-width: thin;
@@ -867,31 +875,13 @@
   transition: width 0.55s ease;
 }
 
-@media (min-width: 900px) {
-  .nova-telemetry {
-    display: grid;
-    grid-template-columns: 1.2fr 1fr 1fr;
-    gap: 0.65rem;
-    position: absolute;
-    left: 50%;
-    bottom: calc(9.5rem + env(safe-area-inset-bottom, 0px));
-    z-index: 16;
-    width: min(46rem, calc(100vw - 2rem));
-    transform: translateX(-50%);
-    pointer-events: none;
-  }
-
-  .nova-tele-card-wide {
-    display: none;
-  }
-}
-
-@media (min-width: 1024px) {
+/* Desktop cockpit: real CSS grid — no absolute overlap */
+@media (min-width: 1200px) {
   .nova-grid {
     display: block;
     position: absolute;
     inset: 0;
-    opacity: 0.16;
+    opacity: 0.14;
     background-image:
       linear-gradient(rgba(86, 214, 255, 0.12) 1px, transparent 1px),
       linear-gradient(90deg, rgba(86, 214, 255, 0.12) 1px, transparent 1px);
@@ -905,7 +895,7 @@
     display: block;
     position: absolute;
     inset: 0;
-    opacity: 0.05;
+    opacity: 0.04;
     background: repeating-linear-gradient(
       0deg,
       transparent,
@@ -917,44 +907,56 @@
     animation: nova-scan 8s linear infinite;
   }
 
+  .nova-layout {
+    display: grid;
+    grid-template-columns: minmax(12.5rem, 14rem) minmax(0, 1fr) minmax(12.5rem, 14rem);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "top top top"
+      "left stage right"
+      "tele tele tele"
+      "dock dock dock";
+    gap: 0.65rem 0.85rem;
+    padding: 0.65rem 0.9rem 0.75rem;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .nova-top {
+    grid-area: top;
+    padding: 0.15rem 0.25rem 0;
+  }
+
   .nova-clock-block {
     display: flex;
-    position: absolute;
-    left: 50%;
-    top: 1.35rem;
-    transform: translateX(-50%);
-  }
-
-  .nova-dock {
-    max-width: min(54rem, calc(100vw - 28rem));
-  }
-
-  .nova-dock-chrome {
-    display: flex;
+    position: static;
+    transform: none;
   }
 
   .nova-hud {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
-    position: absolute;
-    top: 50%;
-    transform: translateY(-58%);
-    z-index: 15;
-    width: 13.75rem;
-    max-height: min(72vh, 36rem);
+    gap: 0.32rem;
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    transform: none;
+    width: auto;
+    max-height: 100%;
+    min-height: 0;
     overflow: hidden;
-    padding: 1rem 1.05rem 1.1rem;
+    padding: 0.75rem 0.8rem;
     border: 1px solid rgba(86, 214, 255, 0.28);
     border-radius: 0.45rem;
     background:
       linear-gradient(165deg, rgba(8, 26, 40, 0.82), rgba(8, 6, 20, 0.62));
     box-shadow:
       0 0 0 1px rgba(255, 79, 216, 0.07) inset,
-      0 0 40px rgba(86, 214, 255, 0.06),
-      0 16px 48px rgba(0, 0, 0, 0.4);
+      0 12px 32px rgba(0, 0, 0, 0.35);
     backdrop-filter: blur(14px);
     pointer-events: none;
+    scrollbar-width: thin;
   }
 
   .nova-hud::before {
@@ -969,24 +971,85 @@
   }
 
   .nova-hud-left {
-    left: 1.25rem;
+    grid-area: left;
+    align-self: stretch;
   }
 
   .nova-hud-right {
-    right: 1.25rem;
+    grid-area: right;
+    align-self: stretch;
+  }
+
+  .nova-stage {
+    grid-area: stage;
+    padding: 0.25rem 0.5rem;
+    height: auto;
+    overflow: hidden;
+  }
+
+  .nova-orb-wrap {
+    overflow: visible;
+  }
+
+  .nova-telemetry {
+    grid-area: tele;
+    display: grid;
+    grid-template-columns: 1.15fr 0.9fr 0.9fr 1.15fr;
+    gap: 0.55rem;
+    position: relative;
+    left: auto;
+    bottom: auto;
+    width: 100%;
+    transform: none;
+    pointer-events: none;
+  }
+
+  .nova-dock {
+    grid-area: dock;
+    max-width: none;
+    width: 100%;
+    padding: 0.15rem 0.25rem 0.35rem;
+    background: none;
+  }
+
+  .nova-dock-chrome {
+    display: flex;
+  }
+
+  .nova-transcript {
+    max-height: 5.5rem;
+  }
+
+  .nova-orb-wrap {
+    width: min(42vh, 22rem);
+    height: min(42vh, 22rem);
+  }
+
+  .nova-orb {
+    width: min(40vh, 20rem);
+    height: min(40vh, 20rem);
+  }
+
+  .nova-brand {
+    font-size: clamp(1.6rem, 3.2vh, 2.4rem);
+  }
+
+  .nova-tagline {
+    max-width: 26rem;
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
   }
 
   .nova-hud-title {
-    font-size: 0.62rem;
-    letter-spacing: 0.32em;
+    font-size: 0.58rem;
+    letter-spacing: 0.28em;
     text-transform: uppercase;
     color: rgba(86, 214, 255, 0.75);
-    margin-bottom: 0.15rem;
   }
 
   .nova-hud-caption {
-    font-size: 0.5rem;
-    letter-spacing: 0.18em;
+    font-size: 0.48rem;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: rgba(150, 170, 200, 0.4);
   }
@@ -995,23 +1058,16 @@
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 0.75rem;
-    font-size: 0.7rem;
+    gap: 0.5rem;
+    font-size: 0.66rem;
     color: rgba(190, 200, 230, 0.55);
   }
 
   .nova-hud-row strong {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     font-weight: 600;
-    letter-spacing: 0.04em;
     color: rgba(220, 245, 255, 0.92);
-  }
-
-  .nova-hud-row-hero strong {
-    font-size: 1.05rem;
-    color: #56d6ff;
-    text-shadow: 0 0 16px rgba(86, 214, 255, 0.45);
   }
 
   .nova-hud-row strong.nova-ok {
@@ -1024,7 +1080,7 @@
 
   .nova-hud-divider {
     height: 1px;
-    margin: 0.15rem 0;
+    margin: 0.1rem 0;
     background: linear-gradient(
       90deg,
       transparent,
@@ -1034,33 +1090,31 @@
   }
 
   .nova-hud-note {
-    margin-top: 0.15rem;
-    font-size: 0.55rem;
-    line-height: 1.35;
-    letter-spacing: 0.04em;
+    font-size: 0.52rem;
+    line-height: 1.3;
     color: rgba(255, 180, 120, 0.65);
   }
 
   .nova-hud-donut-row {
     display: flex;
     align-items: center;
-    gap: 0.65rem;
+    gap: 0.5rem;
   }
 
   .nova-hud-legend {
     display: flex;
     flex-direction: column;
-    gap: 0.22rem;
-    font-size: 0.58rem;
+    gap: 0.18rem;
+    font-size: 0.55rem;
     color: rgba(180, 195, 220, 0.55);
   }
 
   .nova-hud-legend i {
     display: inline-block;
-    width: 0.4rem;
-    height: 0.4rem;
+    width: 0.35rem;
+    height: 0.35rem;
     border-radius: 999px;
-    margin-right: 0.25rem;
+    margin-right: 0.2rem;
     vertical-align: middle;
   }
 
@@ -1081,25 +1135,20 @@
   .nova-gauge-row {
     display: flex;
     justify-content: space-around;
-    gap: 0.25rem;
-  }
-
-  .nova-telemetry {
-    grid-template-columns: 1.15fr 0.9fr 0.9fr 1.15fr;
-    bottom: calc(10.25rem + env(safe-area-inset-bottom, 0px));
-    width: min(58rem, calc(100vw - 28rem));
+    gap: 0.2rem;
   }
 
   .nova-tele-card {
-    padding: 0.7rem 0.8rem 0.75rem;
+    min-width: 0;
+    padding: 0.55rem 0.65rem 0.6rem;
     border: 1px solid rgba(86, 214, 255, 0.22);
-    border-radius: 0.4rem;
+    border-radius: 0.35rem;
     background: linear-gradient(
       160deg,
       rgba(8, 24, 38, 0.78),
       rgba(8, 6, 18, 0.55)
     );
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
     backdrop-filter: blur(12px);
   }
 
@@ -1111,18 +1160,18 @@
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 0.5rem;
-    margin-bottom: 0.45rem;
-    font-size: 0.55rem;
-    letter-spacing: 0.18em;
+    gap: 0.4rem;
+    margin-bottom: 0.35rem;
+    font-size: 0.52rem;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: rgba(150, 180, 210, 0.5);
   }
 
   .nova-tele-head strong {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
+    font-size: 0.68rem;
+    letter-spacing: 0.03em;
     text-transform: none;
     color: rgba(210, 240, 255, 0.9);
   }
@@ -1155,16 +1204,6 @@
     animation: nova-ring-spin 55s linear infinite;
   }
 
-  .nova-tagline {
-    max-width: 28rem;
-  }
-
-  .nova-stage {
-    padding-left: 15rem;
-    padding-right: 15rem;
-    padding-bottom: 16.5rem;
-  }
-
   .nova-input {
     border-radius: 0.45rem;
     border-color: rgba(86, 214, 255, 0.28);
@@ -1181,33 +1220,49 @@
   }
 }
 
-@media (min-width: 900px) and (max-width: 1023px) {
-  .nova-tele-card {
-    padding: 0.65rem 0.7rem;
-    border: 1px solid rgba(86, 214, 255, 0.2);
-    border-radius: 0.35rem;
-    background: rgba(8, 18, 30, 0.72);
-    backdrop-filter: blur(10px);
+/* Shorter desktops: drop the fourth telemetry card, shrink orb */
+@media (min-width: 1200px) and (max-height: 820px) {
+  .nova-tele-card-wide {
+    display: none;
   }
 
-  .nova-tele-head {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 0.35rem;
-    font-size: 0.52rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: rgba(150, 180, 210, 0.5);
+  .nova-telemetry {
+    grid-template-columns: 1.2fr 1fr 1fr;
   }
 
-  .nova-tele-head strong {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.68rem;
-    color: rgba(210, 240, 255, 0.9);
+  .nova-orb-wrap {
+    width: min(34vh, 16rem);
+    height: min(34vh, 16rem);
   }
 
-  .nova-stage {
-    padding-bottom: 15rem;
+  .nova-orb {
+    width: min(32vh, 15rem);
+    height: min(32vh, 15rem);
+  }
+
+  .nova-tagline {
+    display: none;
+  }
+
+  .nova-transcript {
+    max-height: 4.25rem;
+  }
+}
+
+/* Tall desktops: give the orb a bit more room */
+@media (min-width: 1200px) and (min-height: 900px) {
+  .nova-orb-wrap {
+    width: min(48vh, 26rem);
+    height: min(48vh, 26rem);
+  }
+
+  .nova-orb {
+    width: min(46vh, 24rem);
+    height: min(46vh, 24rem);
+  }
+
+  .nova-transcript {
+    max-height: 7rem;
   }
 }
 
