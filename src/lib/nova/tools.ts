@@ -13,6 +13,7 @@ import {
 import { runTick } from "@/lib/nexus/runner";
 import type { LeadSearchPayload } from "@/lib/nexus/types";
 import { loadConversionReport, loadConversionSummary } from "./conversions";
+import { persistNovaLearning } from "./learning-persist";
 import { upsertNovaMemory } from "./memory";
 import {
   getNovaSendPlan,
@@ -205,68 +206,7 @@ async function toolLearn(args: Record<string, unknown>) {
     syncWins: true,
   });
 
-  // Persist compact + insight memory so future sessions keep the lesson.
-  const bits = [
-    `${report.matchedCount}/${report.sentCount} signup converts (${report.conversionRate}%) last ${report.sinceDays}d`,
-  ];
-  if (report.subscribedCount > 0) {
-    bits.push(
-      `${report.subscribedCount} subscribed (${report.subscriptionRate}% of sends)`
-    );
-  }
-  const topSubject = report.bySubject.find((s) => s.converted > 0);
-  const topTheme = report.byTheme.find((t) => t.converted > 0 && t.key !== "no_theme");
-  const topSubTheme = report.byThemeSubscribed.find(
-    (t) => t.converted > 0 && t.key !== "no_theme"
-  );
-  const topCity = report.byCity.find((c) => c.converted > 0);
-  if (topSubject) {
-    bits.push(
-      `subject: "${topSubject.key.slice(0, 70)}" (${topSubject.converted}/${topSubject.sent})`
-    );
-  }
-  if (topTheme) {
-    bits.push(
-      `theme: ${topTheme.key} (${topTheme.converted}/${topTheme.sent}, ${topTheme.rate}%)`
-    );
-  }
-  if (topSubTheme) {
-    bits.push(
-      `sub theme: ${topSubTheme.key} (${topSubTheme.converted}/${topSubTheme.sent})`
-    );
-  }
-  if (topCity) {
-    bits.push(`city: ${topCity.key} (${topCity.converted}/${topCity.sent})`);
-  }
-  if (report.avgDaysToSignup != null) {
-    bits.push(`avg days→signup: ${report.avgDaysToSignup}`);
-  }
-  if (report.avgDaysToSubscribe != null) {
-    bits.push(`avg days→subscribe: ${report.avgDaysToSubscribe}`);
-  }
-  if (report.insights[0]) bits.push(report.insights[0]);
-
-  await upsertNovaMemory({
-    kind: "trial",
-    key: "outreach.learning",
-    content: bits.join(" · "),
-    metadata: {
-      matchedCount: report.matchedCount,
-      sentCount: report.sentCount,
-      conversionRate: report.conversionRate,
-      subscribedCount: report.subscribedCount,
-      subscriptionRate: report.subscriptionRate,
-      topThemesConverted: report.winnersVsLosers.topThemesConverted,
-      topThemesSubscribed: report.byThemeSubscribed
-        .filter((t) => t.converted > 0)
-        .slice(0, 5)
-        .map((t) => t.key),
-      bestHoursEt: report.winnersVsLosers.bestHoursEt,
-      avgDaysToSubscribe: report.avgDaysToSubscribe,
-      insights: report.insights.slice(0, 6),
-      at: new Date().toISOString(),
-    },
-  });
+  await persistNovaLearning(report);
 
   return {
     insights: report.insights,

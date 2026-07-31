@@ -154,6 +154,28 @@ first voice on your account instead of a library default.
 Nova can call Nexus tools: status, list drafts/companies, start search, run a
 tick, queue approved sends, and store memory/trials.
 
+### Background autonomy (UI closed)
+
+Outreach keeps running without `/nova` or `/nexus` open when the scheduler is
+on. Every 10 minutes the GitHub Action hits `/api/nexus/tick`, which:
+
+- Processes queued jobs (search → research → draft → AI review → send)
+- **Replenishes sends** when Nova is armed: queues approved drafts up to her
+  daily target (still gated by `NEXUS_SEND_ENABLED`, armed flag, suppressions,
+  and the 10–3 ET window for live send)
+- **Refreshes learning** every ~6 hours (or when new sends land): updates
+  `nova_memory` keys `outreach.learning` and `outreach.strategy` so the next
+  chat session sees fresh dossier data
+
+One-time setup each day (via chat or prior session):
+
+1. Nova **armed** — call `send_today` (or ask her to arm a daily count)
+2. **`NEXUS_SEND_ENABLED=true`** and Mailtrap wired for actual delivery
+3. GitHub secrets **`NEXUS_APP_URL`** + **`NEXUS_CRON_SECRET`** (see §5)
+
+Voice wake word and ElevenLabs speak-back still need `/nova` open in the
+browser. Outreach email, pipeline jobs, and background learn do not.
+
 ## Later phases
 
 - **Gmail / Workspace send** — swap behind the same `outreach.send` hand on a

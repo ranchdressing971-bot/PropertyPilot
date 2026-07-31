@@ -13,6 +13,7 @@ import { runResearchCompany } from "./hands/research";
 import { runOutreachDraft, runOutreachReview } from "./hands/outreach";
 import { runOutreachSend } from "./hands/send";
 import { maxReviewCount } from "./lead-filter";
+import { runNovaBackgroundTasks } from "@/lib/nova/background";
 import type {
   LeadSearchPayload,
   LeadScorePayload,
@@ -68,6 +69,7 @@ export interface TickResult {
     detail: string;
   }>;
   budgetExhausted: boolean;
+  nova?: Awaited<ReturnType<typeof runNovaBackgroundTasks>>;
 }
 
 export async function runTick(): Promise<TickResult> {
@@ -85,6 +87,16 @@ export async function runTick(): Promise<TickResult> {
 
   // Jobs whose worker died mid-run would sit in 'running' forever otherwise.
   result.requeuedStale = await requeueStaleJobs(10, db);
+
+  // Nova background: top up send queue when armed; refresh learning dossier.
+  try {
+    result.nova = await runNovaBackgroundTasks(db);
+  } catch (err) {
+    console.error(
+      "[nexus] nova background tasks failed:",
+      err instanceof Error ? err.message : err
+    );
+  }
 
   // Catch drafts that were created before auto-review existed, or whose review
   // job was lost — queue AI review so the pipeline doesn't stall on "pending".

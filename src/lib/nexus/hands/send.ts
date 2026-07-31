@@ -42,7 +42,7 @@ async function findSuppression(
   return hit?.reason ?? null;
 }
 
-async function sentTodayCount(db: SupabaseClient): Promise<number> {
+export async function countSentToday(db: SupabaseClient): Promise<number> {
   // Rolling ~business-day window — good enough for the hard cap.
   const since = new Date(Date.now() - 20 * 3600_000).toISOString();
   const { count, error } = await db
@@ -59,6 +59,18 @@ async function sentTodayCount(db: SupabaseClient): Promise<number> {
       .gte("created_at", since);
     return actionCount ?? 0;
   }
+  return count;
+}
+
+/** Outstanding outreach.send jobs (queued or in-flight). */
+export async function countQueuedSends(db: SupabaseClient): Promise<number> {
+  const { count, error } = await db
+    .from("nexus_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("type", "outreach.send")
+    .in("status", ["queued", "running"]);
+
+  if (error || count == null) return 0;
   return count;
 }
 
@@ -138,7 +150,7 @@ export async function runOutreachSend(
     };
   }
 
-  const today = await sentTodayCount(db);
+  const today = await countSentToday(db);
   const dayCap = Math.min(outreachMaxSendsPerDay(), plan.dailyTarget);
   if (today >= dayCap) {
     const wait = secondsUntilOutreachWindow(/* nextDay */ true);
