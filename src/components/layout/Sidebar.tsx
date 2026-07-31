@@ -18,26 +18,32 @@ import { useMobileNav } from "./MobileNavContext";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useCompanyRole } from "@/hooks/useCompanyRole";
+import type { CompanyRole } from "@/lib/company";
 import { displayHoaName } from "@/lib/profile";
 
-const navItems = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard, roles: ["owner", "admin", "inspector"] as const },
-  { href: "/dashboard/inspections", label: "Inspections", icon: Video, roles: ["owner", "admin", "inspector"] as const },
-  { href: "/dashboard/properties", label: "Properties", icon: Home, roles: ["owner", "admin", "inspector"] as const },
-  { href: "/dashboard/violations", label: "Violations", icon: AlertTriangle, roles: ["owner", "admin", "inspector"] as const },
-  { href: "/dashboard/reports", label: "Reports", icon: FileText, roles: ["owner", "admin"] as const },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings, roles: ["owner", "admin", "inspector"] as const },
+const navItems: {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  roles: readonly CompanyRole[];
+}[] = [
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard, roles: ["owner", "admin", "inspector"] },
+  { href: "/dashboard/inspections", label: "Inspections", icon: Video, roles: ["owner", "admin", "inspector"] },
+  { href: "/dashboard/properties", label: "Properties", icon: Home, roles: ["owner", "admin", "inspector"] },
+  { href: "/dashboard/violations", label: "Violations", icon: AlertTriangle, roles: ["owner", "admin", "inspector"] },
+  { href: "/dashboard/reports", label: "Reports", icon: FileText, roles: ["owner", "admin"] },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings, roles: ["owner", "admin", "inspector"] },
 ];
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { role, loading } = useCompanyRole();
-  const effectiveRole = role ?? "owner";
+  const effectiveRole: CompanyRole = role ?? "owner";
 
   return (
     <>
       {navItems
-        .filter((item) => loading || item.roles.includes(effectiveRole as "owner" | "admin" | "inspector"))
+        .filter((item) => loading || item.roles.includes(effectiveRole))
         .map((item) => {
         const isActive =
           pathname === item.href ||
