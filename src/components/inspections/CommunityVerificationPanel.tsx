@@ -28,7 +28,7 @@ export function CommunityVerificationPanel({
 
   if (dismissed) return null;
 
-  // Quiet outcomes — optional one-line note only
+  // Quiet outcomes — show only optional map tips / soft review notes
   if (
     !verification.needsUserAction &&
     verification.outcome !== "bootstrap" &&
