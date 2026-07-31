@@ -6,13 +6,18 @@ import {
   clampDailySendTarget,
   isNexusSendEnabled,
   isWithinOutreachWindow,
-  nextOutreachSendDelaySeconds,
   OUTREACH_MIN_SENDS_PER_DAY,
   outreachMaxSendsPerDay,
 } from "@/lib/nexus/outreach-policy";
 import { runTick } from "@/lib/nexus/runner";
 import type { LeadSearchPayload } from "@/lib/nexus/types";
 import { loadConversionReport, loadConversionSummary } from "./conversions";
+import {
+  computeNovaDailyTarget,
+  loadApprovedDraftsForSend,
+  loadLearnHints,
+  outreachSendDelayWithBias,
+} from "./daily-plan";
 import { persistNovaLearning } from "./learning-persist";
 import { upsertNovaMemory } from "./memory";
 import {
@@ -73,13 +78,13 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "send_today",
       description:
-        "Arm and queue today's batch (paced). YOU pick the count (floor 20, ceiling 50) when you stand behind the drafts. Refuse to call this if copy is weak, blockers exist, or learn data says wait — use pause instead. Omit count to use your current plan / default 20+.",
+        "Optional override: set today's volume or resume after pause. Background ticks plan and queue automatically — use this when Isaac asks for a specific count or to restart after pause. Refuse weak batches; use pause instead.",
       parameters: {
         type: "object",
         properties: {
           count: {
             type: "number",
-            description: `Emails today (${OUTREACH_MIN_SENDS_PER_DAY}–${outreachMaxSendsPerDay()}, or 0 to pause)`,
+            description: `Override emails today (${OUTREACH_MIN_SENDS_PER_DAY}–${outreachMaxSendsPerDay()}, or 0 to pause)`,
           },
           note: { type: "string", description: "Optional why" },
         },
@@ -112,7 +117,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "pause",
       description:
-        "Stop sending — use when quality is off, data is thin, or Isaac's push is premature. Disarms until send_today again. Give Isaac the reason.",
+        "Stop sending — use when quality is off, data is thin, or Isaac's push is premature. Stays paused until Isaac asks you to resume (send_today or explicit resume). Give Isaac the reason.",
       parameters: {
         type: "object",
         properties: {
@@ -151,7 +156,7 @@ async function toolStatus() {
   const active = state.companies.filter((c) => c.status === "active");
 
   const blockers: string[] = [];
-  if (!plan.armed) blockers.push("Nova paused (call send_today to arm)");
+  if (!plan.armed) blockers.push("Nova paused (ask to resume or call send_today)");
   if (!isNexusSendEnabled()) blockers.push("env NEXUS_SEND_ENABLED is false");
   if (!isMailtrapConfigured()) blockers.push("Mailtrap not wired yet");
   if (!isMailtrapSandbox() && !isWithinOutreachWindow()) {
@@ -293,13 +298,31 @@ async function toolFindLeads(args: Record<string, unknown>) {
 
 async function toolSendToday(args: Record<string, unknown>) {
   const current = await getNovaSendPlan();
-  const raw =
-    args.count != null && Number.isFinite(Number(args.count))
-      ? Number(args.count)
-      : current.dailyTarget || OUTREACH_MIN_SENDS_PER_DAY;
-  const count = clampDailySendTarget(raw);
+  const hints = await loadLearnHints();
+  const db = requireNexusDb();
 
-  const note = args.note ? String(args.note) : undefined;
+  const { count: approvedCount } = await db
+    .from("nexus_drafts")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "approved");
+
+  let count: number;
+  let note = args.note ? String(args.note) : undefined;
+
+  if (args.count != null && Number.isFinite(Number(args.count))) {
+    count = clampDailySendTarget(Number(args.count));
+  } else {
+    const { countSentToday } = await import("@/lib/nexus/hands/send");
+    const sentToday = await countSentToday(db);
+    const computed = computeNovaDailyTarget({
+      approvedCount: approvedCount ?? 0,
+      sentToday,
+      hints,
+    });
+    count = computed.target || current.dailyTarget || OUTREACH_MIN_SENDS_PER_DAY;
+    note = note ?? computed.note;
+  }
+
   const plan = await setNovaSendPlan({ dailyTarget: count, note });
   if (count === 0) {
     await setNovaSendArmed(false, note || "Paused at 0");
@@ -309,24 +332,20 @@ async function toolSendToday(args: Record<string, unknown>) {
       plainEnglish: "Paused — 0 sends today.",
     };
   }
-  await setNovaSendArmed(true, note || `Sending ${count} today`);
+  await setNovaSendArmed(true, note || `Override: ${count} today`);
 
-  const db = requireNexusDb();
-  const { data } = await db
-    .from("nexus_drafts")
-    .select("id")
-    .eq("status", "approved")
-    .order("created_at", { ascending: true })
-    .limit(50);
-
-  const available = data ?? [];
-  const toQueue = Math.min(available.length, count);
+  const approved = await loadApprovedDraftsForSend(
+    db,
+    Math.min(count, 50),
+    hints
+  );
+  const toQueue = Math.min(approved.length, count);
   let queued = 0;
-  for (const row of available.slice(0, toQueue)) {
+  for (const row of approved.slice(0, toQueue)) {
     await enqueueOutreachSend(
       row.id,
       db,
-      nextOutreachSendDelaySeconds() * (queued + 1)
+      outreachSendDelayWithBias(hints.bestHoursEt) * (queued + 1)
     );
     queued += 1;
   }
@@ -334,7 +353,7 @@ async function toolSendToday(args: Record<string, unknown>) {
   return {
     plan,
     queued,
-    approvedAvailable: available.length,
+    approvedAvailable: approved.length,
     envSendEnabled: isNexusSendEnabled(),
     mailtrapConfigured: isMailtrapConfigured(),
     plainEnglish:
@@ -346,7 +365,7 @@ async function toolSendToday(args: Record<string, unknown>) {
           ? `Queued ${queued}. They wait until Mailtrap is wired.`
           : !isNexusSendEnabled()
             ? `Queued ${queued}. Flip NEXUS_SEND_ENABLED=true to transmit.`
-            : `Queued ${queued} sends, paced every 5–15 minutes.`,
+            : `Queued ${queued} sends (override), paced every 5–15 minutes.`,
   };
 }
 

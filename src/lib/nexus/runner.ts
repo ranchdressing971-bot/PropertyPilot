@@ -88,7 +88,7 @@ export async function runTick(): Promise<TickResult> {
   // Jobs whose worker died mid-run would sit in 'running' forever otherwise.
   result.requeuedStale = await requeueStaleJobs(10, db);
 
-  // Nova background: top up send queue when armed; refresh learning dossier.
+  // Nova background: autonomous daily plan + send queue top-up; refresh learning.
   try {
     result.nova = await runNovaBackgroundTasks(db);
   } catch (err) {

@@ -127,7 +127,7 @@ NEXUS_SEND_ENABLED=false       # flip to true only when ready to transmit
 
 5. Redeploy. Approved drafts enqueue `outreach.send` with 5–15 min jitter.
 6. Live (non-sandbox) also enforces 10:00–15:00 America/New_York weekdays and a
-   daily cap of 30. Sandbox may send anytime so you can test at night.
+   daily cap (default 50 via `NEXUS_MAX_SENDS_PER_DAY`). Sandbox may send anytime so you can test at night.
 7. Kill switch: set `NEXUS_SEND_ENABLED=false` and redeploy to hard-stop.
 
 When you leave sandbox: verify a Mailtrap sending domain, set
@@ -160,18 +160,25 @@ Outreach keeps running without `/nova` or `/nexus` open when the scheduler is
 on. Every 10 minutes the GitHub Action hits `/api/nexus/tick`, which:
 
 - Processes queued jobs (search → research → draft → AI review → send)
-- **Replenishes sends** when Nova is armed: queues approved drafts up to her
-  daily target (still gated by `NEXUS_SEND_ENABLED`, armed flag, suppressions,
-  and the 10–3 ET window for live send)
+- **Plans Nova's day automatically**: she sets her own daily target from
+  approved drafts, learn data, and `NEXUS_MAX_SENDS_PER_DAY` (floor 20)
+- **Replenishes sends** while she is running (not paused): queues approved
+  drafts up to her target, prioritizing high-confidence and winning themes
+  (still gated by `NEXUS_SEND_ENABLED`, pause flag, suppressions, and the
+  10–3 ET window for live send)
 - **Refreshes learning** every ~6 hours (or when new sends land): updates
   `nova_memory` keys `outreach.learning` and `outreach.strategy` so the next
   chat session sees fresh dossier data
 
-One-time setup each day (via chat or prior session):
+One-time setup (not daily):
 
-1. Nova **armed** — call `send_today` (or ask her to arm a daily count)
-2. **`NEXUS_SEND_ENABLED=true`** and Mailtrap wired for actual delivery
-3. GitHub secrets **`NEXUS_APP_URL`** + **`NEXUS_CRON_SECRET`** (see §5)
+1. **`NEXUS_SEND_ENABLED=true`** and Mailtrap wired for actual delivery
+2. GitHub secrets **`NEXUS_APP_URL`** + **`NEXUS_CRON_SECRET`** (see §5)
+
+Nova runs herself by default. **Pause** her in chat when you need to stop sends
+(soft kill switch alongside `NEXUS_SEND_ENABLED=false`). Optional **`send_today`**
+overrides volume or resumes after pause — you do not need to arm her every
+morning.
 
 Voice wake word and ElevenLabs speak-back still need `/nova` open in the
 browser. Outreach email, pipeline jobs, and background learn do not.

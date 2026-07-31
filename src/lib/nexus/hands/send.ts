@@ -19,7 +19,7 @@ import type { HandResult, OutreachSendPayload } from "../types";
  * Delivery Hand — transmits an approved draft via Mailtrap.
  *
  * Nova chooses how many to queue. Hard gates still apply: env kill switch,
- * Nova armed flag, Nova daily target, suppressions, and (outside sandbox)
+ * Nova pause flag, Nova daily target, suppressions, and (outside sandbox)
  * the 10–3 window.
  */
 
@@ -109,8 +109,8 @@ export async function runOutreachSend(
   const plan = await getNovaSendPlan();
   if (!plan.armed) {
     return {
-      summary: "skipped — Nova has sending disarmed",
-      metadata: { draftId, reason: "nova_disarmed" },
+      summary: "skipped — Nova is paused",
+      metadata: { draftId, reason: "nova_paused" },
     };
   }
 

@@ -1801,7 +1801,7 @@ export function NovaConsole() {
                 }
               />
               <span>
-                {status?.novaArmed ? "Armed" : "Paused"} ·{" "}
+                {status?.novaArmed ? "Running" : "Paused"} ·{" "}
                 {status?.dailyTarget ?? "—"}/day
               </span>
             </div>

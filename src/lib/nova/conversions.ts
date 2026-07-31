@@ -359,6 +359,11 @@ function detectThemes(subject: string, body: string): string[] {
   return THEMES.filter((t) => t.re.test(hay)).map((t) => t.key);
 }
 
+/** Theme tags on a draft/subject/body — shared by learn slices and send prioritization. */
+export function detectMessageThemes(subject: string, body: string): string[] {
+  return detectThemes(subject, body);
+}
+
 function buildFeatures(input: {
   subject: string;
   body: string;

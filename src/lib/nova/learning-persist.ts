@@ -98,7 +98,7 @@ function buildStrategyNote(report: LearningReport): string | null {
 
   const bestHour = report.winnersVsLosers.bestHoursEt[0];
   if (bestHour != null) {
-    parts.push(`Favor ${bestHour}:00 ET sends when arming the next batch.`);
+    parts.push(`Favor ${bestHour}:00 ET sends when scheduling the next batch.`);
   }
 
   const topTheme = report.winnersVsLosers.topThemesConverted[0];

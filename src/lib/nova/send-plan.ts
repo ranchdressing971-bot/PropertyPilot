@@ -41,7 +41,11 @@ export async function getNovaSendPlan(): Promise<NovaSendPlan> {
   const armed =
     typeof armedMeta.armed === "boolean"
       ? armedMeta.armed
-      : /^(true|armed|on|yes)/i.test(armedRow?.content ?? "");
+      : armedRow
+        ? /^(true|armed|on|yes|running|autonomous)/i.test(
+            armedRow.content ?? ""
+          )
+        : true;
 
   return {
     dailyTarget,
@@ -53,6 +57,7 @@ export async function getNovaSendPlan(): Promise<NovaSendPlan> {
 export async function setNovaSendPlan(input: {
   dailyTarget: number;
   note?: string;
+  planDay?: string;
 }): Promise<NovaSendPlan> {
   const dailyTarget = clampDailySendTarget(input.dailyTarget);
   const max = outreachMaxSendsPerDay();
@@ -68,6 +73,7 @@ export async function setNovaSendPlan(input: {
     content: note,
     metadata: {
       dailyTarget,
+      planDay: input.planDay ?? null,
       updatedAt: new Date().toISOString(),
     },
   });
@@ -84,7 +90,7 @@ export async function setNovaSendArmed(
     kind: "preference",
     key: ARMED_KEY,
     content: armed
-      ? `Armed: ${reason?.trim() || "Nova enabled sending"}`
+      ? `Running: ${reason?.trim() || "Nova autonomous outreach"}`
       : `Paused: ${reason?.trim() || "Nova paused sending"}`,
     metadata: {
       armed,
