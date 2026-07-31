@@ -73,21 +73,62 @@ function stripWake(text: string): string {
   return text.replace(/^(hey\s+)?nova[,.\s!]*/i, "").trim();
 }
 
-function containsWake(text: string): boolean {
-  return /\bhey\s+nova\b/i.test(text) || /\bnova\b/i.test(text);
+/** Normalize for intent matching. */
+function normalizeUtterance(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s']/g, "")
+    .replace(/\s+/g, " ");
 }
 
 /** True when the utterance is only the wake word (no real command yet). */
 function isWakeOnly(text: string): boolean {
   const rest = stripWake(text);
   if (rest.length >= 2) return false;
-  const cleaned = text
-    .trim()
-    .toLowerCase()
-    .replace(/[^\w\s]/g, "")
-    .replace(/\s+/g, " ");
-  return /^(hey )?nova$/.test(cleaned);
+  return /^(hey )?nova$/.test(normalizeUtterance(text));
 }
+
+/** User is ending the conversation — Nova should stop active listening. */
+function isCloseIntent(text: string): boolean {
+  const t = normalizeUtterance(stripWake(text) || text);
+  if (!t) return false;
+  if (
+    /^(stop|sleep|bye|goodbye|thanks|thank you|never mind|cancel|done|quit)$/.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  return /\b(stop listening|go to sleep|that'?s all|never mind|good ?bye|talk later|we'?re done|nothing else|catch you later|thanks nova|thank you nova)\b/.test(
+    t
+  );
+}
+
+/**
+ * Intentional speech worth treating as a request (no "Hey Nova" required).
+ * Filters filler so ambient mutter doesn't constantly wake her.
+ */
+function looksLikeCommand(text: string): boolean {
+  const raw = stripWake(text) || text.trim();
+  const t = normalizeUtterance(raw);
+  if (t.length < 3) return false;
+  if (isWakeOnly(text) || isCloseIntent(text)) return false;
+  if (
+    /^(um+|uh+|hmm+|ah+|oh+|okay|ok|yeah|yep|yup|nope|nah|huh|mhm+|mm+)$/.test(
+      t
+    )
+  ) {
+    return false;
+  }
+  // Prefer multi-word asks, or a single solid word (≥5 chars).
+  const words = t.split(" ").filter(Boolean);
+  if (words.length >= 2) return true;
+  return t.length >= 5;
+}
+
+/** How long Nova waits after the last speech before ending the open listen. */
+const SILENCE_END_MS = 5500;
 
 function beep() {
   try {
@@ -121,18 +162,19 @@ export function NovaConsole() {
   const restartingRef = useRef(false);
   const commandBufferRef = useRef("");
   const commandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const commandDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const silenceEndRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const audioUnlockedRef = useRef(false);
-  /** After TTS, restart mic in wake or command mode. */
-  const resumeModeRef = useRef<ListenMode>("wake");
+  /** After TTS, restart mic in wake (dormant) or command (open) mode. */
+  const resumeModeRef = useRef<ListenMode>("command");
   const askNovaRef = useRef<(message: string) => Promise<void>>(async () => {});
   const startMicRef = useRef<(mode?: ListenMode) => void>(() => {});
-  const openCommandWindowRef = useRef<() => void>(() => {});
+  const openConversationRef = useRef<() => void>(() => {});
+  const goDormantRef = useRef<() => void>(() => {});
 
   const unlockAudio = useCallback(() => {
     try {
@@ -289,24 +331,26 @@ export function NovaConsole() {
     }, 100);
   }, []);
 
-  const clearCommandDeadline = useCallback(() => {
-    if (commandDeadlineRef.current) {
-      clearTimeout(commandDeadlineRef.current);
-      commandDeadlineRef.current = null;
+  const clearSilenceEnd = useCallback(() => {
+    if (silenceEndRef.current) {
+      clearTimeout(silenceEndRef.current);
+      silenceEndRef.current = null;
     }
   }, []);
 
-  const armCommandDeadline = useCallback(() => {
-    clearCommandDeadline();
-    // If they only said "Hey Nova", wait for the real ask — then fall back.
-    commandDeadlineRef.current = setTimeout(() => {
-      if (phaseRef.current === "listening_command") {
-        setPhase("listening_wake");
-        resumeModeRef.current = "wake";
-        startMicRef.current("wake");
+  /** Nova decides the conversation paused — drop back to dormant listen. */
+  const armSilenceEnd = useCallback(() => {
+    clearSilenceEnd();
+    silenceEndRef.current = setTimeout(() => {
+      if (phaseRef.current !== "listening_command") return;
+      // Still assembling an utterance — wait again.
+      if (commandBufferRef.current.trim()) {
+        armSilenceEnd();
+        return;
       }
-    }, 10000);
-  }, [clearCommandDeadline]);
+      goDormantRef.current();
+    }, SILENCE_END_MS);
+  }, [clearSilenceEnd]);
 
   const startMic = useCallback(
     (mode: ListenMode = "wake") => {
@@ -329,9 +373,36 @@ export function NovaConsole() {
       recognition.lang = "en-US";
       recognitionRef.current = recognition;
 
-      setPhase(mode === "command" ? "listening_command" : "listening_wake");
-      if (mode === "command") armCommandDeadline();
-      else clearCommandDeadline();
+      phaseRef.current =
+        mode === "command" ? "listening_command" : "listening_wake";
+      setPhase(phaseRef.current);
+      if (mode === "command") armSilenceEnd();
+      else clearSilenceEnd();
+
+      const commitUtterance = (raw: string) => {
+        const text = raw.trim();
+        if (!text) return;
+
+        if (isCloseIntent(text)) {
+          commandBufferRef.current = "";
+          if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+          goDormantRef.current();
+          return;
+        }
+
+        if (isWakeOnly(text)) {
+          openConversationRef.current();
+          return;
+        }
+
+        const rest = stripWake(text) || text;
+        if (!looksLikeCommand(rest)) return;
+
+        commandBufferRef.current = "";
+        if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+        clearSilenceEnd();
+        void askNovaRef.current(rest);
+      };
 
       recognition.onresult = (event) => {
         if (
@@ -350,59 +421,54 @@ export function NovaConsole() {
         const text = chunk.trim();
         if (!text) return;
 
+        // Dormant: pick up intentional speech — no "Hey Nova" required.
         if (phaseRef.current === "listening_wake") {
-          if (!containsWake(text)) return;
-
-          // Wake only — open a 10s listen window (no spoken "Hey").
-          if (isWakeOnly(text) || stripWake(text).length < 2) {
-            if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
-            commandBufferRef.current = "";
-            openCommandWindowRef.current();
+          if (isCloseIntent(text)) return;
+          if (isWakeOnly(text)) {
+            openConversationRef.current();
             return;
           }
+          const rest = stripWake(text) || text;
+          if (!looksLikeCommand(rest)) return;
 
           beep();
+          phaseRef.current = "listening_command";
           setPhase("listening_command");
-          armCommandDeadline();
-          const rest = stripWake(text);
+          armSilenceEnd();
           commandBufferRef.current = rest;
           if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
           if (rest.length > 6 && isFinal) {
-            clearCommandDeadline();
-            commandBufferRef.current = "";
-            void askNovaRef.current(rest);
+            commitUtterance(rest);
             return;
           }
           commandTimerRef.current = setTimeout(() => {
-            const cmd = commandBufferRef.current.trim();
-            if (cmd.length >= 2) {
-              clearCommandDeadline();
-              commandBufferRef.current = "";
-              void askNovaRef.current(cmd);
-            } else {
-              openCommandWindowRef.current();
-            }
-          }, 1600);
+            commitUtterance(commandBufferRef.current);
+          }, 1400);
           return;
         }
 
         if (phaseRef.current === "listening_command") {
-          // Ignore a second bare wake while already listening for the command
+          armSilenceEnd();
+
           if (isWakeOnly(text)) {
-            beep();
-            armCommandDeadline();
+            armSilenceEnd();
             return;
           }
+
+          if (isCloseIntent(text)) {
+            if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+            commandBufferRef.current = "";
+            goDormantRef.current();
+            return;
+          }
+
           const rest = stripWake(text) || text;
-          if (rest.length < 2) return;
+          if (!looksLikeCommand(rest)) return;
+
           commandBufferRef.current = rest;
           if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
           commandTimerRef.current = setTimeout(() => {
-            const cmd = commandBufferRef.current.trim();
-            if (cmd.length < 2) return;
-            clearCommandDeadline();
-            commandBufferRef.current = "";
-            void askNovaRef.current(cmd);
+            commitUtterance(commandBufferRef.current);
           }, isFinal ? 450 : 1200);
         }
       };
@@ -453,7 +519,7 @@ export function NovaConsole() {
         recognitionRef.current = null;
       }
     },
-    [armCommandDeadline, clearCommandDeadline, killMic]
+    [armSilenceEnd, clearSilenceEnd, killMic]
   );
 
   useEffect(() => {
@@ -521,39 +587,66 @@ export function NovaConsole() {
     [killMic, playVoiceBlob, unlockAudio]
   );
 
-  const openCommandWindow = useCallback(() => {
+  const goDormant = useCallback(() => {
+    clearSilenceEnd();
+    if (commandTimerRef.current) {
+      clearTimeout(commandTimerRef.current);
+      commandTimerRef.current = null;
+    }
+    commandBufferRef.current = "";
+    if (phaseRef.current === "thinking" || phaseRef.current === "speaking") {
+      resumeModeRef.current = "wake";
+      return;
+    }
+    phaseRef.current = "listening_wake";
+    setPhase("listening_wake");
+    resumeModeRef.current = "wake";
+    // Keep the live mic; only restart if it died.
+    if (!recognitionRef.current && listeningOnRef.current) {
+      startMicRef.current("wake");
+    }
+  }, [clearSilenceEnd]);
+
+  const openConversation = useCallback(() => {
     unlockAudio();
     if (phaseRef.current === "thinking" || phaseRef.current === "speaking") {
       return;
     }
-    beep();
-    // Flip into command mode without killing the live mic (avoids visual/audio glitch).
     phaseRef.current = "listening_command";
     setPhase("listening_command");
-    armCommandDeadline();
+    armSilenceEnd();
     if (!recognitionRef.current && listeningOnRef.current) {
       startMicRef.current("command");
     }
-  }, [armCommandDeadline, unlockAudio]);
+  }, [armSilenceEnd, unlockAudio]);
 
   useEffect(() => {
-    openCommandWindowRef.current = openCommandWindow;
-  }, [openCommandWindow]);
+    goDormantRef.current = goDormant;
+  }, [goDormant]);
+
+  useEffect(() => {
+    openConversationRef.current = openConversation;
+  }, [openConversation]);
 
   const askNova = useCallback(
     async (message: string) => {
       const cleaned = message.trim();
       if (!cleaned || isWakeOnly(cleaned)) {
-        openCommandWindow();
+        openConversation();
+        return;
+      }
+
+      if (isCloseIntent(cleaned)) {
+        goDormant();
         return;
       }
 
       unlockAudio();
       setError(null);
-      clearCommandDeadline();
+      clearSilenceEnd();
       setPhase("thinking");
       killMic();
-      // After she finishes talking, keep listening ~10s for a follow-up.
+      // After she answers, stay open until silence / close intent says you're done.
       resumeModeRef.current = "command";
 
       setLines((prev) => [
@@ -581,6 +674,7 @@ export function NovaConsole() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Nova failed";
         setError(msg);
+        phaseRef.current = "listening_wake";
         setPhase("listening_wake");
         window.setTimeout(() => {
           if (listeningOnRef.current) startMicRef.current("wake");
@@ -588,9 +682,10 @@ export function NovaConsole() {
       }
     },
     [
-      clearCommandDeadline,
+      clearSilenceEnd,
+      goDormant,
       killMic,
-      openCommandWindow,
+      openConversation,
       refreshStatus,
       speak,
       unlockAudio,
@@ -601,7 +696,7 @@ export function NovaConsole() {
     askNovaRef.current = askNova;
   }, [askNova]);
 
-  // Always-on on mount
+  // Always-on on mount — dormant until intentional speech.
   useEffect(() => {
     listeningOnRef.current = true;
     setListeningOn(true);
@@ -609,7 +704,7 @@ export function NovaConsole() {
     return () => {
       listeningOnRef.current = false;
       killMic();
-      clearCommandDeadline();
+      clearSilenceEnd();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once
   }, []);
@@ -620,7 +715,7 @@ export function NovaConsole() {
       setListeningOn(false);
       listeningOnRef.current = false;
       killMic();
-      clearCommandDeadline();
+      clearSilenceEnd();
       setPhase("idle");
       return;
     }
@@ -673,9 +768,9 @@ export function NovaConsole() {
     : phase === "idle"
       ? "starting…"
       : phase === "listening_wake"
-        ? "say nova"
+        ? "ready — just talk"
         : phase === "listening_command"
-          ? "listening — 10s"
+          ? "listening"
           : phase === "thinking"
             ? "thinking"
             : phase === "speaking"
@@ -735,7 +830,7 @@ export function NovaConsole() {
       <main className="nova-stage">
         <h1 className="nova-brand font-display">NOVA</h1>
         <p className="nova-tagline">
-          Say <span>“Nova”</span>, then speak — she keeps listening.
+          Just talk — she listens, then stops when you’re done.
         </p>
 
         <div className={wrapClass}>
@@ -787,7 +882,7 @@ export function NovaConsole() {
         <div className="nova-transcript" ref={transcriptRef}>
           {lines.length === 0 && (
             <p className="text-center text-sm text-teal-100/30">
-              Waiting for your voice…
+              Ask anything — say “thanks” or go quiet when you’re done.
             </p>
           )}
           {lines.map((line) => (
