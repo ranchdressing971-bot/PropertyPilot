@@ -51,7 +51,10 @@ import {
 } from "@/lib/trash-collection";
 import { getActiveCompanyContext } from "@/lib/company";
 import { normalizeCommunityKey } from "@/lib/community-key";
-import { runCommunityVerification } from "@/lib/community-verification";
+import {
+  isCommunityVerificationEnabled,
+  runCommunityVerification,
+} from "@/lib/community-verification";
 
 export const maxDuration = 120;
 
@@ -499,65 +502,73 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Soft community fingerprint (never blocks save)
+    // Soft community map tips — never blocks save; gated until SQL + env ready
     let communityVerification: AIInspectionData["communityVerification"];
-    try {
-      const company = await getActiveCompanyContext();
-      const sub = subscription ?? (await getUserSubscription(userId));
-      const communityName =
-        sub.hoaName?.trim() ||
-        company?.hoaName?.trim() ||
-        neighborhood ||
-        "Your Community";
-      const communityKey =
-        sub.communityKey ||
-        normalizeCommunityKey(communityName) ||
-        "unknown";
-      const routePoints =
-        uploadGeo?.route?.map((p) => ({
-          lat: p.lat,
-          lng: p.lng,
-          accuracyM: p.accuracyM,
-          heading: p.heading,
-          t: p.t,
-        })) ??
-        (uploadGeo?.lat != null && uploadGeo?.lng != null
-          ? [
-              {
-                lat: uploadGeo.lat,
-                lng: uploadGeo.lng,
-                accuracyM: uploadGeo.accuracyM,
-                heading: uploadGeo.heading,
-              },
-            ]
-          : []);
+    if (isCommunityVerificationEnabled()) {
+      try {
+        const company = await getActiveCompanyContext();
+        const sub = subscription ?? (await getUserSubscription(userId));
+        const communityName =
+          sub.hoaName?.trim() ||
+          company?.hoaName?.trim() ||
+          neighborhood ||
+          "Your Community";
+        const communityKey =
+          sub.communityKey ||
+          normalizeCommunityKey(communityName) ||
+          "unknown";
+        const routePoints =
+          uploadGeo?.route?.map((p) => ({
+            lat: p.lat,
+            lng: p.lng,
+            accuracyM: p.accuracyM,
+            heading: p.heading,
+            t: p.t,
+          })) ??
+          (uploadGeo?.lat != null && uploadGeo?.lng != null
+            ? [
+                {
+                  lat: uploadGeo.lat,
+                  lng: uploadGeo.lng,
+                  accuracyM: uploadGeo.accuracyM,
+                  heading: uploadGeo.heading,
+                },
+              ]
+            : []);
 
-      const verification = await runCommunityVerification({
-        inspectionId: id,
-        communityName,
-        communityKey,
-        companyId: company?.companyId ?? null,
-        userId,
-        addresses: results.map((r) => r.address),
-        geo: uploadGeo,
-        routePoints,
-      });
+        const verification = await runCommunityVerification({
+          inspectionId: id,
+          communityName,
+          communityKey,
+          companyId: company?.companyId ?? null,
+          userId,
+          addresses: results.map((r) => r.address),
+          geo: uploadGeo,
+          routePoints,
+        });
 
-      communityVerification = {
-        outcome: verification.outcome,
-        eventId: verification.eventId,
-        fingerprintId: verification.fingerprintId,
-        matchRatio: verification.matchRatio,
-        knownCount: verification.knownCount,
-        newCount: verification.newCount,
-        newAddresses: verification.newAddresses,
-        helpfulMessage: verification.helpfulMessage,
-        needsUserAction: verification.needsUserAction,
-        flaggedForReview: verification.flaggedForReview,
-        communityName: verification.communityName,
-      };
-    } catch (err) {
-      console.error("community verification skipped:", err);
+        // Only attach UX when there's something gentle to show
+        if (
+          verification.needsUserAction ||
+          verification.outcome === "bootstrap"
+        ) {
+          communityVerification = {
+            outcome: verification.outcome,
+            eventId: verification.eventId,
+            fingerprintId: verification.fingerprintId,
+            matchRatio: verification.matchRatio,
+            knownCount: verification.knownCount,
+            newCount: verification.newCount,
+            newAddresses: verification.newAddresses,
+            helpfulMessage: verification.helpfulMessage,
+            needsUserAction: verification.needsUserAction,
+            flaggedForReview: false,
+            communityName: verification.communityName,
+          };
+        }
+      } catch (err) {
+        console.error("community verification skipped:", err);
+      }
     }
 
     const inspection: AIInspectionData = {
