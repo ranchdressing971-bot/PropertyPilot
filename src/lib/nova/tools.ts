@@ -18,134 +18,76 @@ import {
 } from "./send-plan";
 
 /**
- * Tool implementations Nova (OpenAI) can call. Nexus executes; Nova decides.
+ * Small, obvious tools. Nova should not need a playbook to use them.
+ *
+ * Everyday verbs:
+ *   status | find_leads | work | send_today | pause | remember
  */
 
 export const NOVA_TOOL_DEFS = [
   {
     type: "function" as const,
     function: {
-      name: "get_outreach_status",
+      name: "status",
       description:
-        "Live snapshot: companies, drafts, queue, Nova send plan, kill switch, Mailtrap.",
+        "How outreach is going right now — counts, send plan, blockers, a few drafts/companies.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
   {
     type: "function" as const,
     function: {
-      name: "list_recent_drafts",
-      description: "List recent outreach drafts with status and subject.",
-      parameters: {
-        type: "object",
-        properties: {
-          limit: { type: "number", description: "Max drafts (default 10)" },
-        },
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "list_companies",
-      description: "List active Nexus companies (small HOA leads).",
-      parameters: {
-        type: "object",
-        properties: {
-          limit: { type: "number", description: "Max companies (default 15)" },
-        },
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "start_search",
+      name: "find_leads",
       description:
-        "Enqueue a Google Places lead search, e.g. HOA management in a city.",
+        'Find HOA management companies. Pass a city like "Austin" or a full query.',
       parameters: {
         type: "object",
         properties: {
+          city: {
+            type: "string",
+            description: 'City name, e.g. "Austin" or "Austin TX"',
+          },
           query: {
             type: "string",
-            description: 'e.g. "HOA management company in Austin TX"',
+            description: "Optional full Places query if you don't want the default",
           },
-          maxResults: { type: "number" },
         },
-        required: ["query"],
       },
     },
   },
   {
     type: "function" as const,
     function: {
-      name: "continue_pipeline",
+      name: "work",
       description:
-        "Run one Nexus tick: process queued jobs (research, draft, review, send).",
+        "Do the next batch of Nexus work (research, draft, review, send jobs already queued).",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
   {
     type: "function" as const,
     function: {
-      name: "set_send_plan",
+      name: "send_today",
       description:
-        "YOU decide today's send volume. Sets how many emails to aim for today (0–hard ceiling). Does not send by itself — call queue_approved_sends after.",
-      parameters: {
-        type: "object",
-        properties: {
-          dailyTarget: {
-            type: "number",
-            description: "How many emails to send today",
-          },
-          note: {
-            type: "string",
-            description: "Why this volume (strategy note)",
-          },
-        },
-        required: ["dailyTarget"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "set_send_armed",
-      description:
-        "Arm or disarm sending. Disarmed = Nova pause (no transmits). Env NEXUS_SEND_ENABLED must also be true for real delivery.",
-      parameters: {
-        type: "object",
-        properties: {
-          armed: { type: "boolean" },
-          reason: { type: "string" },
-        },
-        required: ["armed"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "queue_approved_sends",
-      description:
-        "Queue up to N approved drafts for paced delivery (5–15 min jitter). YOU choose count. Safe to call before Mailtrap is wired — jobs wait.",
+        "ONE call to send N emails today: sets the plan, arms Nova, queues that many approved drafts (paced). Use this when Isaac says send X today.",
       parameters: {
         type: "object",
         properties: {
           count: {
             type: "number",
-            description:
-              "How many approved drafts to queue now (default = remaining daily target)",
+            description: "How many emails to send today (0–30)",
           },
+          note: { type: "string", description: "Optional why" },
         },
+        required: ["count"],
       },
     },
   },
   {
     type: "function" as const,
     function: {
-      name: "pause_outreach",
-      description: "Disarm sending and store the reason.",
+      name: "pause",
+      description: "Stop sending. Nova disarms until send_today (or arm) again.",
       parameters: {
         type: "object",
         properties: {
@@ -158,19 +100,14 @@ export const NOVA_TOOL_DEFS = [
     type: "function" as const,
     function: {
       name: "remember",
-      description:
-        "Store a lasting note/trial/preference for future Nova sessions.",
+      description: "Save a note/trial so future Nova sessions know it.",
       parameters: {
         type: "object",
         properties: {
+          content: { type: "string" },
           kind: {
             type: "string",
             enum: ["note", "trial", "preference", "fact"],
-          },
-          content: { type: "string" },
-          key: {
-            type: "string",
-            description: "Optional stable key to upsert (e.g. trial:short-subjects)",
           },
         },
         required: ["content"],
@@ -178,6 +115,135 @@ export const NOVA_TOOL_DEFS = [
     },
   },
 ];
+
+async function toolStatus() {
+  const state = await loadNexusState(40);
+  const plan = await getNovaSendPlan();
+  const approved = state.drafts.filter((d) => d.status === "approved");
+  const sent = state.drafts.filter((d) => d.status === "sent");
+  const active = state.companies.filter((c) => c.status === "active");
+
+  const blockers: string[] = [];
+  if (!plan.armed) blockers.push("Nova paused (call send_today to arm)");
+  if (!isNexusSendEnabled()) blockers.push("env NEXUS_SEND_ENABLED is false");
+  if (!isMailtrapConfigured()) blockers.push("Mailtrap not wired yet");
+  if (!isMailtrapSandbox() && !isWithinOutreachWindow()) {
+    blockers.push("outside 10am–3pm ET send window");
+  }
+
+  return {
+    summary: {
+      leads: active.length,
+      contacts: state.contactCount,
+      draftsWaiting: state.pendingDraftCount,
+      approvedReady: approved.length,
+      sent: sent.length,
+      jobsQueued: state.queuedCount,
+      todayTarget: plan.dailyTarget,
+      novaArmed: plan.armed,
+    },
+    blockers,
+    draftPreview: approved.slice(0, 5).map((d) => ({
+      to: d.to_email,
+      subject: d.subject,
+      company: d.company_name,
+    })),
+    leadPreview: active.slice(0, 5).map((c) => ({
+      name: c.name,
+      city: c.city,
+      reviews: c.metadata?.userRatingCount ?? null,
+    })),
+  };
+}
+
+async function toolFindLeads(args: Record<string, unknown>) {
+  const city = String(args.city ?? "").trim();
+  const custom = String(args.query ?? "").trim();
+  const query =
+    custom ||
+    (city
+      ? `HOA management company in ${city}`
+      : "HOA management company in Austin TX");
+
+  const db = requireNexusDb();
+  const job = await enqueueJob(
+    {
+      type: "lead.search",
+      payload: {
+        query,
+        maxResults: 40,
+      } satisfies LeadSearchPayload,
+      dedupeKey: `lead.search:${query.slice(0, 80)}`,
+    },
+    db
+  );
+
+  // Kick the pipeline once so work starts without a second tool call.
+  const tick = await runTick();
+
+  return {
+    query,
+    searchQueued: Boolean(job),
+    work: {
+      processed: tick.processed,
+      succeeded: tick.succeeded,
+      failed: tick.failed,
+    },
+    tip: "Call work again later to keep research/drafts moving.",
+  };
+}
+
+async function toolSendToday(args: Record<string, unknown>) {
+  const count = Math.max(
+    0,
+    Math.min(OUTREACH_MAX_SENDS_PER_DAY, Math.floor(Number(args.count)))
+  );
+  if (!Number.isFinite(Number(args.count))) {
+    return { error: "count required" };
+  }
+
+  const note = args.note ? String(args.note) : undefined;
+  const plan = await setNovaSendPlan({ dailyTarget: count, note });
+  await setNovaSendArmed(true, note || `Sending ${count} today`);
+
+  const db = requireNexusDb();
+  const { data } = await db
+    .from("nexus_drafts")
+    .select("id")
+    .eq("status", "approved")
+    .order("created_at", { ascending: true })
+    .limit(50);
+
+  const available = data ?? [];
+  const toQueue = Math.min(available.length, count);
+  let queued = 0;
+  for (const row of available.slice(0, toQueue)) {
+    await enqueueOutreachSend(
+      row.id,
+      db,
+      nextOutreachSendDelaySeconds() * (queued + 1)
+    );
+    queued += 1;
+  }
+
+  return {
+    plan,
+    queued,
+    approvedAvailable: available.length,
+    envSendEnabled: isNexusSendEnabled(),
+    mailtrapConfigured: isMailtrapConfigured(),
+    plainEnglish:
+      queued === 0
+        ? count === 0
+          ? "Target set to 0 — nothing queued."
+          : "No approved drafts ready. Run work / find_leads first."
+        : !isMailtrapConfigured()
+          ? `Queued ${queued}. They wait until Mailtrap is wired.`
+          : !isNexusSendEnabled()
+            ? `Queued ${queued}. Flip NEXUS_SEND_ENABLED=true to transmit.`
+            : `Queued ${queued} sends, paced every 5–15 minutes.`,
+  };
+}
 
 export async function runNovaTool(
   name: string,
@@ -190,102 +256,62 @@ export async function runNovaTool(
     args = {};
   }
 
+  // New simple names + old aliases so nothing breaks mid-flight.
   switch (name) {
-    case "get_outreach_status": {
-      const state = await loadNexusState(40);
-      const plan = await getNovaSendPlan();
-      const sent = state.drafts.filter((d) => d.status === "sent").length;
-      const approved = state.drafts.filter((d) => d.status === "approved").length;
-      const pending = state.pendingDraftCount;
-      return JSON.stringify({
-        schemaReady: state.schemaReady,
-        phase2Ready: state.phase2Ready,
-        companiesActive: state.companies.filter((c) => c.status === "active")
-          .length,
-        companyCount: state.companyCount,
-        contacts: state.contactCount,
-        draftsPendingReview: pending,
-        draftsApproved: approved,
-        draftsSentListed: sent,
-        queuedJobs: state.queuedCount,
-        novaPlan: plan,
-        envSendEnabled: isNexusSendEnabled(),
-        withinWindow: isWithinOutreachWindow(),
-        mailtrapConfigured: isMailtrapConfigured(),
-        mailtrapSandbox: isMailtrapSandbox(),
-        hardDailyCeiling: OUTREACH_MAX_SENDS_PER_DAY,
-        recentActions: state.actions.slice(0, 8).map((a) => ({
-          action: a.action,
-          at: a.created_at,
-          meta: a.metadata,
-        })),
-      });
-    }
-    case "list_recent_drafts": {
-      const state = await loadNexusState(30);
-      const limit = Math.min(20, Number(args.limit) || 10);
-      return JSON.stringify(
-        state.drafts.slice(0, limit).map((d) => ({
-          id: d.id,
-          to: d.to_email,
-          subject: d.subject,
-          status: d.status,
-          company: d.company_name,
-          confidence: d.confidence,
-        }))
-      );
-    }
-    case "list_companies": {
-      const state = await loadNexusState(40);
-      const limit = Math.min(30, Number(args.limit) || 15);
-      return JSON.stringify(
-        state.companies
-          .filter((c) => c.status === "active")
-          .slice(0, limit)
-          .map((c) => ({
-            id: c.id,
-            name: c.name,
-            city: c.city,
-            state: c.state,
-            website: c.website,
-            stage: c.stage,
-            research: c.research_status,
-            reviews: c.metadata?.userRatingCount ?? null,
-          }))
-      );
-    }
+    case "status":
+    case "get_outreach_status":
+    case "list_recent_drafts":
+    case "list_companies":
+      return JSON.stringify(await toolStatus());
+
+    case "find_leads":
     case "start_search": {
-      const query = String(args.query ?? "").trim();
-      if (!query) return JSON.stringify({ error: "query required" });
-      const db = requireNexusDb();
-      const job = await enqueueJob(
-        {
-          type: "lead.search",
-          payload: {
-            query,
-            maxResults: Number(args.maxResults) || 40,
-          } satisfies LeadSearchPayload,
-          dedupeKey: `lead.search:${query.slice(0, 80)}`,
-        },
-        db
-      );
-      return JSON.stringify({
-        queued: Boolean(job),
-        query,
-        tip: "Call continue_pipeline to process the search.",
-      });
+      if (name === "start_search" && args.query && !args.city) {
+        // legacy: query-only
+      }
+      return JSON.stringify(await toolFindLeads(args));
     }
+
+    case "work":
     case "continue_pipeline": {
       const tick = await runTick();
       return JSON.stringify({
         processed: tick.processed,
         succeeded: tick.succeeded,
         failed: tick.failed,
-        results: tick.results.slice(0, 10),
+        results: tick.results.slice(0, 8),
       });
     }
+
+    case "send_today":
+    case "queue_approved_sends": {
+      if (name === "queue_approved_sends") {
+        // legacy: count-only queue — still arm + plan for simplicity
+        args.count = args.count ?? (await getNovaSendPlan()).dailyTarget;
+      }
+      return JSON.stringify(await toolSendToday(args));
+    }
+
+    case "pause":
+    case "pause_outreach":
+    case "set_send_armed": {
+      if (name === "set_send_armed" && args.armed === true) {
+        const plan = await setNovaSendArmed(true, String(args.reason ?? ""));
+        return JSON.stringify({ ok: true, plan });
+      }
+      const reason = String(args.reason ?? "paused");
+      const plan = await setNovaSendArmed(false, reason);
+      await upsertNovaMemory({
+        kind: "preference",
+        key: "outreach.pause",
+        content: `Paused: ${reason}`,
+        metadata: { reason, at: new Date().toISOString() },
+      });
+      return JSON.stringify({ ok: true, plan, plainEnglish: "Sending paused." });
+    }
+
     case "set_send_plan": {
-      const dailyTarget = Number(args.dailyTarget);
+      const dailyTarget = Number(args.dailyTarget ?? args.count);
       if (!Number.isFinite(dailyTarget)) {
         return JSON.stringify({ error: "dailyTarget required" });
       }
@@ -295,88 +321,7 @@ export async function runNovaTool(
       });
       return JSON.stringify({ ok: true, plan });
     }
-    case "set_send_armed": {
-      const armed = Boolean(args.armed);
-      const plan = await setNovaSendArmed(
-        armed,
-        args.reason ? String(args.reason) : undefined
-      );
-      return JSON.stringify({
-        ok: true,
-        plan,
-        envSendEnabled: isNexusSendEnabled(),
-        mailtrapConfigured: isMailtrapConfigured(),
-        tip: !isNexusSendEnabled()
-          ? "Armed in Nova, but env NEXUS_SEND_ENABLED is still false — no real sends until Isaac flips it."
-          : !isMailtrapConfigured()
-            ? "Armed, but Mailtrap is not wired yet — queued jobs will wait."
-            : "Ready to transmit when you queue sends.",
-      });
-    }
-    case "queue_approved_sends": {
-      const plan = await getNovaSendPlan();
-      const db = requireNexusDb();
-      const { data } = await db
-        .from("nexus_drafts")
-        .select("id")
-        .eq("status", "approved")
-        .order("created_at", { ascending: true })
-        .limit(50);
 
-      const available = data ?? [];
-      const requested =
-        args.count != null && Number.isFinite(Number(args.count))
-          ? Math.floor(Number(args.count))
-          : plan.dailyTarget;
-      const count = Math.max(
-        0,
-        Math.min(available.length, requested, OUTREACH_MAX_SENDS_PER_DAY)
-      );
-
-      let n = 0;
-      for (const row of available.slice(0, count)) {
-        await enqueueOutreachSend(
-          row.id,
-          db,
-          nextOutreachSendDelaySeconds() * (n + 1)
-        );
-        n += 1;
-      }
-
-      return JSON.stringify({
-        queued: n,
-        approvedAvailable: available.length,
-        dailyTarget: plan.dailyTarget,
-        armed: plan.armed,
-        envSendEnabled: isNexusSendEnabled(),
-        mailtrapConfigured: isMailtrapConfigured(),
-        note:
-          n === 0
-            ? "Nothing queued — need approved drafts, or count was 0."
-            : !isMailtrapConfigured()
-              ? "Queued. Delivery waits until Mailtrap is configured."
-              : !plan.armed
-                ? "Queued, but Nova is disarmed — arm before they transmit."
-                : !isNexusSendEnabled()
-                  ? "Queued, but NEXUS_SEND_ENABLED is false."
-                  : "Queued with 5–15 min pacing.",
-      });
-    }
-    case "pause_outreach": {
-      const reason = String(args.reason ?? "operator asked to pause");
-      const plan = await setNovaSendArmed(false, reason);
-      await upsertNovaMemory({
-        kind: "preference",
-        key: "outreach.pause",
-        content: `Paused: ${reason}`,
-        metadata: { reason, at: new Date().toISOString() },
-      });
-      return JSON.stringify({
-        remembered: true,
-        plan,
-        note: "Nova disarmed. Optional hard stop: NEXUS_SEND_ENABLED=false on Vercel.",
-      });
-    }
     case "remember": {
       const content = String(args.content ?? "").trim();
       if (!content) return JSON.stringify({ error: "content required" });
@@ -385,13 +330,10 @@ export async function runNovaTool(
       )
         ? (args.kind as "note" | "trial" | "preference" | "fact")
         : "note";
-      await upsertNovaMemory({
-        kind,
-        content,
-        key: args.key ? String(args.key) : undefined,
-      });
-      return JSON.stringify({ saved: true, kind });
+      await upsertNovaMemory({ kind, content });
+      return JSON.stringify({ saved: true });
     }
+
     default:
       return JSON.stringify({ error: `Unknown tool: ${name}` });
   }
