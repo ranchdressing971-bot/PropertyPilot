@@ -797,9 +797,14 @@ export function NovaConsole() {
 
       <header className="nova-top">
         <div className="nova-top-inner">
-          <Link href="/nexus" className="nova-link">
-            Nexus
-          </Link>
+          <div className="flex flex-col gap-2">
+            <Link href="/nexus" className="nova-link">
+              Nexus
+            </Link>
+            <Link href="/nova/download" className="nova-link">
+              Get APK
+            </Link>
+          </div>
           <div className="nova-meta">
             <div className="flex items-center gap-2">
               <span

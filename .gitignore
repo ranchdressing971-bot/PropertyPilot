@@ -28,3 +28,11 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# Android / local build tooling (portable JDK + SDK)
+.tools/
+android-nova/local.properties
+android-nova/.gradle/
+android-nova/build/
+android-nova/app/build/
+android-nova/.idea/
