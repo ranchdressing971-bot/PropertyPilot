@@ -11,6 +11,10 @@ import {
 import { runTick } from "@/lib/nexus/runner";
 import type { LeadSearchPayload } from "@/lib/nexus/types";
 import { isResendConfigured } from "@/lib/resend";
+import {
+  logAbuseScanSummary,
+  scanCommunityUsageAbuse,
+} from "@/lib/abuse/community-usage-scan";
 import { loadBusinessBrief } from "./business";
 import { loadConversionReport, loadConversionSummary } from "./conversions";
 import {
@@ -49,8 +53,29 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "business",
       description:
-        "Full RideBy fleet intel: revenue (MRR/ARR/pipeline/multi-community), clients, activation (inspections/roster/dead paid), trial→paid, teams/seats/invites, product usage (audit 30d), trust/misuse flags, watchlists (past_due, canceled, deadPaid, trialBurned, highValue). Call for any business/MRR/client/churn/activation question — never invent numbers.",
+        "Full RideBy fleet intel: revenue (MRR/ARR/pipeline/multi-community), clients, activation, trial→paid, teams, product usage, abuse bot (under-billed communities), watchlists. Call for business/MRR/client/churn/activation — never invent numbers.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "abuse",
+      description:
+        "Run the community abuse bot: finds accounts billed for fewer communities than roster/inspection evidence (e.g. paid for 1, evidence of many neighborhoods/ZIPs). Review-only — never blocks. Use when Isaac asks about sus/abuse/under-billing.",
+      parameters: {
+        type: "object",
+        properties: {
+          persist: {
+            type: "boolean",
+            description: "If true, write suspects to audit_log for history",
+          },
+          limit: {
+            type: "number",
+            description: "Max suspects to return (default 25)",
+          },
+        },
+      },
     },
   },
   {
@@ -234,14 +259,20 @@ async function toolStatus() {
         converted: business.trials.claimedConverted,
         stillUnpaid: business.trials.claimedStillUnpaid,
       },
-      trust: business.trust,
+      trust: {
+        abuseFlagged: business.trust.abuseFlagged,
+        abuseHigh: business.trust.abuseHigh,
+        abuseMedium: business.trust.abuseMedium,
+        abusePlainEnglish: business.trust.abusePlainEnglish,
+      },
       watchlistCounts: {
         pastDue: business.watchlists.pastDue.length,
         deadPaid: business.watchlists.deadPaid.length,
         trialBurned: business.watchlists.trialBurnedUnpaid.length,
+        underBilled: business.watchlists.underBilledCommunities.length,
       },
       plainEnglish: business.plainEnglish,
-      tip: "Call business tool for full watchlists + client cards.",
+      tip: "Call business or abuse for under-billed community suspects.",
     },
     delivery: {
       canTransmitLive,
@@ -475,6 +506,30 @@ export async function runNovaTool(
     case "clients":
     case "fleet":
       return JSON.stringify(await loadBusinessBrief());
+
+    case "abuse":
+    case "sus":
+    case "under_billed": {
+      const limit =
+        args.limit != null && Number.isFinite(Number(args.limit))
+          ? Number(args.limit)
+          : 25;
+      const report = await scanCommunityUsageAbuse({ limit });
+      if (args.persist === true) {
+        await logAbuseScanSummary(report);
+        await upsertNovaMemory({
+          kind: "fact",
+          key: "abuse.community_usage",
+          content: report.plainEnglish,
+          metadata: {
+            flaggedCount: report.flaggedCount,
+            highCount: report.highCount,
+            at: new Date().toISOString(),
+          },
+        });
+      }
+      return JSON.stringify(report);
+    }
 
     case "find_leads":
     case "start_search": {

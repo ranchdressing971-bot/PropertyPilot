@@ -84,12 +84,18 @@ export async function GET() {
         converted: business.trials.claimedConverted,
         stillUnpaid: business.trials.claimedStillUnpaid,
       },
-      trust: business.trust,
+      trust: {
+        abuseFlagged: business.trust.abuseFlagged,
+        abuseHigh: business.trust.abuseHigh,
+        abuseMedium: business.trust.abuseMedium,
+        abuseLow: business.trust.abuseLow,
+      },
       watchlistCounts: {
         pastDue: business.watchlists.pastDue.length,
         deadPaid: business.watchlists.deadPaid.length,
         trialBurned: business.watchlists.trialBurnedUnpaid.length,
         canceled: business.watchlists.canceled.length,
+        underBilled: business.watchlists.underBilledCommunities.length,
       },
     },
     messages: messages.map((m) => ({

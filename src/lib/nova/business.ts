@@ -1,5 +1,7 @@
+import { scanCommunityUsageAbuse } from "@/lib/abuse/community-usage-scan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { FREE_TRIAL_INSPECTIONS } from "@/lib/stripe";
+import type { CommunityAbuseFlag } from "@/lib/abuse/community-usage-scan";
 
 type ProfileRow = {
   id: string;
@@ -105,11 +107,13 @@ export type BusinessBrief = {
     claimedStillUnpaid: number;
   };
   trust: {
-    fingerprints: number;
-    flaggedForReview: number;
-    highMisuseStreak: number;
-    verificationEventsLast30d: number;
-    largeDifferenceEvents: number;
+    /** Abuse bot — under-billed multi-community suspects (not fingerprints). */
+    abuseFlagged: number;
+    abuseHigh: number;
+    abuseMedium: number;
+    abuseLow: number;
+    abusePlainEnglish: string;
+    topSuspects: CommunityAbuseFlag[];
   };
   watchlists: {
     pastDue: ClientCard[];
@@ -117,6 +121,7 @@ export type BusinessBrief = {
     deadPaid: ClientCard[];
     trialBurnedUnpaid: ClientCard[];
     highValue: ClientCard[];
+    underBilledCommunities: CommunityAbuseFlag[];
   };
   recentClients: ClientCard[];
   plainEnglish: string;
@@ -190,11 +195,12 @@ const EMPTY: BusinessBrief = {
     claimedStillUnpaid: 0,
   },
   trust: {
-    fingerprints: 0,
-    flaggedForReview: 0,
-    highMisuseStreak: 0,
-    verificationEventsLast30d: 0,
-    largeDifferenceEvents: 0,
+    abuseFlagged: 0,
+    abuseHigh: 0,
+    abuseMedium: 0,
+    abuseLow: 0,
+    abusePlainEnglish: "Abuse bot not run.",
+    topSuspects: [],
   },
   watchlists: {
     pastDue: [],
@@ -202,6 +208,7 @@ const EMPTY: BusinessBrief = {
     deadPaid: [],
     trialBurnedUnpaid: [],
     highValue: [],
+    underBilledCommunities: [],
   },
   recentClients: [],
   plainEnglish: "No admin DB — can't read RideBy business metrics.",
@@ -284,11 +291,10 @@ export async function loadBusinessBrief(): Promise<BusinessBrief> {
     invites,
     trials,
     audits,
-    fingerprints,
-    verifyEvents,
     productCompanies,
     inspectionsExact,
     propertiesExact,
+    abuseReport,
   ] = await Promise.all([
     safeSelect<ProfileRow>("profiles", () =>
       admin
@@ -354,24 +360,6 @@ export async function loadBusinessBrief(): Promise<BusinessBrief> {
         .gte("created_at", since30)
         .limit(4000)
     ),
-    safeSelect<{
-      flagged_for_review: boolean | null;
-      misuse_streak: number | null;
-    }>("community_fingerprints", () =>
-      admin
-        .from("community_fingerprints")
-        .select("flagged_for_review, misuse_streak")
-        .limit(2000)
-    ),
-    safeSelect<{ outcome: string | null; created_at: string | null }>(
-      "community_verification_events",
-      () =>
-        admin
-          .from("community_verification_events")
-          .select("outcome, created_at")
-          .gte("created_at", since30)
-          .limit(2000)
-    ),
     safeCount("companies", () =>
       admin.from("companies").select("id", { count: "exact", head: true })
     ),
@@ -381,6 +369,7 @@ export async function loadBusinessBrief(): Promise<BusinessBrief> {
     safeCount("properties_exact", () =>
       admin.from("properties").select("id", { count: "exact", head: true })
     ),
+    scanCommunityUsageAbuse({ limit: 20 }),
   ]);
 
   const inspByUser = new Map<string, { count: number; firstAt: string | null }>();
@@ -548,14 +537,6 @@ export async function loadBusinessBrief(): Promise<BusinessBrief> {
     };
   });
 
-  const flaggedForReview = fingerprints.filter((f) => f.flagged_for_review).length;
-  const highMisuseStreak = fingerprints.filter(
-    (f) => (f.misuse_streak ?? 0) >= 2
-  ).length;
-  const largeDifferenceEvents = verifyEvents.filter(
-    (e) => (e.outcome ?? "").toLowerCase().includes("large")
-  ).length;
-
   const pipelineMrr = activeMrr + trialMrr;
   const avgInspectionsPerPaying =
     payingClients > 0
@@ -569,9 +550,9 @@ export async function loadBusinessBrief(): Promise<BusinessBrief> {
     `${signupsLast7d} signups / ${inspectionsLast7d} inspections in 7d.`,
     `Trials claimed ${trials.length} (${claimedConverted} converted in snapshot).`,
     `Teams: ${productCompanies} companies, ${multiSeatCompanies} multi-seat, ${invitesPending} invites pending.`,
-    flaggedForReview > 0
-      ? `${flaggedForReview} community fingerprints flagged for review.`
-      : "No community misuse flags.",
+    abuseReport.flaggedCount > 0
+      ? `Abuse bot: ${abuseReport.flaggedCount} under-billed multi-community suspect(s) (${abuseReport.highCount} high).`
+      : "Abuse bot: no under-billed multi-community suspects.",
   ].join(" ");
 
   const inspectionsTotal = inspectionsExact || inspections.length;
@@ -645,11 +626,12 @@ export async function loadBusinessBrief(): Promise<BusinessBrief> {
       claimedStillUnpaid,
     },
     trust: {
-      fingerprints: fingerprints.length,
-      flaggedForReview,
-      highMisuseStreak,
-      verificationEventsLast30d: verifyEvents.length,
-      largeDifferenceEvents,
+      abuseFlagged: abuseReport.flaggedCount,
+      abuseHigh: abuseReport.highCount,
+      abuseMedium: abuseReport.mediumCount,
+      abuseLow: abuseReport.lowCount,
+      abusePlainEnglish: abuseReport.plainEnglish,
+      topSuspects: abuseReport.flagged.slice(0, 8),
     },
     watchlists: {
       pastDue: pastDueList.slice(0, 15),
@@ -657,6 +639,7 @@ export async function loadBusinessBrief(): Promise<BusinessBrief> {
       deadPaid: deadPaid.slice(0, 15),
       trialBurnedUnpaid: trialBurned.slice(0, 15),
       highValue: highValue.slice(0, 15),
+      underBilledCommunities: abuseReport.flagged.slice(0, 15),
     },
     recentClients: recentPaying.slice(0, 15),
     plainEnglish,

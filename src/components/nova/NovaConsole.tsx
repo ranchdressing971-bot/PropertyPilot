@@ -81,13 +81,17 @@ interface StatusPayload {
       stillUnpaid: number;
     };
     trust?: {
-      flaggedForReview: number;
+      abuseFlagged?: number;
+      abuseHigh?: number;
+      abuseMedium?: number;
+      abuseLow?: number;
     };
     watchlistCounts?: {
       pastDue: number;
       deadPaid: number;
       trialBurned: number;
       canceled?: number;
+      underBilled?: number;
     };
   };
   messages: Array<{
@@ -2093,9 +2097,12 @@ export function NovaConsole() {
             {status?.business?.trials?.claimed ?? 0}
           </strong>
         </div>
-        {(status?.business?.trust?.flaggedForReview ?? 0) > 0 && (
+        {(status?.business?.trust?.abuseFlagged ?? 0) > 0 && (
           <div className="nova-hud-note">
-            {status?.business?.trust?.flaggedForReview} flagged
+            Abuse bot: {status?.business?.trust?.abuseFlagged} under-billed
+            {(status?.business?.trust?.abuseHigh ?? 0) > 0
+              ? ` (${status?.business?.trust?.abuseHigh} high)`
+              : ""}
           </div>
         )}
       </aside>

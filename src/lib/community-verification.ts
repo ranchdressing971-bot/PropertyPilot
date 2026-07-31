@@ -23,14 +23,14 @@ export const MATCH_RATIO_OK = 0.55;
 export const LARGE_DIFF_MATCH_RATIO = 0.35;
 
 /**
- * Opt-in gate. Production stays off until explicitly enabled after SQL is applied.
- * Development defaults on so local testing works without an env flip.
+ * Fingerprint soft-organizer — OFF by default everywhere.
+ * Abuse detection is handled by `src/lib/abuse/community-usage-scan.ts`
+ * (billing vs multi-neighborhood evidence), not fingerprints.
+ * Set COMMUNITY_VERIFICATION_ENABLED=true only if you still want soft map prompts.
  */
 export function isCommunityVerificationEnabled(): boolean {
   const flag = process.env.COMMUNITY_VERIFICATION_ENABLED?.trim().toLowerCase();
-  if (flag === "true" || flag === "1" || flag === "yes") return true;
-  if (flag === "false" || flag === "0" || flag === "no") return false;
-  return process.env.NODE_ENV === "development";
+  return flag === "true" || flag === "1" || flag === "yes";
 }
 
 export type VerificationOutcome =
