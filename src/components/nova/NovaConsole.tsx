@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { NovaMeshOrb } from "@/components/nova/NovaMeshOrb";
 
 type Phase =
   | "idle"
@@ -752,17 +753,6 @@ export function NovaConsole() {
     void askNova(stripWake(msg) || msg);
   };
 
-  const orbClass =
-    phase === "listening_wake"
-      ? "nova-orb is-wake"
-      : phase === "listening_command"
-        ? "nova-orb is-command"
-        : phase === "thinking"
-          ? "nova-orb is-think"
-          : phase === "speaking"
-            ? "nova-orb is-speak"
-            : "nova-orb";
-
   const wrapClass =
     phase === "listening_wake"
       ? "nova-orb-wrap is-wake"
@@ -862,23 +852,13 @@ export function NovaConsole() {
         <div className={wrapClass}>
           <span className="nova-orb-halo nova-orb-halo-a" aria-hidden />
           <span className="nova-orb-halo nova-orb-halo-b" aria-hidden />
-          <span className="nova-orb-particles" aria-hidden />
-          <button
-            type="button"
+          <NovaMeshOrb
+            phase={phase}
             onClick={toggleListening}
-            className={orbClass}
-            aria-label={
+            ariaLabel={
               listeningOn ? "Mute Nova mic" : "Enable always-on listening"
             }
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/nova-sphere.png"
-              alt=""
-              className="nova-orb-img"
-              draggable={false}
-            />
-          </button>
+          />
         </div>
 
         <div
