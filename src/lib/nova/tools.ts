@@ -24,7 +24,7 @@ import {
  * Small, obvious tools. Nova should not need a playbook to use them.
  *
  * Everyday verbs:
- *   status | find_leads | work | send_today | conversions | pause | remember
+ *   status | find_leads | work | send_today | learn | pause | remember
  */
 
 export const NOVA_TOOL_DEFS = [
@@ -88,9 +88,9 @@ export const NOVA_TOOL_DEFS = [
   {
     type: "function" as const,
     function: {
-      name: "conversions",
+      name: "learn",
       description:
-        "See who signed up for RideBy after your outreach emails. Matches sent draft emails to app profiles. Returns conversion rate, who converted, which subjects/cities work, recent signups, and how the app DB is wired. Use this to learn and remember what works.",
+        "Deep learning dossier: who signed up after your emails, WHY hints per convert, converts vs non-converts (themes, length, hour/weekday ET, city/state, review bands, confidence), funnel, rejections, trials, recent actions, and auto insights. Call this often; then remember winning hypotheses.",
       parameters: {
         type: "object",
         properties: {
@@ -100,7 +100,7 @@ export const NOVA_TOOL_DEFS = [
           },
           limit: {
             type: "number",
-            description: "Max matched rows to return (default 20)",
+            description: "Max matched convert rows (default 15)",
           },
         },
       },
@@ -181,11 +181,11 @@ async function toolStatus() {
       city: c.city,
       reviews: c.metadata?.userRatingCount ?? null,
     })),
-    tip: "Call conversions for who signed up and which subjects/cities convert.",
+    tip: "Call learn for converts, why-hints, and what differs from non-converts.",
   };
 }
 
-async function toolConversions(args: Record<string, unknown>) {
+async function toolLearn(args: Record<string, unknown>) {
   const sinceDays =
     args.sinceDays != null && Number.isFinite(Number(args.sinceDays))
       ? Number(args.sinceDays)
@@ -193,7 +193,7 @@ async function toolConversions(args: Record<string, unknown>) {
   const limit =
     args.limit != null && Number.isFinite(Number(args.limit))
       ? Number(args.limit)
-      : 20;
+      : 15;
 
   const report = await loadConversionReport({
     sinceDays,
@@ -201,47 +201,81 @@ async function toolConversions(args: Record<string, unknown>) {
     syncWins: true,
   });
 
-  // Persist a compact learning note when there is signal.
-  if (report.matchedCount > 0) {
-    const topSubject = report.bySubject.find((s) => s.converted > 0);
-    const topCity = report.byCity.find((c) => c.converted > 0);
-    const bits = [
-      `${report.matchedCount}/${report.sentCount} converts (${report.conversionRate}%) last ${report.sinceDays}d`,
-    ];
-    if (topSubject) {
-      bits.push(
-        `best subject so far: "${topSubject.subject.slice(0, 80)}" (${topSubject.converted}/${topSubject.sent})`
-      );
-    }
-    if (topCity) {
-      bits.push(
-        `best city so far: ${topCity.city} (${topCity.converted}/${topCity.sent})`
-      );
-    }
-    if (report.avgDaysToSignup != null) {
-      bits.push(`avg days to signup: ${report.avgDaysToSignup}`);
-    }
-    await upsertNovaMemory({
-      kind: "trial",
-      key: "outreach.conversions",
-      content: bits.join(" · "),
-      metadata: {
-        matchedCount: report.matchedCount,
-        sentCount: report.sentCount,
-        conversionRate: report.conversionRate,
-        at: new Date().toISOString(),
-      },
-    });
+  // Persist compact + insight memory so future sessions keep the lesson.
+  const bits = [
+    `${report.matchedCount}/${report.sentCount} converts (${report.conversionRate}%) last ${report.sinceDays}d`,
+  ];
+  const topSubject = report.bySubject.find((s) => s.converted > 0);
+  const topTheme = report.byTheme.find((t) => t.converted > 0 && t.key !== "no_theme");
+  const topCity = report.byCity.find((c) => c.converted > 0);
+  if (topSubject) {
+    bits.push(
+      `subject: "${topSubject.key.slice(0, 70)}" (${topSubject.converted}/${topSubject.sent})`
+    );
   }
+  if (topTheme) {
+    bits.push(
+      `theme: ${topTheme.key} (${topTheme.converted}/${topTheme.sent}, ${topTheme.rate}%)`
+    );
+  }
+  if (topCity) {
+    bits.push(`city: ${topCity.key} (${topCity.converted}/${topCity.sent})`);
+  }
+  if (report.avgDaysToSignup != null) {
+    bits.push(`avg days→signup: ${report.avgDaysToSignup}`);
+  }
+  if (report.insights[0]) bits.push(report.insights[0]);
+
+  await upsertNovaMemory({
+    kind: "trial",
+    key: "outreach.learning",
+    content: bits.join(" · "),
+    metadata: {
+      matchedCount: report.matchedCount,
+      sentCount: report.sentCount,
+      conversionRate: report.conversionRate,
+      topThemesConverted: report.winnersVsLosers.topThemesConverted,
+      bestHoursEt: report.winnersVsLosers.bestHoursEt,
+      insights: report.insights.slice(0, 6),
+      at: new Date().toISOString(),
+    },
+  });
 
   return {
-    ...report,
+    insights: report.insights,
+    summary: {
+      sentCount: report.sentCount,
+      matchedCount: report.matchedCount,
+      conversionRate: report.conversionRate,
+      paidOrActiveConverts: report.paidOrActiveConverts,
+      avgDaysToSignup: report.avgDaysToSignup,
+      medianDaysToSignup: report.medianDaysToSignup,
+    },
+    winnersVsLosers: report.winnersVsLosers,
+    byTheme: report.byTheme,
+    byCity: report.byCity,
+    byState: report.byState,
+    byHourEt: report.byHourEt,
+    byWeekday: report.byWeekday,
+    byBodyLength: report.byBodyLength,
+    byReviewBucket: report.byReviewBucket,
+    byConfidence: report.byConfidence,
+    bySubject: report.bySubject,
+    matches: report.matches,
+    nonConvertedSample: report.nonConvertedSample,
+    funnel: report.funnel,
+    rejections: report.rejections,
+    softNameMatches: report.softNameMatches,
+    recentSignups: report.recentSignups,
+    recentTrials: report.recentTrials,
+    recentActions: report.recentActions,
+    appContext: report.appContext,
     plainEnglish:
       report.sentCount === 0
-        ? "No sent outreach in this window yet — nothing to measure."
+        ? "No sent outreach in this window yet — nothing to learn from."
         : report.matchedCount === 0
-          ? `Sent ${report.sentCount} emails; none of those addresses have signed up yet (matched on email). Soft name matches: ${report.softNameMatches.length}.`
-          : `${report.matchedCount} signup(s) matched to your emails (${report.conversionRate}% of ${report.sentCount} sends). Companies marked won when matched.`,
+          ? `Sent ${report.sentCount}. No hard email→signup matches yet. Soft name matches: ${report.softNameMatches.length}. Read insights + nonConvertedSample, then experiment and remember.`
+          : `${report.matchedCount} convert(s) (${report.conversionRate}%). Read matches[].whyHints and winnersVsLosers to see why — then remember the hypothesis.`,
   };
 }
 
@@ -388,10 +422,11 @@ export async function runNovaTool(
       return JSON.stringify(await toolSendToday(args));
     }
 
+    case "learn":
     case "conversions":
     case "check_signups":
     case "who_signed_up":
-      return JSON.stringify(await toolConversions(args));
+      return JSON.stringify(await toolLearn(args));
 
     case "pause":
     case "pause_outreach":
