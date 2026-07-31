@@ -34,11 +34,10 @@ export async function synthesizeNovaSpeech(
       body: JSON.stringify({
         text: clipped,
         model_id: model,
+        // Keep settings minimal — "style" breaks some models/voices with 400s.
         voice_settings: {
           stability: 0.45,
           similarity_boost: 0.75,
-          style: 0.25,
-          use_speaker_boost: true,
         },
       }),
     }

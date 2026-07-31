@@ -87,6 +87,26 @@ export function NovaConsole() {
   const commandBufferRef = useRef("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const audioUnlockedRef = useRef(false);
+
+  /** Browsers block play() after async fetch unless audio was unlocked by a tap. */
+  const unlockAudio = useCallback(() => {
+    if (audioUnlockedRef.current) return;
+    try {
+      const a = new Audio(
+        "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="
+      );
+      a.volume = 0.01;
+      void a.play().then(() => {
+        a.pause();
+        audioUnlockedRef.current = true;
+      }).catch(() => {
+        /* still try later */
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -133,14 +153,27 @@ export function NovaConsole() {
         body: JSON.stringify({ text }),
       });
       if (res.status === 503) {
-        setPhase("idle");
+        setError(
+          "Voice off — add ELEVENLABS_API_KEY on Vercel (Production), redeploy, then retry."
+        );
         return;
       }
       if (!res.ok) {
-        setPhase("idle");
+        let detail = "Voice request failed";
+        try {
+          const data = (await res.json()) as { error?: string };
+          if (data.error) detail = data.error;
+        } catch {
+          /* binary or empty */
+        }
+        setError(detail);
         return;
       }
       const blob = await res.blob();
+      if (!blob.size) {
+        setError("Voice returned empty audio.");
+        return;
+      }
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;
@@ -149,9 +182,22 @@ export function NovaConsole() {
           URL.revokeObjectURL(url);
           resolve();
         };
-        audio.onerror = () => resolve();
-        void audio.play().catch(() => resolve());
+        audio.onerror = () => {
+          setError("Could not play Nova audio.");
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        void audio.play().catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : "play blocked";
+          setError(
+            `Browser blocked audio (${msg}). Tap the orb once, then ask again.`
+          );
+          URL.revokeObjectURL(url);
+          resolve();
+        });
       });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Voice failed");
     } finally {
       setPhase("idle");
     }
@@ -162,6 +208,7 @@ export function NovaConsole() {
       const cleaned = message.trim();
       if (!cleaned) return;
 
+      unlockAudio();
       setError(null);
       setPhase("thinking");
       const userLine: ChatLine = {
@@ -194,7 +241,7 @@ export function NovaConsole() {
         setPhase("idle");
       }
     },
-    [refreshStatus, speak]
+    [refreshStatus, speak, unlockAudio]
   );
 
   const stopWake = useCallback(() => {
@@ -205,6 +252,7 @@ export function NovaConsole() {
   }, []);
 
   const startWake = useCallback(() => {
+    unlockAudio();
     const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Ctor) {
       setMicSupported(false);
@@ -297,10 +345,11 @@ export function NovaConsole() {
       setWakeArmed(false);
       setPhase("idle");
     }
-  }, [askNova]);
+  }, [askNova, unlockAudio]);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    unlockAudio();
     const msg = input.trim();
     if (!msg) return;
     setInput("");
@@ -353,6 +402,7 @@ export function NovaConsole() {
             Env send {status?.sendEnabled ? "ON" : "OFF"}
             {status?.mailtrapConfigured ? "" : " · no Mailtrap"}
             {status?.mailtrapSandbox ? " · sandbox" : ""}
+            {status && !status.voiceConfigured ? " · voice key missing" : ""}
           </div>
           <div>
             Queue {status?.queuedJobs ?? "—"} · Approved{" "}
