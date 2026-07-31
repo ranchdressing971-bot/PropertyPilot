@@ -5,7 +5,8 @@ export type JobType =
   | "lead.score"
   | "research.company"
   | "outreach.draft"
-  | "outreach.review";
+  | "outreach.review"
+  | "outreach.send";
 
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
@@ -137,6 +138,11 @@ export interface OutreachDraftPayload {
 
 /** Payload for AI review of a draft before it becomes send-ready. */
 export interface OutreachReviewPayload {
+  draftId: string;
+}
+
+/** Payload for Mailtrap (or later Gmail) delivery of an approved draft. */
+export interface OutreachSendPayload {
   draftId: string;
 }
 

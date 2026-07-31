@@ -11,12 +11,15 @@ import {
 import { runLeadSearch, runLeadScore } from "./hands/lead";
 import { runResearchCompany } from "./hands/research";
 import { runOutreachDraft, runOutreachReview } from "./hands/outreach";
+import { enqueueOutreachSend, runOutreachSend } from "./hands/send";
 import { maxReviewCount } from "./lead-filter";
+import { nextOutreachSendDelaySeconds } from "./outreach-policy";
 import type {
   LeadSearchPayload,
   LeadScorePayload,
   OutreachDraftPayload,
   OutreachReviewPayload,
+  OutreachSendPayload,
   ResearchCompanyPayload,
 } from "./types";
 
@@ -46,6 +49,7 @@ const RESERVE_MS: Record<string, number> = {
   "research.company": 30_000,
   "outreach.draft": 25_000,
   "outreach.review": 20_000,
+  "outreach.send": 12_000,
 };
 const DEFAULT_RESERVE_MS = 20_000;
 
@@ -127,6 +131,22 @@ export async function runTick(): Promise<TickResult> {
     );
     scoreQueued += 1;
     if (scoreQueued >= 15) break;
+  }
+
+  // Approved drafts without a send job (pre-send-hand leftovers) get paced in.
+  const { data: approvedDrafts } = await db
+    .from("nexus_drafts")
+    .select("id")
+    .eq("status", "approved")
+    .limit(20);
+  let sendQueued = 0;
+  for (const row of approvedDrafts ?? []) {
+    await enqueueOutreachSend(
+      row.id,
+      db,
+      nextOutreachSendDelaySeconds() * (sendQueued + 1)
+    );
+    sendQueued += 1;
   }
 
   while (Date.now() - startedAt < TIME_BUDGET_MS) {
@@ -226,6 +246,23 @@ export async function runTick(): Promise<TickResult> {
             await logAction(
               {
                 action: "outreach.review_completed",
+                entityType: "job",
+                entityId: job.id,
+                metadata: handResult.metadata ?? {},
+              },
+              db
+            );
+            break;
+          }
+          case "outreach.send": {
+            const handResult = await runOutreachSend(
+              job.payload as unknown as OutreachSendPayload,
+              db
+            );
+            detail = handResult.summary;
+            await logAction(
+              {
+                action: "outreach.send_completed",
                 entityType: "job",
                 entityId: job.id,
                 metadata: handResult.metadata ?? {},

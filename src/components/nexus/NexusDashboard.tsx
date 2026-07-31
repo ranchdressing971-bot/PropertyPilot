@@ -177,6 +177,18 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink-100 bg-ink-50/60 px-4 py-3">
+        <p className="text-sm text-ink-600">
+          Talk to <span className="font-medium text-ink-900">Nova</span> — the
+          outreach manager that runs these tools.
+        </p>
+        <a
+          href="/nova"
+          className="text-sm font-medium text-brand-700 hover:text-brand-800"
+        >
+          Open Nova →
+        </a>
+      </div>
       {!state.phase2Ready && (
         <Card className="border border-amber-200 bg-amber-50">
           <div className="flex items-start gap-3">

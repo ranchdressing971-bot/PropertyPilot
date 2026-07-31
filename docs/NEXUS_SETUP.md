@@ -1,8 +1,10 @@
-# Nexus setup (Phase 1: Lead Hand)
+# Nexus + Nova setup
 
-Nexus is the internal outreach system. Phase 1 finds HOA management companies and
-stores them in Atlas. **Nothing sends email yet** — that is deliberate, so the
-lead pipeline can be built and reviewed with zero deliverability risk.
+**Nexus** is the outreach toolbox (search, research, draft, send).  
+**Nova** (`/nova`) is the AI manager that decides strategy and talks like Jarvis.
+
+Sending starts on **Mailtrap** (sandbox recommended). Real HOA inboxes stay
+safe until you turn sandbox off and verify a sending domain.
 
 ## 1. Create the database tables
 
@@ -10,12 +12,14 @@ Supabase → SQL Editor → paste and run, in order:
 
 1. [`docs/NEXUS_SCHEMA.sql`](NEXUS_SCHEMA.sql) — companies, contacts, jobs, actions, suppressions
 2. [`docs/NEXUS_SCHEMA_PHASE2.sql`](NEXUS_SCHEMA_PHASE2.sql) — research columns + draft review queue
+3. [`docs/NEXUS_SCHEMA_NOVA.sql`](NEXUS_SCHEMA_NOVA.sql) — Nova chat + memory
 
 Safe to re-run. Every table is service-role only, so the browser cannot read
 Nexus data even when signed in.
 
 Without the phase 2 migration, Lead Hand still works but Research and Outreach
-buttons stay locked.
+buttons stay locked. Without the Nova migration, `/nova` chat still answers but
+cannot persist memory.
 
 ## 2. Google Places API key
 
@@ -105,27 +109,54 @@ will later guarantee an email is never sent twice.
 A search that spans multiple Places pages requeues itself with the next page
 token rather than looping, so every invocation stays short.
 
-## Not built yet (later phases)
+## Mailtrap send (start here)
 
-- **Sending Hand** — Gmail API on a separate outreach domain, warmup ramp, daily caps, CAN-SPAM footer. Drafts already get approved in `/nexus`; this is the hand that actually transmits them.
-- **Inbox Hand** — ingest replies, classify intent, route by confidence
-- **Customer / Weekly Summary / Learning**
+1. Create a [Mailtrap](https://mailtrap.io) account
+2. **Email Testing** → open an inbox → copy the **Inbox ID**
+3. Settings → API Tokens → create a token
+4. Add to `.env.local` / Vercel:
 
-### Built in phase 2
+```bash
+MAILTRAP_API_TOKEN=...
+MAILTRAP_INBOX_ID=...          # required while MAILTRAP_SANDBOX=true
+MAILTRAP_FROM_EMAIL=isaac@your-test.domain
+MAILTRAP_FROM_NAME=Isaac at RideBy
+MAILTRAP_SANDBOX=true          # emails land in Mailtrap, not HOAs
+NEXUS_SEND_ENABLED=false       # flip to true only when ready to transmit
+```
 
-- **Research Hand** — crawl contact/about/team pages for public emails, storing the source URL for each
-- **Outreach Hand (draft only)** — personalized first-touch emails filed for your approval; never sends
+5. Redeploy. Approved drafts enqueue `outreach.send` with 5–15 min jitter.
+6. Live (non-sandbox) also enforces 10:00–15:00 America/New_York weekdays and a
+   daily cap of 30. Sandbox may send anytime so you can test at night.
+7. Kill switch: set `NEXUS_SEND_ENABLED=false` and redeploy to hard-stop.
 
-### Before any sending is added
+When you leave sandbox: verify a Mailtrap sending domain, set
+`MAILTRAP_SANDBOX=false`, keep product Resend mail on a different domain.
 
-- Register a **separate outreach domain**. Never send cold email from the domain
-  serving product email.
-- Google Workspace Business Starter is $8.40/user/month flexible, or $7 with an
-  annual commitment.
-- Gmail allows 2,000 external recipients per day, but that is not the real limit.
-  A new domain should start at 20-30 per day and ramp to 50-80 over about six
-  weeks. Nexus should enforce that cap itself.
-- Cold B2B email is legal in the US under CAN-SPAM provided the message has
-  accurate headers, a real physical postal address, an honest subject line, and a
-  working opt-out honored promptly. The `nexus_suppressions` table exists for
-  exactly this and already ships.
+## Nova (Jarvis cockpit)
+
+1. Open `/nova` while signed in as a Nexus admin
+2. Tap the orb → allow mic → say **“Hey Nova, how are the emails going?”**
+3. Or type in the box (Safari/wake-word fallback)
+4. Voice replies need ElevenLabs:
+
+```bash
+ELEVENLABS_API_KEY=...
+ELEVENLABS_VOICE_ID=...        # optional; defaults to a stock voice
+# ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+```
+
+Nova can call Nexus tools: status, list drafts/companies, start search, run a
+tick, queue approved sends, and store memory/trials.
+
+## Later phases
+
+- **Gmail / Workspace send** — swap behind the same `outreach.send` hand on a
+  dedicated outreach domain (warmup ramp, CAN-SPAM footer)
+- **Inbox Hand** — ingest replies, classify intent
+- **Full experiment UI** — Nova already stores trial notes in `nova_memory`
+
+### Built now
+
+- Lead / Research / Draft / AI review / **Mailtrap send**
+- Nova chat + wake word + ElevenLabs speak-back

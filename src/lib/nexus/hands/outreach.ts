@@ -2,7 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createChatCompletion } from "@/lib/openai-retry";
 import { getOpenAIApiKey } from "@/lib/openai-env";
 import { enqueueJob, logAction } from "../jobs";
-import { OUTREACH_AUTO_APPROVE_MIN_SCORE } from "../outreach-policy";
+import { enqueueOutreachSend } from "./send";
+import {
+  OUTREACH_AUTO_APPROVE_MIN_SCORE,
+  nextOutreachSendDelaySeconds,
+} from "../outreach-policy";
 import type {
   HandResult,
   NexusCompany,
@@ -611,9 +615,14 @@ export async function runOutreachReview(
     db
   );
 
+  if (approving) {
+    // Pace into the Mailtrap send queue — not an immediate spray.
+    await enqueueOutreachSend(draftId, db, nextOutreachSendDelaySeconds());
+  }
+
   return {
     summary: approving
-      ? `auto-approved (${score}) for ${draft.to_email}`
+      ? `auto-approved (${score}) for ${draft.to_email} — send queued`
       : `auto-rejected (${score}): ${reason}`,
     metadata: { draftId, decision, score, reason },
   };
