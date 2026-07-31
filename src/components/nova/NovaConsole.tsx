@@ -227,6 +227,60 @@ export function NovaConsole() {
     }
   }, []);
 
+  /** Free device TTS (Web Speech API) when ElevenLabs is missing or out of credits. */
+  const speakWithBrowser = useCallback(async (text: string) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      throw new Error("This browser has no free device voice.");
+    }
+    const clipped = text.trim().slice(0, 2500);
+    if (!clipped) return;
+
+    await new Promise<void>((resolve) => {
+      const ready = window.speechSynthesis.getVoices();
+      if (ready.length > 0) {
+        resolve();
+        return;
+      }
+      const onVoices = () => {
+        window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
+        resolve();
+      };
+      window.speechSynthesis.addEventListener("voiceschanged", onVoices);
+      window.setTimeout(() => {
+        window.speechSynthesis.removeEventListener("voiceschanged", onVoices);
+        resolve();
+      }, 600);
+    });
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(clipped);
+    const voices = window.speechSynthesis.getVoices();
+    const preferred =
+      voices.find((v) =>
+        /samantha|karen|moira|victoria|susan|zira|google us english|Samantha/i.test(
+          v.name
+        )
+      ) ||
+      voices.find((v) => /^en(-|_)/i.test(v.lang)) ||
+      voices.find((v) => v.lang.toLowerCase().startsWith("en"));
+    if (preferred) utterance.voice = preferred;
+    utterance.rate = 1.05;
+    utterance.pitch = 1.08;
+    utterance.volume = 1;
+
+    await new Promise<void>((resolve, reject) => {
+      utterance.onend = () => resolve();
+      utterance.onerror = (event) => {
+        if (event.error === "interrupted" || event.error === "canceled") {
+          resolve();
+          return;
+        }
+        reject(new Error(event.error || "Device voice failed"));
+      };
+      window.speechSynthesis.speak(utterance);
+    });
+  }, []);
+
   const playVoiceBlob = useCallback(async (blob: Blob) => {
     const el = audioElRef.current;
     if (!el) throw new Error("Audio element missing");
@@ -318,6 +372,11 @@ export function NovaConsole() {
     if (commandTimerRef.current) {
       clearTimeout(commandTimerRef.current);
       commandTimerRef.current = null;
+    }
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {
+      /* ignore */
     }
     const rec = recognitionRef.current;
     recognitionRef.current = null;
@@ -552,19 +611,45 @@ export function NovaConsole() {
       killMic();
       unlockAudio();
       try {
+        if (typeof window !== "undefined") {
+          window.speechSynthesis?.cancel();
+        }
         const res = await fetch("/api/nova/speak", {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text }),
         });
+
+        // Missing key, out of credits, or rate limit → free device voice.
         if (res.status === 503) {
+          let code = "";
+          try {
+            const data = (await res.json()) as { code?: string; error?: string };
+            code = data.code ?? "";
+          } catch {
+            /* ignore */
+          }
+          if (code === "FALLBACK_BROWSER" || !code) {
+            await speakWithBrowser(text);
+            setError(null);
+            return;
+          }
           setError(
             "Voice off — add ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID on Vercel, redeploy."
           );
           return;
         }
+
         if (!res.ok) {
+          // Any ElevenLabs failure: try free voice before surfacing an error.
+          try {
+            await speakWithBrowser(text);
+            setError(null);
+            return;
+          } catch {
+            /* fall through */
+          }
           let detail = "Voice request failed";
           try {
             const data = (await res.json()) as { error?: string };
@@ -577,7 +662,7 @@ export function NovaConsole() {
         }
         const blob = await res.blob();
         if (!blob.size) {
-          setError("Voice returned empty audio.");
+          await speakWithBrowser(text);
           return;
         }
         // Ensure MPEG type — some browsers refuse generic blobs.
@@ -585,14 +670,23 @@ export function NovaConsole() {
           blob.type && blob.type !== "application/octet-stream"
             ? blob
             : new Blob([blob], { type: "audio/mpeg" });
-        await playVoiceBlob(typed);
+        try {
+          await playVoiceBlob(typed);
+        } catch {
+          await speakWithBrowser(text);
+        }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Voice failed";
-        if (/play|NotAllowed|interact/i.test(msg)) {
-          setNeedsGesture(true);
-          setError("Tap the orb once to unlock sound, then try again.");
-        } else {
-          setError(msg);
+        try {
+          await speakWithBrowser(text);
+          setError(null);
+        } catch {
+          const msg = err instanceof Error ? err.message : "Voice failed";
+          if (/play|NotAllowed|interact/i.test(msg)) {
+            setNeedsGesture(true);
+            setError("Tap the orb once to unlock sound, then try again.");
+          } else {
+            setError(msg);
+          }
         }
       } finally {
         const mode = resumeModeRef.current;
@@ -603,7 +697,7 @@ export function NovaConsole() {
         }, 350);
       }
     },
-    [killMic, playVoiceBlob, unlockAudio]
+    [killMic, playVoiceBlob, speakWithBrowser, unlockAudio]
   );
 
   const goDormant = useCallback(() => {

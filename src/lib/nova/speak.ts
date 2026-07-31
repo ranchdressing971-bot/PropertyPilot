@@ -128,11 +128,30 @@ export async function synthesizeNovaSpeech(
     const detail = await response.text();
     const lower = detail.toLowerCase();
     cachedVoiceId = null;
+
+    // Out of credits / rate limit — client should use free browser TTS.
+    if (
+      response.status === 401 ||
+      response.status === 402 ||
+      response.status === 429 ||
+      lower.includes("quota") ||
+      lower.includes("credit") ||
+      lower.includes("rate limit") ||
+      lower.includes("too many requests") ||
+      lower.includes("payment") ||
+      lower.includes("insufficient")
+    ) {
+      const err = new Error(
+        "ElevenLabs credits exhausted or rate-limited — using free device voice."
+      );
+      (err as Error & { code?: string }).code = "QUOTA";
+      throw err;
+    }
+
     if (
       lower.includes("paying") ||
       lower.includes("library") ||
-      lower.includes("subscription") ||
-      response.status === 402
+      lower.includes("subscription")
     ) {
       throw new Error(
         "That ElevenLabs voice needs a paid plan. Use your custom “Nova” voice from My Voices — copy its voice ID (not the name) into ELEVENLABS_VOICE_ID."

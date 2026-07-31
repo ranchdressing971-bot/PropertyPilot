@@ -35,6 +35,8 @@ export async function GET() {
     mailtrapConfigured: isMailtrapConfigured(),
     mailtrapSandbox: isMailtrapSandbox(),
     voiceConfigured: isElevenLabsConfigured(),
+    /** Always true — Web Speech API kicks in when ElevenLabs is missing or out of credits. */
+    browserVoiceFallback: true,
     queuedJobs: state.queuedCount,
     companies: state.companies.filter((c) => c.status === "active").length,
     approvedDrafts: state.drafts.filter((d) => d.status === "approved").length,
