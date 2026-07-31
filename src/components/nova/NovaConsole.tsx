@@ -1690,8 +1690,8 @@ export function NovaConsole() {
       <main className="nova-stage">
         <h1 className="nova-brand font-display">NOVA</h1>
         <p className="nova-tagline">
-          Nova runs outreach. Say <span>“Hey Nova”</span> — talk like a
-          colleague. She’ll push back if the plan’s weak.
+          Nova runs outreach. Say <span>“Hey Nova”</span> — she’ll shoot
+          straight, push back when needed, and keep it real.
         </p>
 
         <div className={wrapClass}>
@@ -1763,8 +1763,8 @@ export function NovaConsole() {
         <div className="nova-transcript" ref={transcriptRef}>
           {lines.length === 0 && (
             <p className="text-center text-sm text-white/25">
-              Say “Hey Nova” for a pipeline read or a decision. Ambient talk is
-              ignored.
+              Say “Hey Nova” for a pipeline read or a call. She’ll tell you
+              what she’d actually do — ambient talk is ignored.
             </p>
           )}
           {lines.map((line) => (
