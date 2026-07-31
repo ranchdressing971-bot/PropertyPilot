@@ -49,7 +49,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "business",
       description:
-        "RideBy business intelligence: MRR, ARR, active/trialing/past_due clients, product companies, inspections, community trials, plan mix, recent paying clients. Use for 'how's the business', MRR, client counts — never invent dollars.",
+        "Full RideBy fleet intel: revenue (MRR/ARR/pipeline/multi-community), clients, activation (inspections/roster/dead paid), trial→paid, teams/seats/invites, product usage (audit 30d), trust/misuse flags, watchlists (past_due, canceled, deadPaid, trialBurned, highValue). Call for any business/MRR/client/churn/activation question — never invent numbers.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
@@ -224,9 +224,24 @@ async function toolStatus() {
       payingClients: business.payingClients,
       trialingClients: business.trialingClients,
       pastDueClients: business.pastDueClients,
+      canceledClients: business.canceledClients,
       productCompanies: business.productCompanies,
       inspectionsTotal: business.inspectionsTotal,
+      activation: business.activation,
+      teams: business.teams,
+      trials: {
+        claimed: business.trials.claimed,
+        converted: business.trials.claimedConverted,
+        stillUnpaid: business.trials.claimedStillUnpaid,
+      },
+      trust: business.trust,
+      watchlistCounts: {
+        pastDue: business.watchlists.pastDue.length,
+        deadPaid: business.watchlists.deadPaid.length,
+        trialBurned: business.watchlists.trialBurnedUnpaid.length,
+      },
       plainEnglish: business.plainEnglish,
+      tip: "Call business tool for full watchlists + client cards.",
     },
     delivery: {
       canTransmitLive,

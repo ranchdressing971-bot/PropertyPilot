@@ -49,10 +49,38 @@ interface StatusPayload {
     payingClients: number;
     trialingClients: number;
     pastDueClients: number;
+    canceledClients?: number;
     productCompanies: number;
     inspectionsTotal: number;
     communityTrialsClaimed: number;
     totalProfiles: number;
+    activation?: {
+      payingWithZeroInspections: number;
+      signupsLast7d: number;
+      inspectionsLast7d: number;
+      trialBurnedUnpaid: number;
+      avgInspectionsPerPaying: number;
+      propertiesTotal: number;
+    };
+    teams?: {
+      multiSeatCompanies: number;
+      invitesPending: number;
+      activeMembers: number;
+    };
+    trials?: {
+      claimed: number;
+      converted: number;
+      stillUnpaid: number;
+    };
+    trust?: {
+      flaggedForReview: number;
+    };
+    watchlistCounts?: {
+      pastDue: number;
+      deadPaid: number;
+      trialBurned: number;
+      canceled?: number;
+    };
   };
   messages: Array<{
     id: string;
@@ -1937,17 +1965,48 @@ export function NovaConsole() {
         </div>
         <div className="nova-hud-divider" />
         <div className="nova-hud-row">
+          <span>Dead paid</span>
+          <strong>
+            {status?.business?.activation?.payingWithZeroInspections ??
+              status?.business?.watchlistCounts?.deadPaid ??
+              0}
+          </strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>7d signups</span>
+          <strong>{status?.business?.activation?.signupsLast7d ?? 0}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>7d inspect</span>
+          <strong>
+            {status?.business?.activation?.inspectionsLast7d ?? 0}
+          </strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>Trial→paid</span>
+          <strong>
+            {status?.business?.trials?.converted ?? 0}/
+            {status?.business?.trials?.claimed ?? 0}
+          </strong>
+        </div>
+        <div className="nova-hud-divider" />
+        <div className="nova-hud-row">
           <span>Companies</span>
           <strong>{status?.business?.productCompanies ?? 0}</strong>
+        </div>
+        <div className="nova-hud-row">
+          <span>Multi-seat</span>
+          <strong>{status?.business?.teams?.multiSeatCompanies ?? 0}</strong>
         </div>
         <div className="nova-hud-row">
           <span>Inspections</span>
           <strong>{status?.business?.inspectionsTotal ?? 0}</strong>
         </div>
-        <div className="nova-hud-row">
-          <span>Profiles</span>
-          <strong>{status?.business?.totalProfiles ?? 0}</strong>
-        </div>
+        {(status?.business?.trust?.flaggedForReview ?? 0) > 0 && (
+          <div className="nova-hud-note">
+            {status?.business?.trust?.flaggedForReview} fingerprint(s) flagged
+          </div>
+        )}
       </aside>
 
       <main className="nova-stage">
