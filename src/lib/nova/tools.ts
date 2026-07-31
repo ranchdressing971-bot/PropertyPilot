@@ -90,7 +90,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "learn",
       description:
-        "Deep learning dossier: who signed up after your emails, WHY hints per convert, converts vs non-converts (themes, length, hour/weekday ET, city/state, review bands, confidence), funnel, rejections, trials, recent actions, and auto insights. Call this often; then remember winning hypotheses.",
+        "Deep learning dossier: who signed up or subscribed after your emails, timing lag (sent→signup→subscribe), WHY hints per convert, converts vs non-converts (themes/subjects that convert and subscribe, length, hour/weekday ET, city/state, review bands), soft name matches, funnel, rejections, trials, recent subscribers, and auto insights. Call this often; then remember winning hypotheses.",
       parameters: {
         type: "object",
         properties: {
@@ -167,6 +167,8 @@ async function toolStatus() {
       novaArmed: plan.armed,
       conversionsMatched: conversions.matchedCount,
       conversionRate: conversions.conversionRate,
+      subscribedCount: conversions.subscribedCount,
+      subscriptionRate: conversions.subscriptionRate,
       sentInWindow: conversions.sentCount,
       recentSignups: conversions.recentSignupCount,
     },
@@ -181,7 +183,7 @@ async function toolStatus() {
       city: c.city,
       reviews: c.metadata?.userRatingCount ?? null,
     })),
-    tip: "Call learn for converts, why-hints, and what differs from non-converts.",
+    tip: "Call learn for converts, subscribers, why-hints, and what differs from non-converts.",
   };
 }
 
@@ -203,10 +205,18 @@ async function toolLearn(args: Record<string, unknown>) {
 
   // Persist compact + insight memory so future sessions keep the lesson.
   const bits = [
-    `${report.matchedCount}/${report.sentCount} converts (${report.conversionRate}%) last ${report.sinceDays}d`,
+    `${report.matchedCount}/${report.sentCount} signup converts (${report.conversionRate}%) last ${report.sinceDays}d`,
   ];
+  if (report.subscribedCount > 0) {
+    bits.push(
+      `${report.subscribedCount} subscribed (${report.subscriptionRate}% of sends)`
+    );
+  }
   const topSubject = report.bySubject.find((s) => s.converted > 0);
   const topTheme = report.byTheme.find((t) => t.converted > 0 && t.key !== "no_theme");
+  const topSubTheme = report.byThemeSubscribed.find(
+    (t) => t.converted > 0 && t.key !== "no_theme"
+  );
   const topCity = report.byCity.find((c) => c.converted > 0);
   if (topSubject) {
     bits.push(
@@ -218,11 +228,19 @@ async function toolLearn(args: Record<string, unknown>) {
       `theme: ${topTheme.key} (${topTheme.converted}/${topTheme.sent}, ${topTheme.rate}%)`
     );
   }
+  if (topSubTheme) {
+    bits.push(
+      `sub theme: ${topSubTheme.key} (${topSubTheme.converted}/${topSubTheme.sent})`
+    );
+  }
   if (topCity) {
     bits.push(`city: ${topCity.key} (${topCity.converted}/${topCity.sent})`);
   }
   if (report.avgDaysToSignup != null) {
     bits.push(`avg days→signup: ${report.avgDaysToSignup}`);
+  }
+  if (report.avgDaysToSubscribe != null) {
+    bits.push(`avg days→subscribe: ${report.avgDaysToSubscribe}`);
   }
   if (report.insights[0]) bits.push(report.insights[0]);
 
@@ -234,8 +252,15 @@ async function toolLearn(args: Record<string, unknown>) {
       matchedCount: report.matchedCount,
       sentCount: report.sentCount,
       conversionRate: report.conversionRate,
+      subscribedCount: report.subscribedCount,
+      subscriptionRate: report.subscriptionRate,
       topThemesConverted: report.winnersVsLosers.topThemesConverted,
+      topThemesSubscribed: report.byThemeSubscribed
+        .filter((t) => t.converted > 0)
+        .slice(0, 5)
+        .map((t) => t.key),
       bestHoursEt: report.winnersVsLosers.bestHoursEt,
+      avgDaysToSubscribe: report.avgDaysToSubscribe,
       insights: report.insights.slice(0, 6),
       at: new Date().toISOString(),
     },
@@ -248,11 +273,18 @@ async function toolLearn(args: Record<string, unknown>) {
       matchedCount: report.matchedCount,
       conversionRate: report.conversionRate,
       paidOrActiveConverts: report.paidOrActiveConverts,
+      subscribedCount: report.subscribedCount,
+      subscriptionRate: report.subscriptionRate,
       avgDaysToSignup: report.avgDaysToSignup,
       medianDaysToSignup: report.medianDaysToSignup,
+      avgDaysToSubscribe: report.avgDaysToSubscribe,
+      medianDaysToSubscribe: report.medianDaysToSubscribe,
     },
+    subscriptionFunnel: report.subscriptionFunnel,
     winnersVsLosers: report.winnersVsLosers,
     byTheme: report.byTheme,
+    byThemeSubscribed: report.byThemeSubscribed,
+    bySubjectSubscribed: report.bySubjectSubscribed,
     byCity: report.byCity,
     byState: report.byState,
     byHourEt: report.byHourEt,
@@ -267,6 +299,7 @@ async function toolLearn(args: Record<string, unknown>) {
     rejections: report.rejections,
     softNameMatches: report.softNameMatches,
     recentSignups: report.recentSignups,
+    recentSubscribers: report.recentSubscribers,
     recentTrials: report.recentTrials,
     recentActions: report.recentActions,
     appContext: report.appContext,
@@ -274,8 +307,8 @@ async function toolLearn(args: Record<string, unknown>) {
       report.sentCount === 0
         ? "No sent outreach in this window yet — nothing to learn from."
         : report.matchedCount === 0
-          ? `Sent ${report.sentCount}. No hard email→signup matches yet. Soft name matches: ${report.softNameMatches.length}. Read insights + nonConvertedSample, then experiment and remember.`
-          : `${report.matchedCount} convert(s) (${report.conversionRate}%). Read matches[].whyHints and winnersVsLosers to see why — then remember the hypothesis.`,
+          ? `Sent ${report.sentCount}. No hard email→signup matches yet. Soft name matches: ${report.softNameMatches.length}. Subscribers after outreach: ${report.subscribedCount}. Read insights + nonConvertedSample, then experiment and remember.`
+          : `${report.matchedCount} signup convert(s) (${report.conversionRate}%), ${report.subscribedCount} subscribed (${report.subscriptionRate}%). Read matches[].whyHints, daysToSubscribe, and byThemeSubscribed — then remember the hypothesis.`,
   };
 }
 

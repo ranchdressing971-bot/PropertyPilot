@@ -44,6 +44,8 @@ export async function GET() {
     pendingDrafts: state.pendingDraftCount,
     conversionsMatched: conversions.matchedCount,
     conversionRate: conversions.conversionRate,
+    subscribedCount: conversions.subscribedCount,
+    subscriptionRate: conversions.subscriptionRate,
     sentInWindow: conversions.sentCount,
     recentSignupCount: conversions.recentSignupCount,
     messages: messages.map((m) => ({

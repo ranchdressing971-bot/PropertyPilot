@@ -34,6 +34,8 @@ interface StatusPayload {
   pendingDrafts: number;
   conversionsMatched?: number;
   conversionRate?: number;
+  subscribedCount?: number;
+  subscriptionRate?: number;
   sentInWindow?: number;
   recentSignupCount?: number;
   messages: Array<{
@@ -1291,6 +1293,9 @@ export function NovaConsole() {
                 : ""}
               {status?.conversionRate != null
                 ? ` · ${status.conversionRate}%`
+                : ""}
+              {(status?.subscribedCount ?? 0) > 0
+                ? ` · ${status.subscribedCount} subscribed`
                 : ""}
             </div>
           </div>

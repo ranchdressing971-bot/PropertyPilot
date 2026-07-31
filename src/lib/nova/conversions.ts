@@ -4,6 +4,12 @@
  */
 
 import { getNexusDb, requireNexusDb } from "@/lib/nexus/jobs";
+import {
+  isActiveSubscriptionStatus,
+  loadSubscriptionEvents,
+  resolveSubscriptionTiming,
+  type SubscribedAtSource,
+} from "./subscription-events";
 
 export interface ConversionMatch {
   draftId: string;
@@ -25,6 +31,11 @@ export interface ConversionMatch {
   plan: string | null;
   subscriptionStatus: string | null;
   daysToSignup: number;
+  isSubscribed: boolean;
+  subscribedAt: string | null;
+  subscribedAtSource: SubscribedAtSource | null;
+  daysToSubscribe: number | null;
+  conversionPath: "signup_only" | "signup_and_subscribed" | "subscribed_after_outreach";
   features: MessageFeatures;
   whyHints: string[];
 }
@@ -35,6 +46,9 @@ export interface SoftNameMatch {
   companyId: string;
   companyName: string;
   signedUpAt: string;
+  isSubscribed: boolean;
+  subscribedAt: string | null;
+  plan: string | null;
   reason: string;
 }
 
@@ -66,8 +80,12 @@ export interface LearningReport {
   matchedCount: number;
   conversionRate: number;
   paidOrActiveConverts: number;
+  subscribedCount: number;
+  subscriptionRate: number;
   avgDaysToSignup: number | null;
   medianDaysToSignup: number | null;
+  avgDaysToSubscribe: number | null;
+  medianDaysToSubscribe: number | null;
   matches: ConversionMatch[];
   nonConvertedSample: Array<{
     draftId: string;
@@ -89,6 +107,8 @@ export interface LearningReport {
   byReviewBucket: StatBucket[];
   byBodyLength: StatBucket[];
   byConfidence: StatBucket[];
+  byThemeSubscribed: StatBucket[];
+  bySubjectSubscribed: StatBucket[];
   winnersVsLosers: {
     avgBodyWordsConverted: number | null;
     avgBodyWordsNotConverted: number | null;
@@ -107,8 +127,16 @@ export interface LearningReport {
     sentDrafts: number;
     rejectedDrafts: number;
     converted: number;
+    subscribed: number;
     wonCompanies: number;
     suppressions: number;
+  };
+  subscriptionFunnel: {
+    emailed: number;
+    signedUp: number;
+    subscribed: number;
+    signupRate: number;
+    subscribeRate: number;
   };
   rejections: Array<{ reason: string; count: number }>;
   softNameMatches: SoftNameMatch[];
@@ -119,6 +147,19 @@ export interface LearningReport {
     plan: string | null;
     subscriptionStatus: string | null;
     matchedOutreach: boolean;
+    isSubscribed: boolean;
+    subscribedAt: string | null;
+  }>;
+  recentSubscribers: Array<{
+    email: string | null;
+    hoaName: string | null;
+    plan: string | null;
+    subscriptionStatus: string | null;
+    subscribedAt: string | null;
+    subscribedAtSource: SubscribedAtSource | null;
+    matchedOutreach: boolean;
+    outreachSubject: string | null;
+    daysFromEmailToSubscribe: number | null;
   }>;
   recentTrials: Array<{
     hoaName: string;
@@ -176,6 +217,15 @@ type ProfileRow = {
   created_at: string;
   plan: string | null;
   subscription_status: string | null;
+  stripe_customer_id: string | null;
+  community_key: string | null;
+};
+
+type TrialClaimRow = {
+  claimed_by: string | null;
+  claimed_at: string;
+  hoa_name: string;
+  community_key: string;
 };
 
 const THEMES: Array<{ key: string; re: RegExp }> = [
@@ -351,8 +401,11 @@ function buildFeatures(input: {
 
 function whyHints(features: MessageFeatures, match: {
   daysToSignup: number;
+  daysToSubscribe: number | null;
   reviewCount: number | null;
   subscriptionStatus: string | null;
+  isSubscribed: boolean;
+  subscribedAtSource: SubscribedAtSource | null;
 }): string[] {
   const hints: string[] = [];
   if (features.mentionsFirstName) hints.push("personalized with contact first name");
@@ -368,15 +421,23 @@ function whyHints(features: MessageFeatures, match: {
     hints.push("sent inside 10am–3pm ET window");
   }
   if (match.daysToSignup <= 2) hints.push("signed up within 2 days — strong message-market fit");
+  if (match.daysToSubscribe != null && match.daysToSubscribe <= 7) {
+    hints.push("subscribed within a week of the email — outreach likely helped");
+  }
   if (match.reviewCount != null && match.reviewCount <= 20) {
     hints.push("smaller review footprint (often hungrier operators)");
   }
-  if (
+  if (match.isSubscribed) {
+    hints.push("became a paying/active subscriber");
+    if (match.subscribedAtSource === "community_trial") {
+      hints.push("started via community free trial");
+    }
+  } else if (
     match.subscriptionStatus &&
     match.subscriptionStatus !== "none" &&
     match.subscriptionStatus !== "canceled"
   ) {
-    hints.push("became a paying/active subscriber");
+    hints.push("subscription status looks active (timing may be unclear)");
   }
   if (hints.length === 0) hints.push("converted — compare against non-converts for patterns");
   return hints;
@@ -441,8 +502,11 @@ function topThemeKeys(
 function buildInsights(report: {
   sentCount: number;
   matchedCount: number;
+  subscribedCount: number;
   conversionRate: number;
+  subscriptionRate: number;
   byTheme: StatBucket[];
+  byThemeSubscribed: StatBucket[];
   byHourEt: StatBucket[];
   byWeekday: StatBucket[];
   byCity: StatBucket[];
@@ -450,6 +514,7 @@ function buildInsights(report: {
   byReviewBucket: StatBucket[];
   winnersVsLosers: LearningReport["winnersVsLosers"];
   avgDaysToSignup: number | null;
+  avgDaysToSubscribe: number | null;
   paidOrActiveConverts: number;
 }): string[] {
   const out: string[] = [];
@@ -460,12 +525,29 @@ function buildInsights(report: {
   out.push(
     `Overall: ${report.matchedCount}/${report.sentCount} email→signup converts (${report.conversionRate}%).`
   );
+  if (report.subscribedCount > 0) {
+    out.push(
+      `${report.subscribedCount} subscribed after outreach (${report.subscriptionRate}% of sends).`
+    );
+  }
   if (report.avgDaysToSignup != null) {
     out.push(`Average days email→signup: ${report.avgDaysToSignup}.`);
   }
+  if (report.avgDaysToSubscribe != null) {
+    out.push(`Average days email→subscribe: ${report.avgDaysToSubscribe}.`);
+  }
   if (report.paidOrActiveConverts > 0) {
     out.push(
-      `${report.paidOrActiveConverts} convert(s) look paid/active — prioritize whatever produced those.`
+      `${report.paidOrActiveConverts} convert(s) are paid/active — prioritize whatever produced those.`
+    );
+  }
+
+  const themeSubWin = report.byThemeSubscribed.find(
+    (t) => t.converted > 0 && t.sent >= 2
+  );
+  if (themeSubWin) {
+    out.push(
+      `Theme "${themeSubWin.key}" correlates with subscriptions (${themeSubWin.converted}/${themeSubWin.sent}).`
     );
   }
 
@@ -525,18 +607,18 @@ function buildInsights(report: {
 
 const APP_CONTEXT = {
   whatWeMatch:
-    "Hard: sent nexus_drafts.to_email → profiles.email with signup after sent_at. Soft: hoa_name ≈ company name. Learning slices: subject, city/state, hour/weekday ET, body length, themes, review bands, confidence, personalization.",
+    "Hard: sent nexus_drafts.to_email → profiles.email with signup after sent_at. Subscription: active/trialing after email using Stripe webhook events (nexus_actions), community_trials.claimed_at, or status when timing unknown. Soft: hoa_name ≈ company name. Learning slices: subject, city/state, hour/weekday ET, body length, themes, review bands, confidence, personalization — plus subscription-themed slices.",
   tables: [
     "nexus_drafts (subject, body, confidence, sent_at, to_email)",
     "nexus_companies (city, state, metadata.userRatingCount, stage)",
     "nexus_contacts (name, role, email)",
-    "nexus_actions (outreach.email_sent, outreach.converted, …)",
+    "nexus_actions (outreach.email_sent, outreach.converted, outreach.subscribed, subscription.*)",
     "nexus_suppressions (do-not-contact)",
-    "profiles (signups: email, hoa_name, plan, subscription_status, created_at)",
-    "community_trials (claimed free trials)",
+    "profiles (signups: email, hoa_name, plan, subscription_status, stripe_customer_id, created_at)",
+    "community_trials (claimed_at, claimed_by — free trial timing)",
   ],
   howToLearn:
-    "Compare converts vs non-converts on themes/timing/length/reviews. Remember winning hypotheses as kind=trial. Re-check with learn after more sends.",
+    "Compare converts vs non-converts on themes/timing/length/reviews. Track sent→signup→subscribe lag. Remember winning hypotheses as kind=trial. Re-check with learn after more sends.",
 };
 
 /**
@@ -557,8 +639,12 @@ export async function loadLearningReport(options?: {
     matchedCount: 0,
     conversionRate: 0,
     paidOrActiveConverts: 0,
+    subscribedCount: 0,
+    subscriptionRate: 0,
     avgDaysToSignup: null,
     medianDaysToSignup: null,
+    avgDaysToSubscribe: null,
+    medianDaysToSubscribe: null,
     matches: [],
     nonConvertedSample: [],
     bySubject: [],
@@ -570,6 +656,8 @@ export async function loadLearningReport(options?: {
     byReviewBucket: [],
     byBodyLength: [],
     byConfidence: [],
+    byThemeSubscribed: [],
+    bySubjectSubscribed: [],
     winnersVsLosers: {
       avgBodyWordsConverted: null,
       avgBodyWordsNotConverted: null,
@@ -588,12 +676,21 @@ export async function loadLearningReport(options?: {
       sentDrafts: 0,
       rejectedDrafts: 0,
       converted: 0,
+      subscribed: 0,
       wonCompanies: 0,
       suppressions: 0,
+    },
+    subscriptionFunnel: {
+      emailed: 0,
+      signedUp: 0,
+      subscribed: 0,
+      signupRate: 0,
+      subscribeRate: 0,
     },
     rejections: [],
     softNameMatches: [],
     recentSignups: [],
+    recentSubscribers: [],
     recentTrials: [],
     recentActions: [],
     insights: ["Database unavailable or empty."],
@@ -630,7 +727,7 @@ export async function loadLearningReport(options?: {
     db
       .from("profiles")
       .select(
-        "id, email, hoa_name, created_at, plan, subscription_status"
+        "id, email, hoa_name, created_at, plan, subscription_status, stripe_customer_id, community_key"
       )
       .gte("created_at", sinceIso)
       .order("created_at", { ascending: false })
@@ -691,9 +788,70 @@ export async function loadLearningReport(options?: {
   }
 
   const drafts = (draftsRes.data ?? []) as SentDraftRow[];
-  const profiles = (profilesRes.data ?? []) as ProfileRow[];
+  let profiles = (profilesRes.data ?? []) as ProfileRow[];
   if (profilesRes.error) {
     console.error("learn profiles:", profilesRes.error.message);
+  }
+
+  const emailedSet = new Set<string>();
+  for (const d of drafts) {
+    const e = normEmail(d.to_email);
+    if (e) emailedSet.add(e);
+  }
+
+  if (emailedSet.size > 0) {
+    const emailedList = [...emailedSet];
+    const { data: emailedProfiles, error: emailedErr } = await db
+      .from("profiles")
+      .select(
+        "id, email, hoa_name, created_at, plan, subscription_status, stripe_customer_id, community_key"
+      )
+      .in("email", emailedList.slice(0, 200))
+      .limit(300);
+    if (emailedErr) {
+      console.error("learn emailed profiles:", emailedErr.message);
+    } else {
+      const byId = new Map(profiles.map((p) => [p.id, p]));
+      for (const row of (emailedProfiles ?? []) as ProfileRow[]) {
+        if (!byId.has(row.id)) byId.set(row.id, row);
+      }
+      profiles = [...byId.values()];
+    }
+  }
+
+  const profileIds = profiles.map((p) => p.id);
+  const [subscriptionEventsByProfile, trialClaimsRes] = await Promise.all([
+    loadSubscriptionEvents(db, sinceIso, profileIds.length ? profileIds : undefined),
+    profileIds.length
+      ? db
+          .from("community_trials")
+          .select("claimed_by, claimed_at, hoa_name, community_key")
+          .in("claimed_by", profileIds.slice(0, 200))
+          .limit(200)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  const trialClaimByProfile = new Map<string, TrialClaimRow>();
+  for (const row of (trialClaimsRes.data ?? []) as TrialClaimRow[]) {
+    if (!row.claimed_by) continue;
+    const existing = trialClaimByProfile.get(row.claimed_by);
+    if (
+      !existing ||
+      new Date(row.claimed_at).getTime() <
+        new Date(existing.claimed_at).getTime()
+    ) {
+      trialClaimByProfile.set(row.claimed_by, row);
+    }
+  }
+
+  function subscriptionForProfile(profile: ProfileRow) {
+    const trial = trialClaimByProfile.get(profile.id);
+    return resolveSubscriptionTiming({
+      subscriptionStatus: profile.subscription_status,
+      stripeCustomerId: profile.stripe_customer_id,
+      stripeEvents: subscriptionEventsByProfile.get(profile.id) ?? [],
+      trialClaimedAt: trial?.claimed_at ?? null,
+    });
   }
 
   type Annotated = {
@@ -703,6 +861,7 @@ export async function loadLearningReport(options?: {
     reviewCount: number | null;
     features: MessageFeatures;
     converted: boolean;
+    subscribed: boolean;
   };
 
   const annotated: Annotated[] = drafts.map((draft) => {
@@ -727,6 +886,7 @@ export async function loadLearningReport(options?: {
       reviewCount,
       features,
       converted: false,
+      subscribed: false,
     };
   });
 
@@ -749,24 +909,80 @@ export async function loadLearningReport(options?: {
   const matches: ConversionMatch[] = [];
   const matchedDraftIds = new Set<string>();
   const matchedProfileIds = new Set<string>();
+  const subscribedDraftIds = new Set<string>();
+  const outreachByProfile = new Map<
+    string,
+    { draftId: string; sentAt: string; subject: string }
+  >();
 
   for (const profile of profiles) {
     const email = normEmail(profile.email);
     if (!email) continue;
     const candidates = byEmail.get(email);
     if (!candidates?.length) continue;
+
+    const sub = subscriptionForProfile(profile);
     const signupMs = new Date(profile.created_at).getTime();
-    const prior = candidates.find((c) => {
+
+    const priorSignup = candidates.find((c) => {
       if (!c.draft.sent_at) return false;
       return new Date(c.draft.sent_at).getTime() <= signupMs;
     });
+
+    const priorSubscribe =
+      sub.subscribedAt != null
+        ? candidates.find((c) => {
+            if (!c.draft.sent_at) return false;
+            return (
+              new Date(c.draft.sent_at).getTime() <=
+              new Date(sub.subscribedAt!).getTime()
+            );
+          })
+        : null;
+
+    const prior = priorSignup ?? priorSubscribe;
     if (!prior?.draft.sent_at) continue;
 
-    prior.converted = true;
-    matchedDraftIds.add(prior.draft.id);
+    const signedUpAfterEmail =
+      Boolean(priorSignup) &&
+      new Date(prior.draft.sent_at).getTime() <= signupMs;
+    const subscribedAfterEmail =
+      sub.isSubscribed &&
+      sub.subscribedAt != null &&
+      new Date(prior.draft.sent_at).getTime() <=
+        new Date(sub.subscribedAt).getTime();
+
+    if (!signedUpAfterEmail && !subscribedAfterEmail) continue;
+
+    prior.converted = signedUpAfterEmail || subscribedAfterEmail;
+    if (signedUpAfterEmail) matchedDraftIds.add(prior.draft.id);
+    if (subscribedAfterEmail) {
+      subscribedDraftIds.add(prior.draft.id);
+      prior.subscribed = true;
+    }
     matchedProfileIds.add(profile.id);
 
-    const days = daysBetween(prior.draft.sent_at, profile.created_at);
+    outreachByProfile.set(profile.id, {
+      draftId: prior.draft.id,
+      sentAt: prior.draft.sent_at,
+      subject: prior.draft.subject ?? "(no subject)",
+    });
+
+    const days = signedUpAfterEmail
+      ? daysBetween(prior.draft.sent_at, profile.created_at)
+      : 0;
+    const daysToSubscribe =
+      sub.subscribedAt && subscribedAfterEmail
+        ? daysBetween(prior.draft.sent_at, sub.subscribedAt)
+        : null;
+
+    let conversionPath: ConversionMatch["conversionPath"] = "signup_only";
+    if (signedUpAfterEmail && sub.isSubscribed) {
+      conversionPath = "signup_and_subscribed";
+    } else if (!signedUpAfterEmail && subscribedAfterEmail) {
+      conversionPath = "subscribed_after_outreach";
+    }
+
     const features = prior.features;
     matches.push({
       draftId: prior.draft.id,
@@ -788,11 +1004,19 @@ export async function loadLearningReport(options?: {
       plan: profile.plan,
       subscriptionStatus: profile.subscription_status,
       daysToSignup: days,
+      isSubscribed: sub.isSubscribed,
+      subscribedAt: sub.subscribedAt,
+      subscribedAtSource: sub.subscribedAtSource,
+      daysToSubscribe,
+      conversionPath,
       features,
       whyHints: whyHints(features, {
         daysToSignup: days,
+        daysToSubscribe,
         reviewCount: prior.reviewCount,
         subscriptionStatus: profile.subscription_status,
+        isSubscribed: sub.isSubscribed,
+        subscribedAtSource: sub.subscribedAtSource,
       }),
     });
   }
@@ -816,34 +1040,40 @@ export async function loadLearningReport(options?: {
       namesLikelyMatch(profile.hoa_name!, c.name)
     );
     if (!hit) continue;
+    const sub = subscriptionForProfile(profile);
     softNameMatches.push({
       profileId: profile.id,
       hoaName: profile.hoa_name,
       companyId: hit.id,
       companyName: hit.name,
       signedUpAt: profile.created_at,
+      isSubscribed: sub.isSubscribed,
+      subscribedAt: sub.subscribedAt,
+      plan: profile.plan,
       reason: "hoa_name ≈ company name (email did not match a sent draft)",
     });
     if (softNameMatches.length >= 12) break;
   }
 
   const subjectStats = new Map<string, { sent: number; converted: number }>();
+  const subjectSubStats = new Map<string, { sent: number; converted: number }>();
   const cityStats = new Map<string, { sent: number; converted: number }>();
   const stateStats = new Map<string, { sent: number; converted: number }>();
   const hourStats = new Map<string, { sent: number; converted: number }>();
   const weekdayStats = new Map<string, { sent: number; converted: number }>();
   const themeStats = new Map<string, { sent: number; converted: number }>();
+  const themeSubStats = new Map<string, { sent: number; converted: number }>();
   const reviewStats = new Map<string, { sent: number; converted: number }>();
   const bodyStats = new Map<string, { sent: number; converted: number }>();
   const confStats = new Map<string, { sent: number; converted: number }>();
 
   for (const row of annotated) {
     const converted = matchedDraftIds.has(row.draft.id);
-    bump(
-      subjectStats,
-      (row.draft.subject ?? "(no subject)").trim() || "(no subject)",
-      converted
-    );
+    const subscribed = subscribedDraftIds.has(row.draft.id);
+    const subjectKey =
+      (row.draft.subject ?? "(no subject)").trim() || "(no subject)";
+    bump(subjectStats, subjectKey, converted);
+    bump(subjectSubStats, subjectKey, subscribed);
     bump(cityStats, (row.company?.city ?? "unknown").trim() || "unknown", converted);
     bump(stateStats, (row.company?.state ?? "unknown").trim() || "unknown", converted);
     bump(
@@ -857,12 +1087,17 @@ export async function loadLearningReport(options?: {
     bump(confStats, row.features.confidenceBucket, converted);
     if (row.features.themes.length === 0) {
       bump(themeStats, "no_theme", converted);
+      bump(themeSubStats, "no_theme", subscribed);
     } else {
-      for (const theme of row.features.themes) bump(themeStats, theme, converted);
+      for (const theme of row.features.themes) {
+        bump(themeStats, theme, converted);
+        bump(themeSubStats, theme, subscribed);
+      }
     }
   }
 
   const bySubject = toBuckets(subjectStats, 10);
+  const bySubjectSubscribed = toBuckets(subjectSubStats, 10);
   const byCity = toBuckets(cityStats, 10);
   const byState = toBuckets(stateStats, 10);
   const byHourEt = toBuckets(hourStats, 24).sort((a, b) => {
@@ -876,6 +1111,7 @@ export async function loadLearningReport(options?: {
     return { key: day, sent: v.sent, converted: v.converted, rate: rate(v.converted, v.sent) };
   }).filter((d) => d.sent > 0);
   const byTheme = toBuckets(themeStats, 12);
+  const byThemeSubscribed = toBuckets(themeSubStats, 12);
   const byReviewBucket = toBuckets(reviewStats, 8);
   const byBodyLength = toBuckets(bodyStats, 8);
   const byConfidence = toBuckets(confStats, 8);
@@ -908,15 +1144,28 @@ export async function loadLearningReport(options?: {
       .map((d) => `${d.key} (${d.converted}/${d.sent})`),
   };
 
-  const daysList = matches.map((m) => m.daysToSignup);
+  const daysList = matches.map((m) => m.daysToSignup).filter((d) => d > 0);
+  const subscribeDaysList = matches
+    .map((m) => m.daysToSubscribe)
+    .filter((d): d is number => d != null);
   const avgDaysToSignup = avg(daysList);
   const medianDaysToSignup = median(daysList);
-  const paidOrActiveConverts = matches.filter(
-    (m) =>
-      m.subscriptionStatus &&
-      m.subscriptionStatus !== "none" &&
-      m.subscriptionStatus !== "canceled"
+  const avgDaysToSubscribe = avg(subscribeDaysList);
+  const medianDaysToSubscribe = median(subscribeDaysList);
+  const subscribedCount = matches.filter((m) => m.isSubscribed).length;
+  const paidOrActiveConverts = subscribedCount;
+
+  const signupMatchedCount = matches.filter(
+    (m) => m.conversionPath !== "subscribed_after_outreach"
   ).length;
+
+  const subscriptionFunnel = {
+    emailed: annotated.length,
+    signedUp: signupMatchedCount,
+    subscribed: subscribedCount,
+    signupRate: rate(signupMatchedCount, annotated.length),
+    subscribeRate: rate(subscribedCount, annotated.length),
+  };
 
   const [
     activeCompanies,
@@ -955,8 +1204,11 @@ export async function loadLearningReport(options?: {
   const insights = buildInsights({
     sentCount: annotated.length,
     matchedCount: matches.length,
+    subscribedCount,
     conversionRate: rate(matches.length, annotated.length),
+    subscriptionRate: rate(subscribedCount, annotated.length),
     byTheme,
+    byThemeSubscribed,
     byHourEt,
     byWeekday,
     byCity,
@@ -964,8 +1216,36 @@ export async function loadLearningReport(options?: {
     byReviewBucket,
     winnersVsLosers,
     avgDaysToSignup,
+    avgDaysToSubscribe,
     paidOrActiveConverts,
   });
+
+  const recentSubscribers = profiles
+    .filter((p) => isActiveSubscriptionStatus(p.subscription_status))
+    .map((p) => {
+      const sub = subscriptionForProfile(p);
+      const outreach = outreachByProfile.get(p.id);
+      return {
+        email: p.email,
+        hoaName: p.hoa_name,
+        plan: p.plan,
+        subscriptionStatus: p.subscription_status,
+        subscribedAt: sub.subscribedAt,
+        subscribedAtSource: sub.subscribedAtSource,
+        matchedOutreach: matchedProfileIds.has(p.id),
+        outreachSubject: outreach?.subject ?? null,
+        daysFromEmailToSubscribe:
+          outreach && sub.subscribedAt
+            ? daysBetween(outreach.sentAt, sub.subscribedAt)
+            : null,
+      };
+    })
+    .sort((a, b) => {
+      const ta = a.subscribedAt ? new Date(a.subscribedAt).getTime() : 0;
+      const tb = b.subscribedAt ? new Date(b.subscribedAt).getTime() : 0;
+      return tb - ta;
+    })
+    .slice(0, 15);
 
   if (syncWins && matches.length > 0) {
     await syncConversionWins(matches).catch((err) => {
@@ -979,16 +1259,22 @@ export async function loadLearningReport(options?: {
     matchedCount: matches.length,
     conversionRate: rate(matches.length, annotated.length),
     paidOrActiveConverts,
+    subscribedCount,
+    subscriptionRate: rate(subscribedCount, annotated.length),
     avgDaysToSignup,
     medianDaysToSignup,
+    avgDaysToSubscribe,
+    medianDaysToSubscribe,
     matches: matches.slice(0, limit),
     nonConvertedSample,
     bySubject,
+    bySubjectSubscribed,
     byCity,
     byState,
     byHourEt,
     byWeekday,
     byTheme,
+    byThemeSubscribed,
     byReviewBucket,
     byBodyLength,
     byConfidence,
@@ -1001,19 +1287,27 @@ export async function loadLearningReport(options?: {
       sentDrafts,
       rejectedDrafts,
       converted: matches.length,
+      subscribed: subscribedCount,
       wonCompanies: wonRes.count ?? 0,
       suppressions: suppressionsRes.count ?? 0,
     },
+    subscriptionFunnel,
     rejections,
     softNameMatches,
-    recentSignups: profiles.slice(0, 15).map((p) => ({
-      email: p.email,
-      hoaName: p.hoa_name,
-      createdAt: p.created_at,
-      plan: p.plan,
-      subscriptionStatus: p.subscription_status,
-      matchedOutreach: matchedProfileIds.has(p.id),
-    })),
+    recentSignups: profiles.slice(0, 15).map((p) => {
+      const sub = subscriptionForProfile(p);
+      return {
+        email: p.email,
+        hoaName: p.hoa_name,
+        createdAt: p.created_at,
+        plan: p.plan,
+        subscriptionStatus: p.subscription_status,
+        matchedOutreach: matchedProfileIds.has(p.id),
+        isSubscribed: sub.isSubscribed,
+        subscribedAt: sub.subscribedAt,
+      };
+    }),
+    recentSubscribers,
     recentTrials: (trialsRes.data ?? []).map((t) => ({
       hoaName: String((t as { hoa_name?: string }).hoa_name ?? ""),
       communityKey: String((t as { community_key?: string }).community_key ?? ""),
@@ -1048,67 +1342,24 @@ export async function loadConversionSummary(sinceDays = 90): Promise<{
   sentCount: number;
   matchedCount: number;
   conversionRate: number;
+  subscribedCount: number;
+  subscriptionRate: number;
   recentSignupCount: number;
 }> {
-  const db = getNexusDb();
-  if (!db) {
-    return {
-      sinceDays,
-      sentCount: 0,
-      matchedCount: 0,
-      conversionRate: 0,
-      recentSignupCount: 0,
-    };
-  }
-
-  const sinceIso = new Date(
-    Date.now() - sinceDays * 24 * 60 * 60 * 1000
-  ).toISOString();
-
-  const [sentRes, profilesRes] = await Promise.all([
-    db
-      .from("nexus_drafts")
-      .select("id, to_email, sent_at")
-      .eq("status", "sent")
-      .not("sent_at", "is", null)
-      .gte("sent_at", sinceIso)
-      .limit(500),
-    db
-      .from("profiles")
-      .select("id, email, created_at")
-      .gte("created_at", sinceIso)
-      .limit(500),
-  ]);
-
-  const drafts = sentRes.data ?? [];
-  const profiles = profilesRes.data ?? [];
-  const byEmail = new Map<string, string[]>();
-  for (const d of drafts) {
-    const email = normEmail((d as { to_email?: string }).to_email);
-    const sentAt = (d as { sent_at?: string }).sent_at;
-    if (!email || !sentAt) continue;
-    const list = byEmail.get(email) ?? [];
-    list.push(sentAt);
-    byEmail.set(email, list);
-  }
-
-  let matched = 0;
-  for (const p of profiles) {
-    const email = normEmail((p as { email?: string }).email);
-    const created = (p as { created_at?: string }).created_at;
-    if (!email || !created) continue;
-    const sends = byEmail.get(email);
-    if (!sends?.length) continue;
-    const signupMs = new Date(created).getTime();
-    if (sends.some((s) => new Date(s).getTime() <= signupMs)) matched += 1;
-  }
+  const report = await loadLearningReport({
+    sinceDays,
+    limit: 1,
+    syncWins: false,
+  });
 
   return {
-    sinceDays,
-    sentCount: drafts.length,
-    matchedCount: matched,
-    conversionRate: rate(matched, drafts.length),
-    recentSignupCount: profiles.length,
+    sinceDays: report.sinceDays,
+    sentCount: report.sentCount,
+    matchedCount: report.matchedCount,
+    conversionRate: report.conversionRate,
+    subscribedCount: report.subscribedCount,
+    subscriptionRate: report.subscriptionRate,
+    recentSignupCount: report.recentSignups.length,
   };
 }
 
@@ -1132,11 +1383,44 @@ async function syncConversionWins(matches: ConversionMatch[]): Promise<void> {
       .eq("entity_id", match.draftId)
       .limit(1);
 
-    if (existing && existing.length > 0) continue;
+    if (!existing?.length) {
+      await db.from("nexus_actions").insert({
+        actor: "nova",
+        action: "outreach.converted",
+        entity_type: "draft",
+        entity_id: match.draftId,
+        metadata: {
+          email: match.email,
+          profileId: match.profileId,
+          companyId: match.companyId,
+          sentAt: match.sentAt,
+          signedUpAt: match.signedUpAt,
+          daysToSignup: match.daysToSignup,
+          subject: match.subject,
+          themes: match.features.themes,
+          whyHints: match.whyHints,
+          isSubscribed: match.isSubscribed,
+          subscribedAt: match.subscribedAt,
+          daysToSubscribe: match.daysToSubscribe,
+          conversionPath: match.conversionPath,
+        },
+      });
+    }
+
+    if (!match.isSubscribed) continue;
+
+    const { data: subExisting } = await db
+      .from("nexus_actions")
+      .select("id")
+      .eq("action", "outreach.subscribed")
+      .eq("entity_id", match.draftId)
+      .limit(1);
+
+    if (subExisting?.length) continue;
 
     await db.from("nexus_actions").insert({
       actor: "nova",
-      action: "outreach.converted",
+      action: "outreach.subscribed",
       entity_type: "draft",
       entity_id: match.draftId,
       metadata: {
@@ -1145,10 +1429,14 @@ async function syncConversionWins(matches: ConversionMatch[]): Promise<void> {
         companyId: match.companyId,
         sentAt: match.sentAt,
         signedUpAt: match.signedUpAt,
+        subscribedAt: match.subscribedAt,
+        subscribedAtSource: match.subscribedAtSource,
         daysToSignup: match.daysToSignup,
+        daysToSubscribe: match.daysToSubscribe,
+        plan: match.plan,
         subject: match.subject,
         themes: match.features.themes,
-        whyHints: match.whyHints,
+        conversionPath: match.conversionPath,
       },
     });
   }

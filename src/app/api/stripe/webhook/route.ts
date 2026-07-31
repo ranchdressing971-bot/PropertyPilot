@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logSubscriptionEvent } from "@/lib/nova/subscription-events";
 
 function mapStripeStatus(status: Stripe.Subscription.Status | string): string {
   switch (status) {
@@ -109,6 +110,16 @@ export async function POST(req: NextRequest) {
 
         if (userId) await updateByUserId(userId, fields);
         else if (customerId) await updateByCustomer(customerId, fields);
+
+        const stripeEventAt = new Date(event.created * 1000).toISOString();
+        if (userId) {
+          await logSubscriptionEvent(admin, userId, "subscription.checkout_completed", {
+            plan,
+            customerId,
+            stripeEventId: event.id,
+            stripeEventAt,
+          });
+        }
         break;
       }
       case "customer.subscription.updated":
@@ -132,6 +143,30 @@ export async function POST(req: NextRequest) {
         if (priceMonthly != null) fields.price_monthly = priceMonthly;
 
         await updateByCustomer(customerId, fields);
+
+        if (status === "active" || status === "trialing") {
+          const { data: profileRow } = await admin
+            .from("profiles")
+            .select("id")
+            .eq("stripe_customer_id", customerId)
+            .maybeSingle();
+          if (profileRow?.id) {
+            await logSubscriptionEvent(
+              admin,
+              profileRow.id,
+              status === "trialing"
+                ? "subscription.trialing"
+                : "subscription.activated",
+              {
+                plan,
+                customerId,
+                stripeSubscriptionId: sub.id,
+                stripeEventId: event.id,
+                stripeEventAt: new Date(event.created * 1000).toISOString(),
+              }
+            );
+          }
+        }
         break;
       }
       case "invoice.paid": {
