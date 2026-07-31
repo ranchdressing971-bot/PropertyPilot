@@ -2,7 +2,7 @@
 
 import { communityDriveInstruction } from "@/lib/community-drive-copy";
 import { Button } from "@/components/ui/Button";
-import { MapPinned, Route, ShieldCheck } from "lucide-react";
+import { MapPinned, Route } from "lucide-react";
 
 interface CommunityDriveBriefingProps {
   communityName: string;
@@ -38,10 +38,9 @@ export function CommunityDriveBriefing({
           </li>
         ))}
       </ul>
-      <p className="mt-4 flex items-start gap-2 text-xs text-ink-500">
-        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        After upload we quietly compare homes and streets to your community map —
-        we’ll only ask if something looks new or unrelated.
+      <p className="mt-4 text-xs text-ink-500">
+        Tip only — your inspection always saves. We may optionally ask if new
+        streets should join this community’s map.
       </p>
       <Button className="mt-6 w-full sm:w-auto" size="lg" onClick={onContinue}>
         Got it — choose video

@@ -75,28 +75,20 @@ export function CommunityVerificationPanel({
     }
   }
 
-  const tone =
-    verification.outcome === "large_difference"
-      ? "amber"
-      : verification.outcome === "bootstrap"
-        ? "brand"
-        : "sky";
-
+  // Neutral / helpful tones only — never warning/alarm styling
   const toneClasses =
-    tone === "amber"
-      ? "border-amber-200 bg-amber-50/90"
-      : tone === "sky"
-        ? "border-sky-200 bg-sky-50/90"
-        : "border-brand-200 bg-brand-50/80";
+    verification.outcome === "bootstrap"
+      ? "border-brand-200 bg-brand-50/80"
+      : "border-sky-200 bg-sky-50/90";
 
   const title =
     verification.outcome === "bootstrap"
-      ? "Community baseline saved"
+      ? "Community map started"
       : verification.outcome === "small_expansion"
-        ? "New homes on this drive"
+        ? "New homes on this drive?"
         : verification.outcome === "large_difference"
-          ? "This drive looks different"
-          : "Community check";
+          ? "Different streets on this drive?"
+          : "Community map tip";
 
   if (doneMessage) {
     return (
@@ -119,16 +111,20 @@ export function CommunityVerificationPanel({
           </p>
           <p className="mt-1.5 text-sm text-ink-800">{verification.helpfulMessage}</p>
         </div>
-        {!verification.needsUserAction && (
-          <button
-            type="button"
-            onClick={() => setDismissed(true)}
-            className="rounded-md p-1 text-ink-400 hover:bg-white/60 hover:text-ink-700"
-            aria-label="Dismiss"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => {
+            if (verification.needsUserAction && verification.eventId) {
+              void resolve("dismiss");
+            } else {
+              setDismissed(true);
+            }
+          }}
+          className="rounded-md p-1 text-ink-400 hover:bg-white/60 hover:text-ink-700"
+          aria-label="Dismiss"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
       {verification.outcome === "small_expansion" &&
@@ -148,13 +144,6 @@ export function CommunityVerificationPanel({
           </ul>
         )}
 
-      {verification.flaggedForReview && (
-        <p className="mt-2 text-xs text-amber-900/80">
-          We’ve noted a few unrelated drives for your team to review later —
-          nothing is locked or suspended.
-        </p>
-      )}
-
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
 
       {verification.needsUserAction && verification.eventId && (
@@ -171,7 +160,7 @@ export function CommunityVerificationPanel({
                 ) : (
                   <CheckCircle2 className="h-3.5 w-3.5" />
                 )}
-                Yes — part of this community
+                Yes — add to this community
               </Button>
               <Button
                 size="sm"
@@ -182,7 +171,15 @@ export function CommunityVerificationPanel({
                 {loading === "ignore_new_homes" ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : null}
-                No — ignore for now
+                Skip for now
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={Boolean(loading)}
+                onClick={() => resolve("dismiss")}
+              >
+                Not now
               </Button>
             </>
           ) : (
@@ -197,7 +194,7 @@ export function CommunityVerificationPanel({
                 ) : (
                   <MapPinned className="h-3.5 w-3.5" />
                 )}
-                Expand community map
+                Expand this community’s map
               </Button>
               <Button
                 size="sm"
@@ -210,7 +207,7 @@ export function CommunityVerificationPanel({
                 ) : (
                   <GitBranch className="h-3.5 w-3.5" />
                 )}
-                Treat as a different community
+                Keep separate for later
               </Button>
               <Button
                 size="sm"

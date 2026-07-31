@@ -1,9 +1,9 @@
 /**
- * RideBy Community Verification — soft fingerprinting to keep one-community
- * plans honest without blocking legitimate expansions.
+ * RideBy Community Verification — soft fingerprinting to keep community maps
+ * organized. Never suspends, locks, or blocks inspections.
  *
- * Never suspends or hard-blocks. Learns from confirmed expansions. Flags for
- * manual review only after a consistent misuse streak.
+ * Soft-gated: off in production until COMMUNITY_VERIFICATION_ENABLED=true.
+ * Missing tables → silent no-op. Learn-and-ask only (optional prompts).
  */
 
 import {
@@ -21,8 +21,19 @@ export const SMALL_NEW_HOME_MAX = 8;
 export const SMALL_NEW_HOME_RATIO = 0.18;
 export const MATCH_RATIO_OK = 0.55;
 export const LARGE_DIFF_MATCH_RATIO = 0.35;
-/** Consecutive unrelated large diffs before manual review flag. */
+/** Consecutive unresolved large diffs before a soft manual-review flag (never blocks). */
 export const MISUSE_STREAK_TO_FLAG = 3;
+
+/**
+ * Opt-in gate. Production stays off until explicitly enabled after SQL is applied.
+ * Development defaults on so local testing works without an env flip.
+ */
+export function isCommunityVerificationEnabled(): boolean {
+  const flag = process.env.COMMUNITY_VERIFICATION_ENABLED?.trim().toLowerCase();
+  if (flag === "true" || flag === "1" || flag === "yes") return true;
+  if (flag === "false" || flag === "0" || flag === "no") return false;
+  return process.env.NODE_ENV === "development";
+}
 
 export type VerificationOutcome =
   | "bootstrap"
@@ -294,16 +305,31 @@ function helpfulMessageFor(
 ): string {
   switch (outcome) {
     case "bootstrap":
-      return `Thanks — this drive is now the baseline for ${communityName}. Future inspections will be checked against these streets so your community stays organized.`;
+      return `Saved a starting map for ${communityName} from this drive. Optional — helps keep future reports organized.`;
     case "match":
       return `Looks like the same community — most homes match ${communityName}.`;
     case "small_expansion":
-      return `We found ${newCount} home${newCount === 1 ? "" : "s"} that haven’t appeared in ${communityName} before. Are these part of this community?`;
+      return `We noticed ${newCount} home${newCount === 1 ? "" : "s"} that haven’t shown up in ${communityName} yet. Want to add them to this community’s map?`;
     case "large_difference":
-      return `This drive looks significantly different from ${communityName}. You can expand the community map (we may note a large change) or set this up as a separate community.`;
+      return `This drive covers streets that look different from ${communityName}. You can expand this community’s map, keep it separate later, or skip — your inspection is already saved.`;
     default:
-      return `Community check for ${communityName} complete.`;
+      return `Community map tip for ${communityName}.`;
   }
+}
+
+function isMissingRelationError(error: {
+  message?: string;
+  code?: string;
+}): boolean {
+  const msg = (error.message ?? "").toLowerCase();
+  return (
+    error.code === "42P01" ||
+    error.code === "PGRST205" ||
+    msg.includes("community_fingerprints") ||
+    msg.includes("community_verification_events") ||
+    msg.includes("does not exist") ||
+    msg.includes("schema cache")
+  );
 }
 
 function rowToSnapshot(row: {
@@ -395,10 +421,7 @@ async function loadFingerprint(opts: {
 
   const { data, error } = await query.maybeSingle();
   if (error) {
-    if (
-      error.message?.includes("community_fingerprints") ||
-      error.code === "42P01"
-    ) {
+    if (isMissingRelationError(error)) {
       console.warn(
         "community_fingerprints missing — run docs/COMMUNITY_VERIFICATION_SCHEMA.sql"
       );
@@ -453,6 +476,12 @@ async function insertFingerprint(opts: {
     .single();
 
   if (error) {
+    if (isMissingRelationError(error)) {
+      console.warn(
+        "community_fingerprints missing — run docs/COMMUNITY_VERIFICATION_SCHEMA.sql"
+      );
+      return null;
+    }
     console.error("insertFingerprint:", error.message);
     return null;
   }
@@ -517,6 +546,12 @@ async function insertEvent(row: Record<string, unknown>): Promise<string | null>
     .select("id")
     .single();
   if (error) {
+    if (isMissingRelationError(error)) {
+      console.warn(
+        "community_verification_events missing — run docs/COMMUNITY_VERIFICATION_SCHEMA.sql"
+      );
+      return null;
+    }
     console.error("insert verification event:", error.message);
     return null;
   }
@@ -557,6 +592,11 @@ export async function runCommunityVerification(
     communityName,
   };
 
+  // Soft gate: production stays quiet until explicitly enabled
+  if (!isCommunityVerificationEnabled()) {
+    return empty;
+  }
+
   if (!createAdminClient()) {
     return empty;
   }
@@ -573,7 +613,7 @@ export async function runCommunityVerification(
       return {
         ...empty,
         outcome: "bootstrap",
-        helpfulMessage: `We’ll learn ${communityName}’s streets as addresses are confirmed on this drive.`,
+        helpfulMessage: `We’ll gently learn ${communityName}’s streets as addresses are confirmed — nothing to do right now.`,
       };
     }
 
@@ -647,28 +687,30 @@ export async function runCommunityVerification(
       sampleCountInc: 1,
       misuseStreak: 0,
     });
+  } else if (cmp.outcome === "small_expansion") {
+    // Honest growth — reset streak; wait for optional confirm before expanding
+    misuseStreak = 0;
+    await updateFingerprint(existing.id, existing.snapshot, {
+      misuseStreak: 0,
+    });
   } else if (cmp.outcome === "large_difference") {
+    // Soft anti-abuse: count unresolved unrelated drives; never block or suspend
     misuseStreak += 1;
     if (misuseStreak >= MISUSE_STREAK_TO_FLAG) {
       flagged = true;
       await updateFingerprint(existing.id, existing.snapshot, {
         misuseStreak,
         flaggedForReview: true,
-        reviewNote: `Repeated drives look unrelated to ${communityName}. Soft flag for manual review — no account action taken.`,
+        reviewNote: `Several drives look unrelated to ${communityName}. Soft flag for manual review only — inspection still saved, no account action.`,
       });
     } else {
       await updateFingerprint(existing.id, existing.snapshot, {
         misuseStreak,
       });
     }
-  } else if (cmp.outcome === "small_expansion") {
-    // Wait for user confirmation before expanding — reset streak (honest growth)
-    misuseStreak = 0;
-    await updateFingerprint(existing.id, existing.snapshot, {
-      misuseStreak: 0,
-    });
   }
 
+  // Optional prompts only; large diffs are dismissible and never lock anyone out
   const needsUserAction =
     cmp.outcome === "small_expansion" || cmp.outcome === "large_difference";
 
@@ -699,6 +741,7 @@ export async function runCommunityVerification(
       misuseStreak,
       roads: observed.roadsCovered,
       entrances: observed.entrances,
+      softOnly: true,
     },
   });
 
@@ -733,6 +776,10 @@ export async function resolveCommunityVerification(opts: {
   resolution: VerificationResolution;
   communityName?: string;
 }): Promise<{ ok: boolean; error?: string; message?: string }> {
+  if (!isCommunityVerificationEnabled()) {
+    return { ok: true, message: "Thanks — nothing else needed." };
+  }
+
   const admin = createAdminClient();
   if (!admin) return { ok: false, error: "Database not configured" };
 
@@ -742,7 +789,13 @@ export async function resolveCommunityVerification(opts: {
     .eq("id", opts.eventId)
     .maybeSingle();
 
-  if (error || !event) {
+  if (error) {
+    if (isMissingRelationError(error)) {
+      return { ok: true, message: "Thanks — your inspection is already saved." };
+    }
+    return { ok: false, error: "Verification event not found" };
+  }
+  if (!event) {
     return { ok: false, error: "Verification event not found" };
   }
   if (event.user_id && event.user_id !== opts.userId) {
@@ -795,7 +848,7 @@ export async function resolveCommunityVerification(opts: {
     message =
       opts.resolution === "confirm_new_homes"
         ? "Thanks — those homes are now part of this community’s map."
-        : "Community map updated. We noted this as a larger change so your team stays organized.";
+        : "Community map updated. Your inspection was already saved.";
   } else if (opts.resolution === "ignore_new_homes") {
     outcome = "ignored_new";
     message = "Got it — we’ll keep the existing community map as-is.";
@@ -814,8 +867,7 @@ export async function resolveCommunityVerification(opts: {
   } else if (opts.resolution === "create_new_community") {
     outcome = "new_community_suggested";
     message =
-      "Understood. Keep this inspection for records — add another community under Pricing when you’re ready (we don’t auto-charge or lock anything).";
-    // Soft signal only; reset misuse so honest multi-community intent isn't punished
+      "No problem. This inspection stays saved — add another community under Pricing whenever you’re ready. Nothing is locked or charged from this tip.";
     if (fingerprintId) {
       const { data: fp } = await admin
         .from("community_fingerprints")
@@ -829,7 +881,7 @@ export async function resolveCommunityVerification(opts: {
       }
     }
   } else {
-    message = "Dismissed.";
+    message = "No problem — your inspection is saved.";
   }
 
   await admin
