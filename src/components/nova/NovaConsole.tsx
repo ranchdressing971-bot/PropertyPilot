@@ -926,7 +926,11 @@ export function NovaConsole() {
             <div className="nova-meta-dim">
               Send {status?.sendEnabled ? "on" : "off"}
               {status?.mailtrapConfigured ? "" : " · no Mailtrap"}
-              {status && !status.voiceConfigured ? " · voice missing" : ""}
+              {status && !status.voiceConfigured
+                ? " · free device voice"
+                : status?.voiceConfigured
+                  ? " · ElevenLabs (+ free fallback)"
+                  : ""}
             </div>
             <div className="nova-meta-dim">
               Signups {status?.conversionsMatched ?? 0}
