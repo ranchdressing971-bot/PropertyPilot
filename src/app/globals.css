@@ -165,6 +165,12 @@
   color: rgba(255, 210, 140, 0.9);
 }
 
+.nova-hint-mobile {
+  max-width: 18rem;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
 .nova-voice-debug {
   margin-top: 0.35rem;
   font-size: 0.62rem;
@@ -175,12 +181,15 @@
 }
 
 .nova-audio-hidden {
+  /* iOS refuses playback from fully off-screen / zero-size elements. */
   position: fixed;
-  left: -9999px;
-  width: 0;
-  height: 0;
-  opacity: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0.01;
   pointer-events: none;
+  z-index: -1;
 }
 
 .nova-tap-hear {
@@ -206,33 +215,41 @@
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-/* Fixed above all Nova layers — outside orb/dock stacking contexts. */
+/* Fixed on document.body via portal — above all Nova layers and iOS chrome. */
 .nova-tap-hear-fixed {
   position: fixed;
   left: 50%;
-  bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
-  z-index: 99999;
+  bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+  z-index: 2147483646;
   transform: translateX(-50%);
   display: block;
   min-width: min(18rem, calc(100vw - 2rem));
-  min-height: 3rem;
-  padding: 0.85rem 1.5rem;
+  min-height: 3.25rem;
+  padding: 0.9rem 1.5rem;
   border-radius: 9999px;
   border: 1px solid rgba(120, 220, 255, 0.65);
-  background: rgba(10, 40, 55, 0.96);
+  background: rgba(10, 40, 55, 0.98);
   box-shadow:
     0 0 24px rgba(86, 214, 255, 0.25),
     0 8px 32px rgba(0, 0, 0, 0.55);
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: rgba(200, 245, 255, 1);
   cursor: pointer;
   pointer-events: auto;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
   transition: background 0.15s ease, transform 0.1s ease;
+}
+
+@media (min-width: 640px) {
+  .nova-tap-hear-fixed {
+    bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 .nova-tap-hear-fixed:hover {

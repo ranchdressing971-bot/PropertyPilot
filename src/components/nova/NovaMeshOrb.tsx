@@ -12,7 +12,8 @@ type OrbPhase =
 interface NovaMeshOrbProps {
   phase: OrbPhase;
   onClick: () => void;
-  onPointerDown?: () => void;
+  onPointerDown?: (e: React.PointerEvent<HTMLButtonElement>) => void;
+  onTouchStart?: (e: React.TouchEvent<HTMLButtonElement>) => void;
   ariaLabel: string;
 }
 
@@ -50,6 +51,7 @@ export function NovaMeshOrb({
   phase,
   onClick,
   onPointerDown,
+  onTouchStart,
   ariaLabel,
 }: NovaMeshOrbProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -318,6 +320,7 @@ export function NovaMeshOrb({
       type="button"
       onClick={onClick}
       onPointerDown={onPointerDown}
+      onTouchStart={onTouchStart}
       className="nova-orb"
       aria-label={ariaLabel}
     >

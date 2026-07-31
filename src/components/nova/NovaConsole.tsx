@@ -686,6 +686,7 @@ export function NovaConsole() {
   const [needsGesture, setNeedsGesture] = useState(false);
   const [showTapToHear, setShowTapToHear] = useState(false);
   const [voiceDebug, setVoiceDebug] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   const phaseRef = useRef<Phase>("idle");
   const listeningOnRef = useRef(true);
@@ -703,6 +704,7 @@ export function NovaConsole() {
   const pendingVoiceRef = useRef<PendingVoice | null>(null);
   const waitingForTapRef = useRef(false);
   const gesturePlayLockRef = useRef(false);
+  const unlockInFlightRef = useRef(false);
   /** After TTS, restart mic in wake (dormant) or command (open) mode. */
   const resumeModeRef = useRef<ListenMode>("command");
   const askNovaRef = useRef<(message: string) => Promise<void>>(async () => {});
@@ -715,6 +717,9 @@ export function NovaConsole() {
     if (!el) return false;
 
     if (audioUnlockedRef.current) return true;
+    if (unlockInFlightRef.current) return true;
+
+    unlockInFlightRef.current = true;
 
     // iOS requires play() in the same synchronous turn as touchstart — no await.
     try {
@@ -729,6 +734,7 @@ export function NovaConsole() {
           el.removeAttribute("src");
           if (!isIOS()) el.load();
           audioUnlockedRef.current = true;
+          unlockInFlightRef.current = false;
           setNeedsGesture(false);
           const synth = window.speechSynthesis;
           if (synth && isSafariBrowser()) {
@@ -738,11 +744,13 @@ export function NovaConsole() {
         })
         .catch(() => {
           el.muted = false;
+          unlockInFlightRef.current = false;
           setNeedsGesture(true);
         });
       return true;
     } catch {
       el.muted = false;
+      unlockInFlightRef.current = false;
       setNeedsGesture(true);
       return false;
     }
@@ -861,6 +869,10 @@ export function NovaConsole() {
     window.setTimeout(() => {
       if (listeningOnRef.current) startMicRef.current(mode);
     }, 350);
+  }, []);
+
+  useEffect(() => {
+    setMounted(true);
   }, []);
 
   useEffect(() => {
@@ -1014,10 +1026,8 @@ export function NovaConsole() {
     if (snapshot.blob && !snapshot.useBrowserTts) {
       if (snapshot.url) {
         objectUrlRef.current = snapshot.url;
-        if (el.src !== snapshot.url) {
-          primeAudioElement(el);
-          el.src = snapshot.url;
-        }
+        primeAudioElement(el);
+        el.src = snapshot.url;
       } else {
         playback = playBlobInGesture(el, snapshot.blob, objectUrlRef);
         void playback
@@ -1605,9 +1615,8 @@ export function NovaConsole() {
   return (
     <div
       className="nova-shell"
-      onPointerDown={() => {
-        void unlockAudio();
-      }}
+      onTouchStart={handleGestureUnlock}
+      onPointerDown={handleGestureUnlock}
     >
       <audio
         ref={audioElRef}
@@ -1691,9 +1700,8 @@ export function NovaConsole() {
           <NovaMeshOrb
             phase={phase}
             onClick={toggleListening}
-            onPointerDown={() => {
-              void unlockAudio();
-            }}
+            onPointerDown={handleGestureUnlock}
+            onTouchStart={handleGestureUnlock}
             ariaLabel={
               listeningOn ? "Mute Nova mic" : "Enable always-on listening"
             }
@@ -1716,7 +1724,12 @@ export function NovaConsole() {
         <p className="nova-phase">{phaseLabel}</p>
         {needsGesture && (
           <p className="nova-hint">
-            Tap the orb once to unlock sound, then talk to Nova.
+            Tap the orb once to unlock sound{isIOS() ? " — turn up media volume" : ""}, then talk to Nova.
+          </p>
+        )}
+        {showTapToHear && isIOS() && (
+          <p className="nova-hint nova-hint-mobile">
+            Turn up volume (side buttons). Silent switch does not mute Nova, but volume must be up.
           </p>
         )}
         {voiceDebug && (
@@ -1731,16 +1744,20 @@ export function NovaConsole() {
         )}
       </main>
 
-      {showTapToHear && (
-        <button
-          type="button"
-          className="nova-tap-hear-fixed"
-          onPointerDown={onTapToHear}
-          onClick={(e) => e.preventDefault()}
-        >
-          Tap to hear Nova
-        </button>
-      )}
+      {mounted &&
+        showTapToHear &&
+        createPortal(
+          <button
+            type="button"
+            className="nova-tap-hear-fixed"
+            onTouchStart={onTapToHearTouch}
+            onPointerDown={onTapToHear}
+            onClick={(e) => e.preventDefault()}
+          >
+            Tap to hear Nova
+          </button>,
+          document.body
+        )}
 
       <footer className="nova-dock">
         <div className="nova-transcript" ref={transcriptRef}>
