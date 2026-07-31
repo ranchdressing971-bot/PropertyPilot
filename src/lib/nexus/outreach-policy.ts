@@ -25,8 +25,33 @@ export const OUTREACH_SEND_INTERVAL_MAX_MINUTES = 15;
  */
 export const OUTREACH_SEND_INTERVAL_MINUTES = OUTREACH_SEND_INTERVAL_MAX_MINUTES;
 
-/** Hard daily ceiling, even inside the window. */
-export const OUTREACH_MAX_SENDS_PER_DAY = 30;
+/**
+ * Nova's working floor when sending (not pausing). She picks the daily number;
+ * keep it at least this high unless the day is paused at 0.
+ */
+export const OUTREACH_MIN_SENDS_PER_DAY = 20;
+
+/**
+ * Hard daily ceiling. Default 50 for when the outreach domain is live.
+ * Override with NEXUS_MAX_SENDS_PER_DAY if you want a tighter test cap.
+ */
+export function outreachMaxSendsPerDay(): number {
+  const raw = Number(process.env.NEXUS_MAX_SENDS_PER_DAY ?? 50);
+  if (!Number.isFinite(raw) || raw < 1) return 50;
+  return Math.min(100, Math.floor(raw));
+}
+
+/** @deprecated use outreachMaxSendsPerDay() — kept for older imports. */
+export const OUTREACH_MAX_SENDS_PER_DAY = 50;
+
+/** Clamp a Nova daily target: 0 = pause, else between min and max. */
+export function clampDailySendTarget(n: number): number {
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.max(
+    OUTREACH_MIN_SENDS_PER_DAY,
+    Math.min(outreachMaxSendsPerDay(), Math.floor(n))
+  );
+}
 
 /**
  * AI review confidence needed to auto-approve a draft for the send queue.

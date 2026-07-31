@@ -1,9 +1,13 @@
 /**
- * Nova-owned send plan. Hard safety still lives in outreach-policy + env kill
- * switch; this is what Nova sets when it decides "how many today".
+ * Nova-owned send plan. She chooses daily volume (usually 20–50).
+ * Hard safety still lives in outreach-policy + env kill switch.
  */
 
-import { OUTREACH_MAX_SENDS_PER_DAY } from "@/lib/nexus/outreach-policy";
+import {
+  clampDailySendTarget,
+  OUTREACH_MIN_SENDS_PER_DAY,
+  outreachMaxSendsPerDay,
+} from "@/lib/nexus/outreach-policy";
 import { loadNovaMemories, upsertNovaMemory } from "./memory";
 
 export interface NovaSendPlan {
@@ -29,9 +33,9 @@ export async function getNovaSendPlan(): Promise<NovaSendPlan> {
       : Number.parseInt(planRow?.content?.match(/\d+/)?.[0] ?? "", 10);
 
   if (!Number.isFinite(dailyTarget) || dailyTarget < 0) {
-    dailyTarget = 10;
+    dailyTarget = OUTREACH_MIN_SENDS_PER_DAY;
   }
-  dailyTarget = Math.min(OUTREACH_MAX_SENDS_PER_DAY, Math.floor(dailyTarget));
+  dailyTarget = clampDailySendTarget(dailyTarget);
 
   const armedMeta = (armedRow?.metadata ?? {}) as { armed?: boolean };
   const armed =
@@ -50,13 +54,13 @@ export async function setNovaSendPlan(input: {
   dailyTarget: number;
   note?: string;
 }): Promise<NovaSendPlan> {
-  const dailyTarget = Math.max(
-    0,
-    Math.min(OUTREACH_MAX_SENDS_PER_DAY, Math.floor(input.dailyTarget))
-  );
+  const dailyTarget = clampDailySendTarget(input.dailyTarget);
+  const max = outreachMaxSendsPerDay();
   const note =
     input.note?.trim() ||
-    `Nova target: ${dailyTarget} sends/day (hard ceiling ${OUTREACH_MAX_SENDS_PER_DAY}).`;
+    (dailyTarget === 0
+      ? "Paused (0 sends today)."
+      : `Nova target: ${dailyTarget}/day (floor ${OUTREACH_MIN_SENDS_PER_DAY}, ceiling ${max}).`);
 
   await upsertNovaMemory({
     kind: "preference",

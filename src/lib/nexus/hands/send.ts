@@ -10,7 +10,7 @@ import {
   isNexusSendEnabled,
   isWithinOutreachWindow,
   nextOutreachSendDelaySeconds,
-  OUTREACH_MAX_SENDS_PER_DAY,
+  outreachMaxSendsPerDay,
   secondsUntilOutreachWindow,
 } from "../outreach-policy";
 import type { HandResult, OutreachSendPayload } from "../types";
@@ -139,7 +139,7 @@ export async function runOutreachSend(
   }
 
   const today = await sentTodayCount(db);
-  const dayCap = Math.min(OUTREACH_MAX_SENDS_PER_DAY, plan.dailyTarget);
+  const dayCap = Math.min(outreachMaxSendsPerDay(), plan.dailyTarget);
   if (today >= dayCap) {
     const wait = secondsUntilOutreachWindow(/* nextDay */ true);
     await enqueueJob(

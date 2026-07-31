@@ -3,10 +3,12 @@ import { loadNexusState } from "@/lib/nexus/state";
 import { enqueueOutreachSend } from "@/lib/nexus/hands/send";
 import { isMailtrapConfigured, isMailtrapSandbox } from "@/lib/nexus/mailtrap";
 import {
+  clampDailySendTarget,
   isNexusSendEnabled,
   isWithinOutreachWindow,
   nextOutreachSendDelaySeconds,
-  OUTREACH_MAX_SENDS_PER_DAY,
+  OUTREACH_MIN_SENDS_PER_DAY,
+  outreachMaxSendsPerDay,
 } from "@/lib/nexus/outreach-policy";
 import { runTick } from "@/lib/nexus/runner";
 import type { LeadSearchPayload } from "@/lib/nexus/types";
@@ -69,17 +71,16 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "send_today",
       description:
-        "ONE call to send N emails today: sets the plan, arms Nova, queues that many approved drafts (paced). Use this when Isaac says send X today.",
+        "ONE call for today's send plan: arms Nova and queues that many approved drafts (paced). YOU usually pick the count — keep it at least 20, up to 50. Omit count to use your current plan / default 20+.",
       parameters: {
         type: "object",
         properties: {
           count: {
             type: "number",
-            description: "How many emails to send today (0–30)",
+            description: `Emails today (${OUTREACH_MIN_SENDS_PER_DAY}–${outreachMaxSendsPerDay()}, or 0 to pause)`,
           },
           note: { type: "string", description: "Optional why" },
         },
-        required: ["count"],
       },
     },
   },
@@ -194,16 +195,23 @@ async function toolFindLeads(args: Record<string, unknown>) {
 }
 
 async function toolSendToday(args: Record<string, unknown>) {
-  const count = Math.max(
-    0,
-    Math.min(OUTREACH_MAX_SENDS_PER_DAY, Math.floor(Number(args.count)))
-  );
-  if (!Number.isFinite(Number(args.count))) {
-    return { error: "count required" };
-  }
+  const current = await getNovaSendPlan();
+  const raw =
+    args.count != null && Number.isFinite(Number(args.count))
+      ? Number(args.count)
+      : current.dailyTarget || OUTREACH_MIN_SENDS_PER_DAY;
+  const count = clampDailySendTarget(raw);
 
   const note = args.note ? String(args.note) : undefined;
   const plan = await setNovaSendPlan({ dailyTarget: count, note });
+  if (count === 0) {
+    await setNovaSendArmed(false, note || "Paused at 0");
+    return {
+      plan,
+      queued: 0,
+      plainEnglish: "Paused — 0 sends today.",
+    };
+  }
   await setNovaSendArmed(true, note || `Sending ${count} today`);
 
   const db = requireNexusDb();
@@ -311,10 +319,9 @@ export async function runNovaTool(
     }
 
     case "set_send_plan": {
-      const dailyTarget = Number(args.dailyTarget ?? args.count);
-      if (!Number.isFinite(dailyTarget)) {
-        return JSON.stringify({ error: "dailyTarget required" });
-      }
+      const dailyTarget = clampDailySendTarget(
+        Number(args.dailyTarget ?? args.count ?? OUTREACH_MIN_SENDS_PER_DAY)
+      );
       const plan = await setNovaSendPlan({
         dailyTarget,
         note: args.note ? String(args.note) : undefined,
