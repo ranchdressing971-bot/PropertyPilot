@@ -181,26 +181,162 @@ function pickPreferredVoice(
   );
 }
 
-async function playBlobViaWebAudio(
-  blob: Blob,
-  ctx: AudioContext | null
-): Promise<void> {
-  const AC = getAudioContextClass();
-  if (!AC) throw new Error("Web Audio unavailable");
-  const audioCtx = ctx ?? new AC();
-  if (audioCtx.state === "suspended") await audioCtx.resume();
-  const buffer = await blob.arrayBuffer();
-  const decoded = await audioCtx.decodeAudioData(buffer.slice(0));
-  await new Promise<void>((resolve, reject) => {
-    const source = audioCtx.createBufferSource();
-    source.buffer = decoded;
-    source.connect(audioCtx.destination);
-    source.onended = () => resolve();
-    try {
-      source.start(0);
-    } catch (err) {
-      reject(err instanceof Error ? err : new Error("Web Audio playback failed"));
+function needsSafariGesturePlayback(): boolean {
+  return isSafariBrowser() && !isNovaApk();
+}
+
+class NeedsGesturePlaybackError extends Error {
+  constructor(message = "Safari requires a tap to play voice") {
+    super(message);
+    this.name = "NeedsGesturePlaybackError";
+  }
+}
+
+interface PendingVoice {
+  text: string;
+  blob: Blob | null;
+  after: ListenMode;
+  useBrowserTts: boolean;
+}
+
+/** Safari/iOS: call speak() synchronously — no await before speak in this function. */
+function speakWithFreeVoiceSync(text: string): Promise<void> {
+  const clipped = text.trim().slice(0, 2500);
+  if (!clipped) return Promise.resolve();
+
+  if (isNovaApk() && hasNativeTts()) {
+    return speakWithNative(clipped);
+  }
+
+  if (typeof window === "undefined" || !window.speechSynthesis) {
+    if (hasNativeTts()) return speakWithNative(clipped);
+    return Promise.reject(new Error("This browser has no free device voice."));
+  }
+
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(clipped);
+  const voices = window.speechSynthesis.getVoices();
+  const preferred = pickPreferredVoice(voices);
+  if (preferred) utterance.voice = preferred;
+  utterance.rate = 1.05;
+  utterance.pitch = 1.08;
+  utterance.volume = 1;
+
+  return new Promise<void>((resolve, reject) => {
+    let spoke = false;
+    const watchdog = window.setTimeout(() => {
+      if (!spoke && !window.speechSynthesis.speaking) {
+        reject(new Error("Device voice did not start"));
+      }
+    }, 3000);
+    utterance.onstart = () => {
+      spoke = true;
+    };
+    utterance.onend = () => {
+      window.clearTimeout(watchdog);
+      resolve();
+    };
+    utterance.onerror = (event) => {
+      window.clearTimeout(watchdog);
+      if (event.error === "interrupted" || event.error === "canceled") {
+        resolve();
+        return;
+      }
+      reject(new Error(event.error || "Device voice failed"));
+    };
+    window.speechSynthesis.resume();
+    window.speechSynthesis.speak(utterance);
+    if (isSafariBrowser()) {
+      window.speechSynthesis.pause();
+      window.speechSynthesis.resume();
     }
+  });
+}
+
+function normalizeAudioBlob(blob: Blob): Blob {
+  if (blob.type && blob.type !== "application/octet-stream") return blob;
+  return new Blob([blob], { type: "audio/mpeg" });
+}
+
+/**
+ * Play MPEG via persistent <audio> — play() must run in the same turn as src
+ * assignment when invoked from a tap handler.
+ */
+function playBlobInGesture(
+  el: HTMLAudioElement,
+  blob: Blob,
+  objectUrlRef: { current: string | null }
+): Promise<void> {
+  if (objectUrlRef.current) {
+    URL.revokeObjectURL(objectUrlRef.current);
+    objectUrlRef.current = null;
+  }
+
+  const typed = normalizeAudioBlob(blob);
+  const url = URL.createObjectURL(typed);
+  objectUrlRef.current = url;
+
+  el.muted = false;
+  el.volume = 1;
+  el.setAttribute("playsinline", "");
+  el.src = url;
+
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (ok: boolean, err?: Error) => {
+      if (settled) return;
+      settled = true;
+      el.onended = null;
+      el.onerror = null;
+      el.onloadedmetadata = null;
+      window.clearTimeout(watchdog);
+      if (ok) resolve();
+      else reject(err ?? new Error("Voice playback failed"));
+    };
+
+    el.onloadedmetadata = () => {
+      const d = el.duration;
+      if (!Number.isFinite(d) || d < 0.05) {
+        finish(false, new Error("Voice file has zero duration"));
+      }
+    };
+    el.onended = () => {
+      if (objectUrlRef.current === url) {
+        URL.revokeObjectURL(url);
+        objectUrlRef.current = null;
+      }
+      if (el.currentTime < 0.02 && el.duration > 0.05) {
+        finish(false, new Error("Voice ended without playing"));
+        return;
+      }
+      finish(true);
+    };
+    el.onerror = () => {
+      if (objectUrlRef.current === url) {
+        URL.revokeObjectURL(url);
+        objectUrlRef.current = null;
+      }
+      finish(false, new Error("Browser could not play the voice file"));
+    };
+
+    const playResult = el.play();
+    if (playResult !== undefined) {
+      playResult.catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : "play blocked";
+        finish(false, new Error(msg));
+      });
+    }
+
+    const watchdog = window.setTimeout(() => {
+      if (settled) return;
+      if (el.paused && !el.ended) {
+        finish(false, new Error("play blocked"));
+        return;
+      }
+      if (el.currentTime < 0.01 && !el.ended) {
+        finish(false, new Error("Voice did not start"));
+      }
+    }, 700);
   });
 }
 
@@ -317,6 +453,7 @@ export function NovaConsole() {
   const [micSupported, setMicSupported] = useState(true);
   const [listeningOn, setListeningOn] = useState(true);
   const [needsGesture, setNeedsGesture] = useState(false);
+  const [showTapToHear, setShowTapToHear] = useState(false);
 
   const phaseRef = useRef<Phase>("idle");
   const listeningOnRef = useRef(true);
@@ -331,6 +468,7 @@ export function NovaConsole() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const audioUnlockedRef = useRef(false);
+  const pendingVoiceRef = useRef<PendingVoice | null>(null);
   /** After TTS, restart mic in wake (dormant) or command (open) mode. */
   const resumeModeRef = useRef<ListenMode>("command");
   const askNovaRef = useRef<(message: string) => Promise<void>>(async () => {});
@@ -386,9 +524,13 @@ export function NovaConsole() {
 
   /**
    * Free device TTS when ElevenLabs is missing or out of credits.
-   * Prefer Android TextToSpeech in the RideByNova APK (WebView often has no voices).
+   * On Safari after async work, throws — use speakWithFreeVoiceSync in a tap handler.
    */
   const speakWithFreeVoice = useCallback(async (text: string) => {
+    if (needsSafariGesturePlayback()) {
+      throw new NeedsGesturePlaybackError();
+    }
+
     const clipped = text.trim().slice(0, 2500);
     if (!clipped) return;
 
@@ -421,119 +563,36 @@ export function NovaConsole() {
       return;
     }
 
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(clipped);
-    const preferred = pickPreferredVoice(voices);
-    if (preferred) utterance.voice = preferred;
-    utterance.rate = 1.05;
-    utterance.pitch = 1.08;
-    utterance.volume = 1;
-
-    await new Promise<void>((resolve, reject) => {
-      let spoke = false;
-      const watchdog = window.setTimeout(() => {
-        if (!spoke && !window.speechSynthesis.speaking) {
-          reject(new Error("Device voice did not start"));
-        }
-      }, 2500);
-      utterance.onstart = () => {
-        spoke = true;
-      };
-      utterance.onend = () => {
-        window.clearTimeout(watchdog);
-        resolve();
-      };
-      utterance.onerror = (event) => {
-        window.clearTimeout(watchdog);
-        if (event.error === "interrupted" || event.error === "canceled") {
-          resolve();
-          return;
-        }
-        reject(new Error(event.error || "Device voice failed"));
-      };
-      window.speechSynthesis.resume();
-      window.speechSynthesis.speak(utterance);
-      // iOS Safari: kick the queue so speak actually starts.
-      if (isSafariBrowser()) {
-        window.speechSynthesis.pause();
-        window.speechSynthesis.resume();
-      }
-    });
+    await speakWithFreeVoiceSync(clipped);
   }, []);
 
   const playVoiceBlob = useCallback(
     async (blob: Blob) => {
-      const unlocked = await unlockAudio();
+      if (needsSafariGesturePlayback() && !audioUnlockedRef.current) {
+        throw new NeedsGesturePlaybackError();
+      }
+
+      await unlockAudio();
       const el = audioElRef.current;
       if (!el) throw new Error("Audio element missing");
 
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
-
-      const typed =
-        blob.type && blob.type !== "application/octet-stream"
-          ? blob
-          : new Blob([blob], { type: "audio/mpeg" });
-
-      const playViaElement = () =>
-        new Promise<void>((resolve, reject) => {
-          const url = URL.createObjectURL(typed);
-          objectUrlRef.current = url;
-          el.muted = false;
-          el.setAttribute("playsinline", "");
-          el.src = url;
-          el.load();
-
-          const cleanup = () => {
-            el.onended = null;
-            el.onerror = null;
-          };
-          el.onended = () => {
-            cleanup();
-            if (objectUrlRef.current === url) {
-              URL.revokeObjectURL(url);
-              objectUrlRef.current = null;
-            }
-            resolve();
-          };
-          el.onerror = () => {
-            cleanup();
-            if (objectUrlRef.current === url) {
-              URL.revokeObjectURL(url);
-              objectUrlRef.current = null;
-            }
-            reject(new Error("Browser could not play the voice file"));
-          };
-          void el.play().catch((err: unknown) => {
-            cleanup();
-            if (objectUrlRef.current === url) {
-              URL.revokeObjectURL(url);
-              objectUrlRef.current = null;
-            }
-            const msg = err instanceof Error ? err.message : "play blocked";
-            reject(new Error(msg));
-          });
-        });
-
-      try {
-        await playViaElement();
-        return;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "";
-        if (!unlocked && /NotAllowed|interact|gesture|play blocked/i.test(msg)) {
-          throw err;
-        }
-        try {
-          await playBlobViaWebAudio(typed, audioCtxRef.current);
-        } catch {
-          throw err instanceof Error ? err : new Error("Voice playback failed");
-        }
-      }
+      await playBlobInGesture(el, blob, objectUrlRef);
     },
     [unlockAudio]
   );
+
+  const queueTapToHear = useCallback((pending: PendingVoice) => {
+    pendingVoiceRef.current = pending;
+    setShowTapToHear(true);
+    setNeedsGesture(true);
+  }, []);
+
+  const resumeAfterSpeech = useCallback((mode: ListenMode) => {
+    setPhase(mode === "command" ? "listening_command" : "listening_wake");
+    window.setTimeout(() => {
+      if (listeningOnRef.current) startMicRef.current(mode);
+    }, 350);
+  }, []);
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -605,6 +664,48 @@ export function NovaConsole() {
       restartingRef.current = false;
     }, 100);
   }, []);
+
+  const onTapToHear = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const pending = pendingVoiceRef.current;
+      if (!pending) return;
+
+      pendingVoiceRef.current = null;
+      setShowTapToHear(false);
+      setNeedsGesture(false);
+      setPhase("speaking");
+      killMic();
+      audioUnlockedRef.current = true;
+
+      const el = audioElRef.current;
+      let playback: Promise<void>;
+      if (pending.blob && el && !pending.useBrowserTts) {
+        playback = playBlobInGesture(el, pending.blob, objectUrlRef);
+      } else if (isNovaApk() && hasNativeTts()) {
+        playback = speakWithNative(pending.text);
+      } else if (typeof window !== "undefined" && window.speechSynthesis) {
+        primeSpeechSynthesis(window.speechSynthesis);
+        playback = speakWithFreeVoiceSync(pending.text);
+      } else if (pending.blob && el) {
+        playback = playBlobInGesture(el, pending.blob, objectUrlRef);
+      } else {
+        playback = Promise.reject(new Error("Nothing to play"));
+      }
+
+      void playback
+        .then(() => setError(null))
+        .catch(() => {
+          pendingVoiceRef.current = pending;
+          setShowTapToHear(true);
+          setNeedsGesture(true);
+          setError("Tap again to hear Nova's reply.");
+        })
+        .finally(() => resumeAfterSpeech(pending.after));
+    },
+    [killMic, resumeAfterSpeech]
+  );
 
   const clearSilenceEnd = useCallback(() => {
     if (silenceEndRef.current) {
@@ -816,12 +917,18 @@ export function NovaConsole() {
       resumeModeRef.current = after;
       setPhase("speaking");
       killMic();
-      const audioReady = await unlockAudio();
+      const safariTap = needsSafariGesturePlayback();
+
+      let voiceBlob: Blob | null = null;
+      let useBrowserTts = false;
+
       try {
+        await unlockAudio();
         if (typeof window !== "undefined") {
           stopNativeTts();
           window.speechSynthesis?.cancel();
         }
+
         const res = await fetch("/api/nova/speak", {
           method: "POST",
           credentials: "include",
@@ -829,7 +936,6 @@ export function NovaConsole() {
           body: JSON.stringify({ text }),
         });
 
-        // Missing key, out of credits, or rate limit → free device voice.
         if (res.status === 503) {
           let code = "";
           try {
@@ -839,59 +945,76 @@ export function NovaConsole() {
             /* ignore */
           }
           if (code === "FALLBACK_BROWSER" || !code) {
-            await speakWithFreeVoice(text);
-            setError(null);
+            useBrowserTts = true;
+          } else {
+            setError(
+              "Voice off — add ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID on Vercel, redeploy."
+            );
             return;
           }
-          setError(
-            "Voice off — add ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID on Vercel, redeploy."
-          );
+        } else if (!res.ok) {
+          useBrowserTts = true;
+        } else {
+          const blob = await res.blob();
+          if (!blob.size) useBrowserTts = true;
+          else voiceBlob = normalizeAudioBlob(blob);
+        }
+
+        if (safariTap) {
+          if (
+            !useBrowserTts &&
+            voiceBlob &&
+            audioUnlockedRef.current &&
+            audioElRef.current
+          ) {
+            try {
+              await playBlobInGesture(
+                audioElRef.current,
+                voiceBlob,
+                objectUrlRef
+              );
+              setShowTapToHear(false);
+              pendingVoiceRef.current = null;
+              setError(null);
+              return;
+            } catch {
+              /* fall through to tap queue */
+            }
+          }
+          queueTapToHear({
+            text,
+            blob: voiceBlob,
+            after,
+            useBrowserTts: useBrowserTts || !voiceBlob,
+          });
+          setError(null);
           return;
         }
 
-        if (!res.ok) {
-          // Any ElevenLabs failure: try free voice before surfacing an error.
-          try {
-            await speakWithFreeVoice(text);
-            setError(null);
-            return;
-          } catch {
-            /* fall through */
-          }
-          let detail = "Voice request failed";
-          try {
-            const data = (await res.json()) as { error?: string };
-            if (data.error) detail = data.error;
-          } catch {
-            /* ignore */
-          }
-          setError(detail);
-          return;
-        }
-        const blob = await res.blob();
-        if (!blob.size) {
+        if (useBrowserTts || !voiceBlob) {
           await speakWithFreeVoice(text);
+          setError(null);
           return;
         }
-        // Ensure MPEG type — some browsers refuse generic blobs.
-        const typed =
-          blob.type && blob.type !== "application/octet-stream"
-            ? blob
-            : new Blob([blob], { type: "audio/mpeg" });
+
         try {
-          await playVoiceBlob(typed);
-        } catch (playErr) {
-          const playMsg =
-            playErr instanceof Error ? playErr.message : "Voice playback failed";
-          if (
-            !audioReady &&
-            /NotAllowed|interact|gesture|play blocked/i.test(playMsg)
-          ) {
-            setNeedsGesture(true);
-          }
+          await playVoiceBlob(voiceBlob);
+          setError(null);
+        } catch {
           await speakWithFreeVoice(text);
+          setError(null);
         }
       } catch (err) {
+        if (safariTap) {
+          queueTapToHear({
+            text,
+            blob: voiceBlob,
+            after,
+            useBrowserTts: true,
+          });
+          setError(null);
+          return;
+        }
         try {
           await speakWithFreeVoice(text);
           setError(null);
@@ -912,15 +1035,17 @@ export function NovaConsole() {
           }
         }
       } finally {
-        const mode = resumeModeRef.current;
-        setPhase(mode === "command" ? "listening_command" : "listening_wake");
-        // Fresh mic session after TTS — old one is dead after killMic.
-        window.setTimeout(() => {
-          if (listeningOnRef.current) startMicRef.current(mode);
-        }, 350);
+        resumeAfterSpeech(after);
       }
     },
-    [killMic, playVoiceBlob, speakWithFreeVoice, unlockAudio]
+    [
+      killMic,
+      playVoiceBlob,
+      queueTapToHear,
+      resumeAfterSpeech,
+      speakWithFreeVoice,
+      unlockAudio,
+    ]
   );
 
   const goDormant = useCallback(() => {
@@ -979,6 +1104,8 @@ export function NovaConsole() {
 
       void unlockAudio();
       setError(null);
+      setShowTapToHear(false);
+      pendingVoiceRef.current = null;
       clearSilenceEnd();
       setPhase("thinking");
       killMic();
@@ -1202,8 +1329,21 @@ export function NovaConsole() {
           <span />
         </div>
 
-        <p className="nova-phase">{phaseLabel}</p>
-        {needsGesture && (
+        <p className="nova-phase">
+          {showTapToHear
+            ? "reply ready"
+            : phaseLabel}
+        </p>
+        {showTapToHear && (
+          <button
+            type="button"
+            className="nova-tap-hear"
+            onPointerDown={onTapToHear}
+          >
+            Tap to hear Nova
+          </button>
+        )}
+        {needsGesture && !showTapToHear && (
           <p className="nova-hint">
             Tap the orb once to unlock mic + sound.
           </p>
