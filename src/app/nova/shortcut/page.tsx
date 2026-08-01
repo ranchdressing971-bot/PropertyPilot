@@ -7,7 +7,7 @@ import { checkNexusAdmin } from "@/lib/nexus/admin";
 export const metadata: Metadata = {
   title: "Hey Nova · iOS Shortcut",
   description:
-    "SpeakText says whats up big dog first — the webpage cannot talk first on iPhone.",
+    "Open Nova already listening — optional Dictate Text via q= for glasses.",
   robots: { index: false, follow: false },
 };
 
@@ -32,24 +32,18 @@ export default async function NovaShortcutPage() {
           HEY NOVA
         </h1>
         <p className="mt-4 text-center text-base font-medium leading-snug text-white/85">
-          This is what makes her talk — the webpage cannot talk first on
-          iPhone.
-        </p>
-        <p className="mt-2 text-center text-sm leading-relaxed text-white/50">
-          Safari blocks page audio until you tap. Siri Shortcut{" "}
-          <span className="text-white/70">Speak Text</span> is allowed to speak
-          immediately. Put it first.
+          Open Nova already listening. One shortcut action is enough.
         </p>
 
         <div className="mt-8 space-y-6 text-left">
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200/70">
-            iPhone shortcut — hear her first
+            iPhone shortcut
           </p>
 
           <ol className="space-y-5">
             <li className="rounded-2xl border border-cyan-300/35 bg-cyan-300/[0.07] px-4 py-5">
               <p className="text-xl font-bold tracking-tight text-white">
-                1. Speak Text ← required, first
+                1. Open URLs
               </p>
               <p className="mt-2 text-sm leading-relaxed text-white/70">
                 Open{" "}
@@ -60,26 +54,9 @@ export default async function NovaShortcutPage() {
                   Shortcuts
                 </a>{" "}
                 → new shortcut → add{" "}
-                <span className="font-semibold text-white">Speak Text</span>.
-                Text exactly:
+                <span className="font-semibold text-white">Open URLs</span>:
               </p>
-              <p className="mt-3 rounded-lg bg-black/45 px-3 py-3 text-center text-lg font-semibold tracking-wide text-white">
-                whats up big dog
-              </p>
-              <p className="mt-2 text-xs text-white/45">
-                No comma. This is the greeting you hear — Nova will not autoplay
-                it in Safari.
-              </p>
-            </li>
-
-            <li className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
-              <p className="text-lg font-bold tracking-tight text-white">
-                2. Open URLs
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-white/65">
-                After SpeakText finishes, open Nova listening:
-              </p>
-              <code className="mt-2.5 block break-all rounded-lg bg-black/40 px-3 py-2.5 font-mono text-[11px] leading-relaxed text-cyan-100/90">
+              <code className="mt-3 block break-all rounded-lg bg-black/45 px-3 py-3 font-mono text-[11px] leading-relaxed text-cyan-100/90">
                 {listenUrl}
               </code>
               <p className="mt-2 text-xs text-white/45">
@@ -95,16 +72,17 @@ export default async function NovaShortcutPage() {
               Optional — dictate a command
             </p>
             <p className="mt-2 text-sm leading-relaxed text-white/55">
-              Between SpeakText and Open URLs, add{" "}
+              Before Open URLs, add{" "}
               <span className="text-white/75">Dictate Text</span>, then open:
             </p>
             <code className="mt-2.5 block break-all rounded-lg bg-black/40 px-3 py-2.5 font-mono text-[11px] leading-relaxed text-cyan-100/90">
               {listenWithQExample}
-              <span className="text-amber-100/85">DictatedText</span>
+              <span className="text-amber-100/85">Dictated Text</span>
             </code>
             <p className="mt-2 text-xs text-white/40">
               Insert the DictateText variable after{" "}
-              <span className="font-mono text-white/60">q=</span>.
+              <span className="font-mono text-white/60">q=</span>. Useful on
+              glasses when you want the command in the URL.
             </p>
           </div>
 
@@ -116,7 +94,8 @@ export default async function NovaShortcutPage() {
             <p>
               Without the Shortcut: open{" "}
               <span className="font-mono text-white/60">/nova</span> and tap the
-              orb once — that unlocks sound and can greet in-page.
+              orb once to unlock sound, then say{" "}
+              <span className="text-white/70">Hey Nova</span>.
             </p>
           </div>
 

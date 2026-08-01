@@ -1180,6 +1180,8 @@ function looksLikeCommand(text: string): boolean {
 
 /** How long Nova waits after the last speech before ending the open listen. */
 const SILENCE_END_MS = 5500;
+/** Ignore duplicate / overlapping mic finals within this window (same turn). */
+const UTTERANCE_DEDUPE_MS = 2500;
 
 function beep() {
   try {
@@ -1209,20 +1211,6 @@ function readListenIntentFromLocation(): boolean {
     return false;
   }
 }
-
-/** Opt-in in-page greeting via orb tap (?greet=1). Never autoplays on listen=1. */
-function readGreetIntentFromLocation(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const greet = new URLSearchParams(window.location.search).get("greet");
-    return greet === "1" || greet === "true";
-  } catch {
-    return false;
-  }
-}
-
-/** One-shot phone greeting — Shortcut SpeakText owns this for ?listen=1. */
-const LISTEN_READY_GREETING = "whats up big dog";
 
 /** Shortcut Dictate Text (or typed) utterance from ?q= — process without waiting on mic. */
 function readQueryUtteranceFromLocation(): string | null {
@@ -1379,6 +1367,12 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   /** Monotonic id so a newer ask can supersede an in-flight chat/speak. */
   const chatSeqRef = useRef(0);
   const chatAbortRef = useRef<AbortController | null>(null);
+  /** True from mic commit / ask start until that turn finishes (or is superseded). */
+  const askInFlightRef = useRef(false);
+  /** Sync re-entry guard — blocks double finals before askNova flips phase. */
+  const micCommitLockRef = useRef(false);
+  /** Last mic-committed utterance for short-window dedupe. */
+  const lastMicCommitRef = useRef<{ norm: string; at: number } | null>(null);
   /** Bumped when output is interrupted so a stale speak() bails cleanly. */
   const outputEpochRef = useRef(0);
   const startMicRef = useRef<(mode?: ListenMode) => void>(() => {});
@@ -1394,16 +1388,11 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   >(async () => {});
   const autoListenRef = useRef(autoListen);
   const listenTapNeededRef = useRef(false);
-  /** Once per session — in-page "whats up big dog" (orb tap / ?greet=1 only). */
-  const phoneGreetDoneRef = useRef(false);
-  /** ?greet=1 — allow in-page greet on orb tap even with listen=1. */
-  const wantInPageGreetRef = useRef(false);
   /** Prevents overlapping unlock→listen boots. */
   const listenReadyInFlightRef = useRef(false);
   const runListenReadySequenceRef = useRef<
     (fromGesture: boolean) => Promise<void>
   >(async () => {});
-  const playPhoneGreetingInGestureRef = useRef<() => boolean>(() => false);
 
   /**
    * Resume/create AudioContext only — safe during pending playback.
@@ -1850,7 +1839,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         return true;
       }
       unlockAudioInGesture();
-      // Shortcut / listen=1: ensure command listen after unlock (no web greeting).
+      // Shortcut / listen=1: ensure command listen after unlock.
       if (
         autoListenRef.current &&
         (listenTapNeededRef.current ||
@@ -1870,21 +1859,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const handleOrbGesture = useCallback(
     (e: React.SyntheticEvent) => {
       e.stopPropagation();
-      const pending = pendingVoiceRef.current;
-      if (waitingForTapRef.current && pending) {
-        const drained = handleUserGesture(e);
-        if (drained) drainedPendingRef.current = true;
-        return;
-      }
-      // Phone path: first orb tap can say the greeting once (gesture-unlocked TTS).
-      // listen=1 skips this unless ?greet=1 (Shortcut SpeakText already greeted).
-      const mayGreet =
-        !phoneGreetDoneRef.current &&
-        (!autoListenRef.current || wantInPageGreetRef.current);
-      if (mayGreet && playPhoneGreetingInGestureRef.current()) {
-        drainedPendingRef.current = true;
-        return;
-      }
       const drained = handleUserGesture(e);
       if (drained) drainedPendingRef.current = true;
     },
@@ -2063,62 +2037,8 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   }, [clearSilenceEnd]);
 
   /**
-   * In-gesture phone greeting (orb tap). Sync speechSynthesis.speak — no await
-   * before speak. Mic resumes after TTS. Never used for listen=1 autoplay.
-   */
-  const playPhoneGreetingInGesture = useCallback((): boolean => {
-    if (phoneGreetDoneRef.current || gesturePlayLockRef.current) return false;
-    if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
-      return false;
-    }
-
-    listeningOnRef.current = true;
-    setListeningOn(true);
-    listenTapNeededRef.current = false;
-    setListenTapNeeded(false);
-
-    // Start TTS in-gesture first (iOS token), then hard-mute capture.
-    resumeAudioContextInGesture();
-    let playback: Promise<void>;
-    try {
-      playback = speakWithFreeVoiceSync(LISTEN_READY_GREETING);
-    } catch {
-      return false;
-    }
-
-    phoneGreetDoneRef.current = true;
-    gesturePlayLockRef.current = true;
-    phaseRef.current = "speaking";
-    setPhase("speaking");
-    killMic({ keepSpeech: true });
-    setVoiceDebug(
-      formatVoiceDiag({ unlocked: true, path: "phone-greet:device-tts" })
-    );
-
-    void playback
-      .then(() => {
-        setError(null);
-        resumeAfterSpeech("command");
-      })
-      .catch(() => {
-        // Greeting failed — still open the mic (don't leave listen broken).
-        phoneGreetDoneRef.current = false;
-        resumeAfterSpeech("command");
-      })
-      .finally(() => {
-        gesturePlayLockRef.current = false;
-      });
-
-    return true;
-  }, [killMic, resumeAfterSpeech, resumeAudioContextInGesture]);
-
-  useEffect(() => {
-    playPhoneGreetingInGestureRef.current = playPhoneGreetingInGesture;
-  }, [playPhoneGreetingInGesture]);
-
-  /**
-   * Shortcut / ?listen=1: SpeakText already said the greeting.
-   * Open → short delay → startMic. No in-page autoplay. No tap wall.
+   * Shortcut / ?listen=1: open → short delay → startMic.
+   * No greeting TTS. No tap wall. Optional ?q= runs immediately.
    */
   const runListenReadySequence = useCallback(
     async (fromGesture: boolean) => {
@@ -2130,10 +2050,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       setListeningOn(true);
       listenTapNeededRef.current = false;
       setListenTapNeeded(false);
-      // Shortcut already greeted — don't double-greet on orb tap unless ?greet=1.
-      if (!wantInPageGreetRef.current) {
-        phoneGreetDoneRef.current = true;
-      }
 
       const armCommandListen = () => {
         if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
@@ -2147,14 +2063,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
 
       try {
         if (fromGesture) {
-          // Optional ?greet=1: orb tap can still play in-page greeting.
-          if (
-            wantInPageGreetRef.current &&
-            !phoneGreetDoneRef.current &&
-            playPhoneGreetingInGesture()
-          ) {
-            return;
-          }
           unlockAudioInGesture();
           armCommandListen();
           return;
@@ -2182,7 +2090,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           return;
         }
 
-        // Best-effort unlock; never block mic on failed greeting autoplay.
+        // Best-effort unlock; never block mic on failed audio unlock.
         void unlockAudio();
         // Brief settle after page open, then listen for commands.
         await new Promise((r) => window.setTimeout(r, 280));
@@ -2195,13 +2103,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         listenReadyInFlightRef.current = false;
       }
     },
-    [
-      armSilenceEnd,
-      killMic,
-      playPhoneGreetingInGesture,
-      unlockAudio,
-      unlockAudioInGesture,
-    ]
+    [armSilenceEnd, killMic, unlockAudio, unlockAudioInGesture]
   );
 
   useEffect(() => {
@@ -2283,9 +2185,22 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           const text = raw.trim();
           if (!text) return;
 
+          // One mic turn at a time — drop re-entrant finals / timer races.
+          if (
+            micCommitLockRef.current ||
+            askInFlightRef.current ||
+            phaseRef.current === "thinking" ||
+            phaseRef.current === "speaking"
+          ) {
+            return;
+          }
+
           if (isCloseIntent(text)) {
             commandBufferRef.current = "";
-            if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+            if (commandTimerRef.current) {
+              clearTimeout(commandTimerRef.current);
+              commandTimerRef.current = null;
+            }
             goDormantRef.current();
             return;
           }
@@ -2298,15 +2213,41 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           const rest = stripWake(text) || text;
           if (!looksLikeCommand(rest)) return;
 
+          const norm = normalizeUtterance(rest);
+          const prev = lastMicCommitRef.current;
+          if (
+            prev &&
+            Date.now() - prev.at < UTTERANCE_DEDUPE_MS &&
+            (prev.norm === norm ||
+              prev.norm.includes(norm) ||
+              norm.includes(prev.norm))
+          ) {
+            return;
+          }
+
+          // Claim the turn synchronously, then kill recognition before ask.
+          micCommitLockRef.current = true;
+          lastMicCommitRef.current = { norm, at: Date.now() };
           commandBufferRef.current = "";
-          if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+          if (commandTimerRef.current) {
+            clearTimeout(commandTimerRef.current);
+            commandTimerRef.current = null;
+          }
           clearSilenceEnd();
-          void askNovaRef.current(rest);
+          phaseRef.current = "thinking";
+          setPhase("thinking");
+          killMic();
+
+          void askNovaRef.current(rest).finally(() => {
+            micCommitLockRef.current = false;
+          });
         };
 
         recognition.onresult = (event) => {
           // Hard-ignore while muted for TTS / thinking (no barge-in).
           if (
+            micCommitLockRef.current ||
+            askInFlightRef.current ||
             phaseRef.current === "speaking" ||
             phaseRef.current === "thinking"
           ) {
@@ -2327,7 +2268,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             if (!containsWake(text)) return;
 
             if (isWakeOnly(text) || stripWake(text).length < 2) {
-              if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+              if (commandTimerRef.current) {
+                clearTimeout(commandTimerRef.current);
+                commandTimerRef.current = null;
+              }
               commandBufferRef.current = "";
               beep();
               openConversationRef.current();
@@ -2347,7 +2291,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             setPhase("listening_command");
             armSilenceEnd();
             commandBufferRef.current = rest;
-            if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+            if (commandTimerRef.current) {
+              clearTimeout(commandTimerRef.current);
+              commandTimerRef.current = null;
+            }
             if (rest.length > 6 && isFinal) {
               commitUtterance(rest);
               return;
@@ -2367,7 +2314,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             }
 
             if (isCloseIntent(text)) {
-              if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+              if (commandTimerRef.current) {
+                clearTimeout(commandTimerRef.current);
+                commandTimerRef.current = null;
+              }
               commandBufferRef.current = "";
               goDormantRef.current();
               return;
@@ -2376,11 +2326,30 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             const rest = stripWake(text) || text;
             if (!looksLikeCommand(rest)) return;
 
+            // Same final text already queued — ignore duplicate browser finals.
+            const norm = normalizeUtterance(rest);
+            if (
+              commandBufferRef.current &&
+              normalizeUtterance(commandBufferRef.current) === norm &&
+              isFinal &&
+              commandTimerRef.current
+            ) {
+              return;
+            }
+
             commandBufferRef.current = rest;
-            if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+            if (commandTimerRef.current) {
+              clearTimeout(commandTimerRef.current);
+              commandTimerRef.current = null;
+            }
+            // Final → commit promptly; interim keeps assembling.
+            if (isFinal) {
+              commitUtterance(rest);
+              return;
+            }
             commandTimerRef.current = setTimeout(() => {
               commitUtterance(commandBufferRef.current);
-            }, isFinal ? 450 : 1200);
+            }, 1200);
           }
         };
 
@@ -2493,10 +2462,11 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
                 video: false,
               });
               // Hard mute may have started while permission UI / getUserMedia ran.
+              const phaseAfterGrant = phaseRef.current as Phase;
               if (
                 !listeningOnRef.current ||
-                phaseRef.current === "speaking" ||
-                phaseRef.current === "thinking"
+                phaseAfterGrant === "speaking" ||
+                phaseAfterGrant === "thinking"
               ) {
                 disableMediaStreamTracks(stream);
                 stopMediaStreamTracks(stream);
@@ -2517,7 +2487,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
 
       void ensureCaptureThenBoot();
     },
-    [armSilenceEnd, clearSilenceEnd]
+    [armSilenceEnd, clearSilenceEnd, killMic]
   );
 
   useEffect(() => {
@@ -3029,7 +2999,26 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         return;
       }
 
-      // Supersede any in-flight chat/speak — conversation stays interruptible.
+      const norm = normalizeUtterance(cleaned);
+      // Same/similar utterance while a turn is already running → drop (no 2nd API).
+      if (askInFlightRef.current) {
+        const prev = lastMicCommitRef.current;
+        if (
+          prev &&
+          Date.now() - prev.at < UTTERANCE_DEDUPE_MS &&
+          (prev.norm === norm ||
+            prev.norm.includes(norm) ||
+            norm.includes(prev.norm))
+        ) {
+          return;
+        }
+      }
+
+      askInFlightRef.current = true;
+      lastMicCommitRef.current = { norm, at: Date.now() };
+
+      // Supersede any in-flight chat/speak — conversation stays interruptible
+      // for a *different* user turn (typed / new command), not duplicate finals.
       interruptOutput();
       const ac = new AbortController();
       chatAbortRef.current = ac;
@@ -3180,6 +3169,11 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         window.setTimeout(() => {
           if (listeningOnRef.current) startMicRef.current("wake");
         }, 350);
+      } finally {
+        // Only the active turn clears the in-flight flag (superseded keeps it).
+        if (chatSeqRef.current === seq) {
+          askInFlightRef.current = false;
+        }
       }
     },
     [
@@ -3203,7 +3197,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   useEffect(() => {
     listeningOnRef.current = true;
     setListeningOn(true);
-    wantInPageGreetRef.current = readGreetIntentFromLocation();
     const wantListen = autoListen || readListenIntentFromLocation();
     const initialQ = readQueryUtteranceFromLocation();
     if (wantListen || initialQ) {
@@ -3604,8 +3597,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             )
           ) : (
             <>
-              Systems online. Tap the orb to hear{" "}
-              <span>“whats up big dog”</span>, or say <span>“Hey Nova”</span>.
+              Systems online. Say <span>“Hey Nova”</span>, or tap the orb.
             </>
           )}
         </p>
