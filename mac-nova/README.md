@@ -1,7 +1,7 @@
 # Nova Mac launcher
 
-Small AppleScript app that opens `https://rideby.live/nova` in a Chrome/Edge
-app window (Safari fallback).
+Small AppleScript app that opens `https://rideby-ai.vercel.app/nova` in a
+Chrome/Edge app window (Safari fallback). Switch to `rideby.live` when DNS is live.
 
 ## Rebuild
 

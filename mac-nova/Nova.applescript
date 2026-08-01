@@ -1,9 +1,8 @@
 -- RideBy Nova — Mac launcher
 -- Opens the Nova console in an app-style browser window.
 on run
-	set novaURL to "https://rideby.live/nova"
+	set novaURL to "https://rideby-ai.vercel.app/nova"
 	
-	-- Prefer Chrome app window (no browser chrome)
 	try
 		do shell script "open -na 'Google Chrome' --args --app=" & quoted form of novaURL
 		return
@@ -19,7 +18,6 @@ on run
 		return
 	end try
 	
-	-- Safari fallback
 	tell application "Safari"
 		activate
 		open location novaURL

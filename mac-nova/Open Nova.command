@@ -1,7 +1,7 @@
 #!/bin/bash
 # RideBy Nova — Mac launcher (double-click)
 cd "$(dirname "$0")"
-NOVA_URL="https://rideby.live/nova"
+NOVA_URL="https://rideby-ai.vercel.app/nova"
 
 open_app_window() {
   local app="$1"
@@ -18,5 +18,4 @@ if open_app_window "Microsoft Edge"; then
   exit 0
 fi
 
-# Safari fallback
 open -a Safari "$NOVA_URL"

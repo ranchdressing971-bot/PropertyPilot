@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   const origin =
     request.headers.get("origin") ||
     process.env.NEXT_PUBLIC_APP_URL ||
-    "https://rideby.live";
+    "https://rideby-ai.vercel.app";
   const inviteUrl = `${origin.replace(/\/$/, "")}/invite/${result.token}`;
 
   return NextResponse.json({

@@ -48,7 +48,7 @@ No card. No call. One link. That is it.
 function ctaUrl(): string {
   return (
     process.env.NEXUS_OUTREACH_CTA_URL?.trim() ||
-    "https://rideby.live/free"
+    "https://rideby-ai.vercel.app/free"
   );
 }
 

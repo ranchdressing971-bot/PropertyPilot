@@ -1,6 +1,6 @@
 # Nova Android (burner phone)
 
-Fullscreen WebView shell that loads `https://rideby.live/nova` with mic + keep-screen-on.
+Fullscreen WebView shell that loads `https://rideby-ai.vercel.app/nova` with mic + keep-screen-on.
 
 ## Build
 
