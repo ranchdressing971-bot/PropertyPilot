@@ -20,7 +20,7 @@ import type {
  */
 
 const USER_AGENT =
-  "RideByBot/1.0 (+https://rideby-ai.vercel.app; contact via website)";
+  "RideByBot/1.0 (+https://rideby.live; contact via website)";
 
 // Sized against the runner's 30s reserve for this job type: one robots.txt
 // fetch plus MAX_PAGES page fetches must fit, worst case, with room to spare.
