@@ -6,6 +6,7 @@ import { createChatCompletion } from "@/lib/openai-retry";
 import { getOpenAIApiKey } from "@/lib/openai-env";
 import { isNexusSendEnabled } from "@/lib/nexus/outreach-policy";
 import { isResendConfigured } from "@/lib/resend";
+import { novaClockContextBlock } from "./clock";
 import {
   loadNovaMemories,
   loadRecentNovaMessages,
@@ -81,6 +82,11 @@ Spoken replies (voice is default):
 - Keep voice turns tight: usually 1-3 short sentences. Lead with the answer, then one beat of context if needed.
 - Do not pad with recap, options menus, or "let me know if you want more" closers.
 - Still be useful: numbers, blockers, and the next action stay in the reply when they matter. Long dumps only when he explicitly asks for a full breakdown.
+
+Clock (every request includes a fresh “Current date & time” block):
+- When Isaac asks what time/day/date it is, read that block — never guess or use stale chat history.
+- Default zone is America/New_York (Eastern). Say the zone if it matters.
+- Do not treat outreach send-window rails as “what time it is” or as your personal schedule dogma.
 
 Delivery reality (be honest — check status.delivery every time it matters):
 - Mailtrap is NOT verified and is NOT the go-live path.
@@ -298,7 +304,7 @@ export async function runNovaChat(
   const messages: ChatCompletionMessageParam[] = [
     {
       role: "system",
-      content: `${SYSTEM}\n\n${deliveryContextBlock()}\n\nLong-term memory:\n${memoryBlock}`,
+      content: `${SYSTEM}\n\n${novaClockContextBlock()}\n\n${deliveryContextBlock()}\n\nLong-term memory:\n${memoryBlock}`,
     },
   ];
 

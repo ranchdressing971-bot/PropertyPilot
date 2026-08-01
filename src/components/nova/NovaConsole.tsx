@@ -1285,14 +1285,19 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     (
       input: string | { take: () => Promise<string | null> },
       after?: ListenMode,
-      fullTextForFallback?: string
+      fullTextForFallback?: string,
+      opts?: { skipTapRecovery?: boolean }
     ) => Promise<void>
   >(async () => {});
   const autoListenRef = useRef(autoListen);
   const listenTapNeededRef = useRef(false);
   /** Once per ?listen=1 session — not on every barge-in / mic restart. */
   const listenGreetingDoneRef = useRef(false);
-  const maybeSpeakListenGreetingRef = useRef<() => void>(() => {});
+  /** Prevents overlapping unlock→greet→listen boots. */
+  const listenReadyInFlightRef = useRef(false);
+  const runListenReadySequenceRef = useRef<
+    (fromGesture: boolean) => Promise<void>
+  >(async () => {});
 
   /**
    * Unlock audio inside a user gesture without clobbering a prefetched voice URL.
@@ -1398,6 +1403,11 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     }
   }, [resumeAudioContextInGesture]);
 
+  /**
+   * Best-effort unlock outside a tap. Must NOT claim success on iOS when
+   * AudioContext stays suspended — that made greeting autoplay "succeed" the
+   * unlock check, fail playback, and leave mic/listen in a broken state.
+   */
   const unlockAudio = useCallback(async (): Promise<boolean> => {
     if (audioUnlockedRef.current) {
       const synth =
@@ -1405,11 +1415,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       if (synth) primeSpeechSynthesis(synth);
       setAudioUnlocked(true);
       return true;
-    }
-
-    // If we're somehow in a gesture context, prefer the sync path on mobile.
-    if (isMobileTouchDevice()) {
-      return unlockAudioInGesture();
     }
 
     try {
@@ -1428,10 +1433,12 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     const el = audioElRef.current;
     const synth =
       typeof window !== "undefined" ? window.speechSynthesis : undefined;
+    const ctxRunning =
+      Boolean(audioCtxRef.current) &&
+      audioCtxRef.current!.state === "running";
 
     if (!el) {
-      // AudioContext-only unlock still counts on iOS.
-      if (audioCtxRef.current) {
+      if (ctxRunning) {
         audioUnlockedRef.current = true;
         setAudioUnlocked(true);
         setNeedsGesture(false);
@@ -1441,10 +1448,11 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         }
         return true;
       }
+      setNeedsGesture(true);
+      setAudioUnlocked(false);
       return false;
     }
 
-    // Warm the persistent <audio> inside a user gesture so later TTS can play.
     try {
       primeAudioElement(el);
       el.muted = true;
@@ -1464,8 +1472,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       return true;
     } catch {
       el.muted = false;
-      // AC may still be unlocked even if <audio> warm-up failed.
-      if (audioCtxRef.current && audioCtxRef.current.state === "running") {
+      if (ctxRunning || audioCtxRef.current?.state === "running") {
         audioUnlockedRef.current = true;
         setAudioUnlocked(true);
         setNeedsGesture(false);
@@ -1475,7 +1482,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       setAudioUnlocked(false);
       return false;
     }
-  }, [unlockAudioInGesture]);
+  }, []);
 
   /**
    * Free device TTS when ElevenLabs is missing or out of credits.
@@ -1529,9 +1536,17 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   }, []);
 
   const resumeAfterSpeech = useCallback((mode: ListenMode) => {
-    setPhase(mode === "command" ? "listening_command" : "listening_wake");
+    const next: Phase =
+      mode === "command" ? "listening_command" : "listening_wake";
+    // Sync ref immediately so startMic (350ms later) doesn't bail on stale "speaking".
+    phaseRef.current = next;
+    setPhase(next);
     window.setTimeout(() => {
-      if (listeningOnRef.current) startMicRef.current(mode);
+      if (!listeningOnRef.current) return;
+      if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
+        return;
+      }
+      startMicRef.current(mode);
     }, 350);
   }, []);
 
@@ -1700,22 +1715,18 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         return true;
       }
       unlockAudioInGesture();
-      // First interaction after Shortcut open: finish auto-listen if mic was blocked.
+      // Shortcut / ?listen=1: tap finishes unlock → greet → listen (even if mount boot stalled).
       if (
         autoListenRef.current &&
         (listenTapNeededRef.current ||
+          !listenGreetingDoneRef.current ||
           phaseRef.current === "idle" ||
-          (phaseRef.current === "listening_wake" && !recognitionRef.current))
+          (phaseRef.current === "listening_wake" && !recognitionRef.current) ||
+          (phaseRef.current === "listening_command" && !recognitionRef.current))
       ) {
-        listenTapNeededRef.current = false;
-        setListenTapNeeded(false);
-        listeningOnRef.current = true;
-        setListeningOn(true);
-        if (phaseRef.current !== "speaking" && phaseRef.current !== "thinking") {
-          phaseRef.current = "listening_command";
-          setPhase("listening_command");
-        }
-        if (!recognitionRef.current) startMicRef.current("command");
+        void runListenReadySequenceRef.current(true);
+        // Signal orb click to skip mute-toggle — this tap arms listen, not mute.
+        return true;
       }
       return false;
     },
@@ -1899,43 +1910,88 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   }, [clearSilenceEnd]);
 
   /**
-   * Shortcut / ?listen=1 path: unlock audio + open command listen (no wake word).
-   * Safe to call from mount (best-effort) or from the first user tap on iOS.
+   * Shortcut / ?listen=1 ready path:
+   * unlock → speak "whats up big dog" once → THEN command listen.
+   * On iPhone, mount often lacks a gesture — show tap-once; that tap still greets.
    */
-  const bootCommandListen = useCallback(
-    (fromGesture: boolean) => {
+  const runListenReadySequence = useCallback(
+    async (fromGesture: boolean) => {
+      if (listenReadyInFlightRef.current) return;
+      listenReadyInFlightRef.current = true;
       autoListenRef.current = true;
       setShortcutListen(true);
       listeningOnRef.current = true;
       setListeningOn(true);
-      if (fromGesture) {
-        unlockAudioInGesture();
-      } else {
-        void unlockAudio();
-      }
-      if (phaseRef.current === "speaking") return;
-      if (phaseRef.current !== "thinking") {
-        phaseRef.current = "listening_command";
-        setPhase("listening_command");
-      }
-      armSilenceEnd();
-      if (!recognitionRef.current) {
-        startMicRef.current("command");
-      }
-      // SpeechRecognition may refuse without a gesture — retry on first tap.
-      window.setTimeout(() => {
-        if (!autoListenRef.current) return;
-        if (recognitionRef.current) {
-          listenTapNeededRef.current = false;
-          setListenTapNeeded(false);
+
+      try {
+        if (fromGesture) {
+          unlockAudioInGesture();
+        } else {
+          const unlocked = await unlockAudio();
+          // iOS/Safari: no user gesture → cannot play TTS or reliably arm mic.
+          if (!unlocked && needsGestureForVoice()) {
+            listenTapNeededRef.current = true;
+            setListenTapNeeded(true);
+            if (phaseRef.current === "idle" || !recognitionRef.current) {
+              phaseRef.current = "idle";
+              setPhase("idle");
+            }
+            return;
+          }
+        }
+
+        listenTapNeededRef.current = false;
+        setListenTapNeeded(false);
+
+        // One-shot greeting before mic — never greet-by-killing an active listen arm.
+        if (!listenGreetingDoneRef.current) {
+          listenGreetingDoneRef.current = true;
+          await speakRef.current(LISTEN_READY_GREETING, "command", undefined, {
+            skipTapRecovery: true,
+          });
+          // speak() resumes command listen in finally via resumeAfterSpeech.
+          // If mic still didn't start (recognition blocked), ask for a tap.
+          window.setTimeout(() => {
+            if (!autoListenRef.current) return;
+            if (recognitionRef.current) return;
+            if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
+              return;
+            }
+            listenTapNeededRef.current = true;
+            setListenTapNeeded(true);
+          }, 700);
           return;
         }
-        listenTapNeededRef.current = true;
-        setListenTapNeeded(true);
-      }, 500);
+
+        if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
+          return;
+        }
+        phaseRef.current = "listening_command";
+        setPhase("listening_command");
+        armSilenceEnd();
+        if (!recognitionRef.current) {
+          startMicRef.current("command");
+        }
+        window.setTimeout(() => {
+          if (!autoListenRef.current) return;
+          if (recognitionRef.current) {
+            listenTapNeededRef.current = false;
+            setListenTapNeeded(false);
+            return;
+          }
+          listenTapNeededRef.current = true;
+          setListenTapNeeded(true);
+        }, 500);
+      } finally {
+        listenReadyInFlightRef.current = false;
+      }
     },
     [armSilenceEnd, unlockAudio, unlockAudioInGesture]
   );
+
+  useEffect(() => {
+    runListenReadySequenceRef.current = runListenReadySequence;
+  }, [runListenReadySequence]);
 
   const startMic = useCallback(
     (mode: ListenMode = "wake") => {
@@ -2124,8 +2180,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         if (autoListenRef.current && mode === "command") {
           listenTapNeededRef.current = false;
           setListenTapNeeded(false);
-          // Ready: first successful listen-arm — greet once, then stay in command listen.
-          maybeSpeakListenGreetingRef.current();
         }
       } catch {
         setNeedsGesture(true);
@@ -2147,24 +2201,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   }, [startMic]);
 
   /**
-   * ?listen=1 ready greeting: cloud TTS once, then resume command listen.
-   * Fires after first successful listen-arm (mic started), not on barge-ins.
-   */
-  const maybeSpeakListenGreeting = useCallback(() => {
-    if (!autoListenRef.current) return;
-    if (listenGreetingDoneRef.current) return;
-    if (phaseRef.current === "thinking") return;
-    // Already speaking a reply — don't interrupt with the greeting.
-    if (phaseRef.current === "speaking") return;
-    listenGreetingDoneRef.current = true;
-    void speakRef.current(LISTEN_READY_GREETING, "command");
-  }, []);
-
-  useEffect(() => {
-    maybeSpeakListenGreetingRef.current = maybeSpeakListenGreeting;
-  }, [maybeSpeakListenGreeting]);
-
-  /**
    * Sentence-streamed server TTS: fetch chunk N+1 while chunk N plays.
    * Accepts full text, or a live queue fed while chat SSE streams.
    */
@@ -2172,16 +2208,19 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     async (
       input: string | { take: () => Promise<string | null> },
       after: ListenMode = "wake",
-      fullTextForFallback?: string
+      fullTextForFallback?: string,
+      opts?: { skipTapRecovery?: boolean }
     ) => {
       const epoch = outputEpochRef.current;
       const stillCurrent = () => outputEpochRef.current === epoch;
+      const skipTapRecovery = Boolean(opts?.skipTapRecovery);
 
       speakAbortRef.current?.abort();
       const speakAc = new AbortController();
       speakAbortRef.current = speakAc;
 
       resumeModeRef.current = after;
+      phaseRef.current = "speaking";
       setPhase("speaking");
       killMic();
       waitingForTapRef.current = false;
@@ -2366,7 +2405,12 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             }
 
             // Could not autoplay this chunk — queue silent recovery for remainder.
+            // Listen-ready greeting: skip recovery so we still enter listening.
             if (!stillCurrent()) return;
+            if (skipTapRecovery) {
+              setError(null);
+              return;
+            }
             const remainder = [text, await upcomingPromise]
               .concat(
                 await (async () => {
@@ -2423,6 +2467,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
 
           if (isIOS() || isMobileTouchDevice()) {
             if (!stillCurrent()) return;
+            if (skipTapRecovery) {
+              setError(null);
+              return;
+            }
             setVoicePathLabel("Device voice");
             queueSilentRecovery(
               {
@@ -2451,6 +2499,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         const joined =
           fallbackText || spokenParts.join(" ") || "Nova voice failed";
+        if (skipTapRecovery) {
+          setError(null);
+          return;
+        }
         if (
           err instanceof NeedsGesturePlaybackError ||
           needsGestureForVoice()
@@ -2805,13 +2857,13 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     askNovaRef.current = askNova;
   }, [askNova]);
 
-  // Always-on on mount — wake word by default; ?listen=1 opens command listen.
+  // Always-on on mount — wake word by default; ?listen=1 unlocks → greets → listens.
   useEffect(() => {
     listeningOnRef.current = true;
     setListeningOn(true);
     const wantListen = autoListen || readListenIntentFromLocation();
     if (wantListen) {
-      bootCommandListen(false);
+      void runListenReadySequence(false);
     } else {
       startMic("wake");
     }
@@ -3188,7 +3240,16 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           {shortcutListen ? (
             listenTapNeeded ? (
               <>
-                Shortcut opened. <span>Tap once</span> to unlock the mic, then speak.
+                Shortcut opened. <span>Tap once</span> to unlock — Nova greets,
+                then listens.
+              </>
+            ) : phase === "speaking" && !lines.length ? (
+              <>
+                Systems online. <span>Greeting…</span>
+              </>
+            ) : phase === "listening_command" ? (
+              <>
+                Systems online. <span>Listening…</span> Speak your command.
               </>
             ) : (
               <>

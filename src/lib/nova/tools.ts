@@ -16,6 +16,7 @@ import {
   scanCommunityUsageAbuse,
 } from "@/lib/abuse/community-usage-scan";
 import { loadBusinessBrief } from "./business";
+import { getNovaClock } from "./clock";
 import { loadConversionReport, loadConversionSummary } from "./conversions";
 import {
   computeNovaDailyTarget,
@@ -227,7 +228,17 @@ async function toolStatus() {
     );
   }
 
+  const clock = getNovaClock();
+
   return {
+    clock: {
+      timeZone: clock.timeZone,
+      weekday: clock.weekday,
+      date: clock.date,
+      time: clock.timeWithZone,
+      localISO: clock.isoLocal,
+      utcISO: clock.isoUtc,
+    },
     summary: {
       leads: active.length,
       contacts: state.contactCount,

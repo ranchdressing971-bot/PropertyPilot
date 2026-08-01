@@ -6,6 +6,7 @@ import {
 } from "@/lib/nexus/outreach-policy";
 import { loadNexusState } from "@/lib/nexus/state";
 import { loadBusinessBrief } from "@/lib/nova/business";
+import { getNovaClock } from "@/lib/nova/clock";
 import { loadConversionSummary } from "@/lib/nova/conversions";
 import {
   isServerTtsConfigured,
@@ -39,7 +40,17 @@ export async function GET() {
     appUrl && !/vercel\.app/i.test(appUrl) && /^https?:\/\//i.test(appUrl)
   );
 
+  const clock = getNovaClock();
+
   return NextResponse.json({
+    clock: {
+      timeZone: clock.timeZone,
+      weekday: clock.weekday,
+      date: clock.date,
+      time: clock.timeWithZone,
+      localISO: clock.isoLocal,
+      utcISO: clock.isoUtc,
+    },
     sendEnabled: isNexusSendEnabled(),
     novaArmed: plan.armed,
     dailyTarget: plan.dailyTarget,
