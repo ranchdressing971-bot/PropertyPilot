@@ -138,29 +138,28 @@ When you leave sandbox: verify a Mailtrap sending domain, set
 1. Open `/nova` while signed in as a Nexus admin
 2. Tap the orb → allow mic → say **“Hey Nova, how are the emails going?”**
 3. Or type in the box (Safari/wake-word fallback)
-4. Voice replies need ElevenLabs:
+4. Voice replies use server TTS (ElevenLabs preferred; OpenAI automatic fallback):
 
 ```bash
 ELEVENLABS_API_KEY=...
-# Default when unset: Lily (pFZP5JQG7iQjIQuC4Bku) — natural British female
-# ELEVENLABS_VOICE_ID=pFZP5JQG7iQjIQuC4Bku
-# Free tier: if premade Lily is blocked, copy a My Voices ID instead
-# ELEVENLABS_SPEED=1.15          # speaking rate (0.7–1.2)
+# Your configured voice — respected as-is (never overwritten by Lily default)
+# ELEVENLABS_VOICE_ID=...
+# Only when unset: Lily (pFZP5JQG7iQjIQuC4Bku)
+# ELEVENLABS_SPEED=1.15
 # ELEVENLABS_MODEL_ID=eleven_multilingual_v2
-# OpenAI TTS fallback (when ElevenLabs missing/out of credits):
-# OPENAI_TTS_MODEL=tts-1-hd      # plain HD — not mini-tts (avoids cartoon accent steering)
-# OPENAI_TTS_VOICE=nova          # feminine; also shimmer/coral/sage — avoid fable
-# OPENAI_TTS_SPEED=1.15
+# OpenAI is automatic when ElevenLabs is out of credits / quota / auth fails:
+# (uses OPENAI_API_KEY — no extra toggle)
+# OPENAI_TTS_MODEL=tts-1-hd
+# OPENAI_TTS_VOICE=nova          # feminine; shimmer also fine — avoid fable
+# OPENAI_TTS_SPEED=1.18
 ```
 
-**Voice stack:** ElevenLabs **Lily** (British woman, warm narration) when the
-API key works; OpenAI **`tts-1-hd` + `nova`** otherwise (clean female, not
-strongly British — OpenAI has no great UK female without cartoonish mini-tts
-prompting). On free ElevenLabs plans that block premade IDs, open
-[Voices](https://elevenlabs.io/app/voice-lab) → My Voices → ⋯ → **Copy voice ID**
-→ `ELEVENLABS_VOICE_ID` on Vercel → redeploy. If Vercel still has old
-`OPENAI_TTS_*` overrides (`coral` / `gpt-4o-mini-tts` / “Young British…”),
-**clear them** and hard-refresh after deploy.
+**Voice stack:** ElevenLabs with your `ELEVENLABS_VOICE_ID` when credits work.
+If ElevenLabs returns credits/quota/401/402/403/429, the API **automatically
+falls through to OpenAI `tts-1-hd` + `nova`** (natural female; not strongly
+British). Device/Web Speech is last resort only when both server providers
+fail. Clear stale Vercel `OPENAI_TTS_*` overrides (`gpt-4o-mini-tts` / cartoon
+prompts) if present, then redeploy.
 
 Nova can call Nexus tools: status, list drafts/companies, start search, run a
 tick, queue approved sends, and store memory/trials.

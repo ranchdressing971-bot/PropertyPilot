@@ -45,6 +45,9 @@ export async function POST(req: NextRequest) {
     const { audio, contentType, provider } = await synthesizeNovaSpeech(text, {
       format: speechFormat,
     });
+    console.info(
+      `[nova speak] ok provider=${provider} format=${speechFormat} bytes=${audio.length}`
+    );
     return new NextResponse(new Uint8Array(audio), {
       status: 200,
       headers: {
@@ -61,7 +64,7 @@ export async function POST(req: NextRequest) {
       err && typeof err === "object" && "code" in err
         ? String((err as { code?: string }).code ?? "")
         : "";
-    console.error("nova speak:", err);
+    console.error("[nova speak] route error:", code || "unknown", msg);
 
     if (
       code === "QUOTA" ||

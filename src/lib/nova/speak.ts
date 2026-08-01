@@ -1,26 +1,28 @@
 /**
  * Server TTS for Nova voice replies.
  *
- * Primary: ElevenLabs (when ELEVENLABS_API_KEY is set).
- * Fallback: OpenAI TTS (when OPENAI_API_KEY is set) — required for iPhone
- * autoplay, since WebKit speechSynthesis cannot start after await fetch.
+ * Primary: ElevenLabs when ELEVENLABS_API_KEY is set. Uses env
+ * ELEVENLABS_VOICE_ID as-is when configured — never replaced by the Lily
+ * default. Lily (`pFZP5JQG7iQjIQuC4Bku`) is only the default when VOICE_ID
+ * (and VOICE_NAME) are unset.
  *
- * Default ElevenLabs voice: premade Lily (`pFZP5JQG7iQjIQuC4Bku`) — natural
- * British female, warm narration (not theatrical). Override with
- * ELEVENLABS_VOICE_ID or ELEVENLABS_VOICE_NAME. Free-tier accounts that cannot
- * use premade/library IDs should set a My Voices ID; we also resolve by name
- * (Lily → Alice → Nova → first account voice).
+ * Automatic fallback: OpenAI TTS (OPENAI_API_KEY) when ElevenLabs fails for
+ * any reason — especially credits / quota / 401 / 402 / 403 / 429 / payment.
+ * Required for iPhone autoplay (WebKit speechSynthesis cannot start after
+ * await fetch).
  *
- * OpenAI fallback: plain `tts-1-hd` + `nova` at ~1.15 — no mini-tts accent
- * steering (that path sounded cartoonish). True British accent needs ElevenLabs.
- * ElevenLabs speaking rate defaults to ~1.15 (env: ELEVENLABS_SPEED).
+ * OpenAI fallback: plain `tts-1-hd` + `nova` at ~1.18 — natural female, no
+ * mini-tts accent steering. True British accent needs ElevenLabs credits.
  */
 
 import { getOpenAIApiKey } from "@/lib/openai-env";
 
-/** Premade Lily — British female, warm/clear narration. */
+/** Premade Lily — used only when ELEVENLABS_VOICE_ID / _NAME are unset. */
 export const DEFAULT_ELEVENLABS_VOICE_ID = "pFZP5JQG7iQjIQuC4Bku";
 const DEFAULT_ELEVENLABS_VOICE_NAMES = ["Lily", "Alice", "Nova"] as const;
+
+/** OpenAI voices that sound male/deep — never use these for Nova fallback. */
+const OPENAI_DEEP_VOICES = new Set(["fable", "onyx", "echo"]);
 
 let cachedVoiceId: string | null = null;
 
@@ -78,7 +80,8 @@ function findByName(voices: ElVoice[], name: string): ElVoice | undefined {
 
 /**
  * Resolve a voice the API key is allowed to use.
- * Prefers British female Lily when env does not override.
+ * Honors ELEVENLABS_VOICE_ID / ELEVENLABS_VOICE_NAME when set.
+ * Prefers premade Lily only when env does not override.
  */
 export async function resolveElevenLabsVoiceId(apiKey: string): Promise<string> {
   if (cachedVoiceId) return cachedVoiceId;
@@ -86,7 +89,7 @@ export async function resolveElevenLabsVoiceId(apiKey: string): Promise<string> 
   const rawId = process.env.ELEVENLABS_VOICE_ID?.trim();
   const rawName = process.env.ELEVENLABS_VOICE_NAME?.trim();
 
-  // Exact voice id from env — use directly (fast path).
+  // Exact voice id from env — use directly (never replace with Lily default).
   if (rawId && looksLikeVoiceId(rawId)) {
     cachedVoiceId = rawId;
     return cachedVoiceId;
@@ -204,6 +207,58 @@ function markQuotaError(message: string): Error {
   return err;
 }
 
+/**
+ * ElevenLabs credit / billing / auth failures that should fall through to
+ * OpenAI immediately — not retry another ElevenLabs voice.
+ */
+export function isElevenLabsQuotaOrBillingFailure(
+  status: number,
+  detail: string
+): boolean {
+  const lower = detail.toLowerCase();
+  if (
+    status === 401 ||
+    status === 402 ||
+    status === 403 ||
+    status === 429
+  ) {
+    return true;
+  }
+  return (
+    lower.includes("quota") ||
+    lower.includes("credit") ||
+    lower.includes("rate limit") ||
+    lower.includes("too many requests") ||
+    lower.includes("payment") ||
+    lower.includes("insufficient") ||
+    lower.includes("billing") ||
+    lower.includes("out of") ||
+    lower.includes("usage_based") ||
+    lower.includes("limit_exceeded") ||
+    lower.includes("character limit") ||
+    lower.includes("monthly limit")
+  );
+}
+
+/** Premade / library voice blocked on free tier (not a credit exhaustion). */
+function isPremadeVoiceBlocked(status: number, detail: string): boolean {
+  const lower = detail.toLowerCase();
+  // Do not treat credit exhaustion as "try another ElevenLabs voice".
+  if (isElevenLabsQuotaOrBillingFailure(status, detail)) return false;
+  return (
+    status === 404 ||
+    lower.includes("paying") ||
+    lower.includes("library") ||
+    lower.includes("voice_not_found") ||
+    // "subscription" alone often appears in quota copy — only match with voice context.
+    (lower.includes("subscription") &&
+      (lower.includes("voice") ||
+        lower.includes("library") ||
+        lower.includes("premade") ||
+        lower.includes("paying")))
+  );
+}
+
 async function elevenLabsTtsRequest(
   apiKey: string,
   voiceId: string,
@@ -259,6 +314,33 @@ async function resolveAccountFallbackVoiceId(apiKey: string): Promise<string> {
   return preferred.voice_id;
 }
 
+function throwElevenLabsFailure(status: number, detail: string): never {
+  const lower = detail.toLowerCase();
+  cachedVoiceId = null;
+
+  if (isElevenLabsQuotaOrBillingFailure(status, detail)) {
+    throw markQuotaError(
+      `ElevenLabs credits exhausted or rate-limited (${status}).`
+    );
+  }
+
+  if (
+    lower.includes("paying") ||
+    lower.includes("library") ||
+    (lower.includes("subscription") && lower.includes("voice"))
+  ) {
+    throw new Error(
+      "That ElevenLabs voice needs a paid plan. Add a British female in My Voices and set ELEVENLABS_VOICE_ID (copy voice ID, not the name)."
+    );
+  }
+  if (status === 404) {
+    throw new Error(
+      "ElevenLabs voice not found. Set ELEVENLABS_VOICE_ID to a real voice ID (⋯ → Copy voice ID), not a display name."
+    );
+  }
+  throw new Error(`ElevenLabs failed (${status}): ${detail.slice(0, 300)}`);
+}
+
 async function synthesizeElevenLabs(
   text: string,
   opts?: { format?: NovaSpeechFormat }
@@ -270,73 +352,55 @@ async function synthesizeElevenLabs(
 
   const clipped = clipSpeechText(text);
   const wantWav = opts?.format === "wav";
+  const envVoiceSet = Boolean(
+    process.env.ELEVENLABS_VOICE_ID?.trim() ||
+      process.env.ELEVENLABS_VOICE_NAME?.trim()
+  );
   let voiceId = await resolveElevenLabsVoiceId(apiKey);
   let response = await elevenLabsTtsRequest(apiKey, voiceId, clipped, opts);
 
-  // Premade Lily may need a paid plan — fall back to an account voice once.
-  if (
-    !response.ok &&
-    !process.env.ELEVENLABS_VOICE_ID?.trim() &&
-    !process.env.ELEVENLABS_VOICE_NAME?.trim() &&
-    voiceId === DEFAULT_ELEVENLABS_VOICE_ID
-  ) {
+  if (!response.ok) {
     const detail = await response.text();
-    const lower = detail.toLowerCase();
-    const blocked =
-      response.status === 404 ||
-      lower.includes("paying") ||
-      lower.includes("library") ||
-      lower.includes("subscription") ||
-      lower.includes("voice_not_found");
-    if (blocked) {
+
+    // Credits / quota / auth → stop ElevenLabs immediately (OpenAI fallthrough).
+    if (isElevenLabsQuotaOrBillingFailure(response.status, detail)) {
+      console.warn(
+        `[nova speak] ElevenLabs quota/billing failure (${response.status}):`,
+        detail.slice(0, 240)
+      );
+      throwElevenLabsFailure(response.status, detail);
+    }
+
+    // Premade Lily may need a paid plan — try an account voice once.
+    // Never do this when the user already set ELEVENLABS_VOICE_ID.
+    if (
+      !envVoiceSet &&
+      voiceId === DEFAULT_ELEVENLABS_VOICE_ID &&
+      isPremadeVoiceBlocked(response.status, detail)
+    ) {
+      console.warn(
+        "[nova speak] Default Lily blocked; retrying with account voice:",
+        detail.slice(0, 200)
+      );
       cachedVoiceId = null;
       voiceId = await resolveAccountFallbackVoiceId(apiKey);
       cachedVoiceId = voiceId;
       response = await elevenLabsTtsRequest(apiKey, voiceId, clipped, opts);
+      if (!response.ok) {
+        const retryDetail = await response.text();
+        console.warn(
+          `[nova speak] ElevenLabs retry failed (${response.status}):`,
+          retryDetail.slice(0, 240)
+        );
+        throwElevenLabsFailure(response.status, retryDetail);
+      }
     } else {
-      // Re-wrap detail for the shared error path below.
-      response = new Response(detail, { status: response.status });
-    }
-  }
-
-  if (!response.ok) {
-    const detail = await response.text();
-    const lower = detail.toLowerCase();
-    cachedVoiceId = null;
-
-    if (
-      response.status === 401 ||
-      response.status === 402 ||
-      response.status === 429 ||
-      lower.includes("quota") ||
-      lower.includes("credit") ||
-      lower.includes("rate limit") ||
-      lower.includes("too many requests") ||
-      lower.includes("payment") ||
-      lower.includes("insufficient")
-    ) {
-      throw markQuotaError(
-        "ElevenLabs credits exhausted or rate-limited."
+      console.warn(
+        `[nova speak] ElevenLabs TTS failed (${response.status}):`,
+        detail.slice(0, 240)
       );
+      throwElevenLabsFailure(response.status, detail);
     }
-
-    if (
-      lower.includes("paying") ||
-      lower.includes("library") ||
-      lower.includes("subscription")
-    ) {
-      throw new Error(
-        "That ElevenLabs voice needs a paid plan. Add a British female in My Voices and set ELEVENLABS_VOICE_ID (copy voice ID, not the name)."
-      );
-    }
-    if (response.status === 404) {
-      throw new Error(
-        "ElevenLabs voice not found. Set ELEVENLABS_VOICE_ID to a real voice ID (⋯ → Copy voice ID), not a display name."
-      );
-    }
-    throw new Error(
-      `ElevenLabs failed (${response.status}): ${detail.slice(0, 300)}`
-    );
   }
 
   const arrayBuffer = await response.arrayBuffer();
@@ -367,12 +431,12 @@ async function synthesizeOpenAI(
   const clipped = clipSpeechText(text);
   const wantWav = opts?.format === "wav";
   // Plain HD TTS — no mini-tts accent prompts (those sounded cartoonish).
-  // Tradeoff: not strongly British; use ElevenLabs Lily for real UK accent.
   const model = process.env.OPENAI_TTS_MODEL?.trim() || "tts-1-hd";
   // Feminine: nova, shimmer, coral, sage. Avoid fable/onyx/echo (male/deep).
-  const voice = process.env.OPENAI_TTS_VOICE?.trim() || "nova";
+  const rawVoice = (process.env.OPENAI_TTS_VOICE?.trim() || "nova").toLowerCase();
+  const voice = OPENAI_DEEP_VOICES.has(rawVoice) ? "nova" : rawVoice;
   // Brisk but natural — OpenAI TTS speed range is 0.25–4.0.
-  const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.15, 0.25, 4.0);
+  const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.18, 0.25, 4.0);
   // Only applied when model is gpt-4o-*-tts; default stack leaves this unset.
   const instructions = process.env.OPENAI_TTS_INSTRUCTIONS?.trim();
 
@@ -403,6 +467,7 @@ async function synthesizeOpenAI(
     if (
       response.status === 401 ||
       response.status === 402 ||
+      response.status === 403 ||
       response.status === 429 ||
       lower.includes("quota") ||
       lower.includes("insufficient") ||
@@ -427,7 +492,7 @@ async function synthesizeOpenAI(
 
 /**
  * Synthesize reply audio. Prefers ElevenLabs, falls back to OpenAI TTS.
- * Throws with code QUOTA / FALLBACK_BROWSER only when no server audio is possible.
+ * Throws with code FALLBACK_BROWSER only when no server audio is possible.
  */
 export async function synthesizeNovaSpeech(
   text: string,
@@ -438,24 +503,39 @@ export async function synthesizeNovaSpeech(
   if (isElevenLabsConfigured()) {
     try {
       const result = await synthesizeElevenLabs(text, opts);
+      console.info(
+        `[nova speak] provider=elevenlabs voice=${process.env.ELEVENLABS_VOICE_ID?.trim() || cachedVoiceId || "default"} bytes=${result.audio.length}`
+      );
       return { ...result, provider: "elevenlabs" };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "ElevenLabs failed";
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? String((err as { code?: string }).code ?? "")
+          : "";
       errors.push(msg);
       if (!isOpenAITtsConfigured()) {
         throw err;
       }
-      console.warn("nova speak: ElevenLabs failed, trying OpenAI TTS:", msg);
+      console.warn(
+        `[nova speak] ElevenLabs failed (${code || "error"}); falling through to OpenAI TTS:`,
+        msg
+      );
     }
   }
 
   if (isOpenAITtsConfigured()) {
     try {
       const result = await synthesizeOpenAI(text, opts);
+      const viaFallback = isElevenLabsConfigured();
+      console.info(
+        `[nova speak] provider=openai${viaFallback ? " (ElevenLabs fallback)" : ""} model=${process.env.OPENAI_TTS_MODEL?.trim() || "tts-1-hd"} voice=${process.env.OPENAI_TTS_VOICE?.trim() || "nova"} bytes=${result.audio.length}`
+      );
       return { ...result, provider: "openai" };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "OpenAI TTS failed";
       errors.push(msg);
+      console.error("[nova speak] OpenAI TTS also failed:", msg);
       const out = markQuotaError(
         errors.join(" | ") || "Server TTS unavailable. Using free device voice."
       );
