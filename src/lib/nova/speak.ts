@@ -7,8 +7,11 @@
  *
  * Free ElevenLabs accounts cannot use Voice Library IDs via the API. Set
  * ELEVENLABS_VOICE_ID to the id from My Voices, OR ELEVENLABS_VOICE_NAME
- * (e.g. "Nova") and we resolve it. If unset, we prefer a voice named Nova,
- * then the first account voice.
+ * (e.g. a British voice name) and we resolve it. If unset, we prefer a voice
+ * named Nova, then the first account voice.
+ *
+ * OpenAI fallback defaults: British voice `fable`, speed ~1.2.
+ * ElevenLabs speaking rate defaults to ~1.15 (env: ELEVENLABS_SPEED).
  */
 
 import { getOpenAIApiKey } from "@/lib/openai-env";
@@ -150,6 +153,19 @@ function clipSpeechText(text: string): string {
   return clipped;
 }
 
+/** Clamp env speed into a sensible speaking-rate range. */
+function parseSpeechSpeed(
+  raw: string | undefined,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  if (!raw?.trim()) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 function markQuotaError(message: string): Error {
   const err = new Error(message);
   (err as Error & { code?: string }).code = "QUOTA";
@@ -171,6 +187,8 @@ async function synthesizeElevenLabs(
   const wantWav = opts?.format === "wav";
   const outputFormat = wantWav ? "pcm_44100" : "mp3_44100_128";
   const clipped = clipSpeechText(text);
+  // Slightly brisker than default (1.0); ElevenLabs accepts ~0.7–1.2.
+  const speed = parseSpeechSpeed(process.env.ELEVENLABS_SPEED, 1.15, 0.7, 1.2);
 
   const response = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${outputFormat}`,
@@ -185,8 +203,9 @@ async function synthesizeElevenLabs(
         text: clipped,
         model_id: model,
         voice_settings: {
-          stability: 0.45,
+          stability: 0.4,
           similarity_boost: 0.75,
+          speed,
         },
       }),
     }
@@ -260,7 +279,10 @@ async function synthesizeOpenAI(
   const clipped = clipSpeechText(text);
   const wantWav = opts?.format === "wav";
   const model = process.env.OPENAI_TTS_MODEL?.trim() || "tts-1";
-  const voice = process.env.OPENAI_TTS_VOICE?.trim() || "nova";
+  // `fable` is OpenAI's classic British English voice (tts-1 / tts-1-hd).
+  const voice = process.env.OPENAI_TTS_VOICE?.trim() || "fable";
+  // Brisk but natural — OpenAI TTS speed range is 0.25–4.0.
+  const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.2, 0.25, 4.0);
 
   const response = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
@@ -272,6 +294,7 @@ async function synthesizeOpenAI(
       model,
       voice,
       input: clipped,
+      speed,
       response_format: wantWav ? "wav" : "mp3",
     }),
   });

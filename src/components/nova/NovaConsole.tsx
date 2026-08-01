@@ -217,11 +217,14 @@ function pickPreferredVoice(
 ): SpeechSynthesisVoice | undefined {
   return (
     voices.find((v) =>
+      /daniel|serena|martha|arthur|google uk|british|en-gb/i.test(v.name)
+    ) ||
+    voices.find((v) => /^en-GB/i.test(v.lang)) ||
+    voices.find((v) =>
       /samantha|karen|moira|victoria|susan|zira|google us english|siri/i.test(
         v.name
       )
     ) ||
-    voices.find((v) => /^en-US/i.test(v.lang)) ||
     voices.find((v) => /^en(-|_)/i.test(v.lang)) ||
     voices.find((v) => v.lang.toLowerCase().startsWith("en"))
   );
@@ -584,9 +587,9 @@ function speakWithFreeVoiceSync(text: string): Promise<void> {
 
   // Build utterance BEFORE cancel/speak so speak() is the last sync call in-gesture.
   const utterance = new SpeechSynthesisUtterance(clipped);
-  utterance.lang = "en-US";
-  utterance.rate = isIOS() ? 1 : 1.05;
-  utterance.pitch = 1.08;
+  utterance.lang = "en-GB";
+  utterance.rate = isIOS() ? 1.1 : 1.15;
+  utterance.pitch = 1.05;
   utterance.volume = 1;
 
   const voices =

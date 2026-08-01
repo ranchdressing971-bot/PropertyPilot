@@ -143,13 +143,19 @@ When you leave sandbox: verify a Mailtrap sending domain, set
 ```bash
 ELEVENLABS_API_KEY=...
 ELEVENLABS_VOICE_ID=...        # required on free tier — copy from My Voices
+# Prefer a British accent voice in My Voices for Nova's accent.
+# ELEVENLABS_SPEED=1.15          # speaking rate (0.7–1.2)
 # ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+# OpenAI TTS fallback (when ElevenLabs missing/out of credits):
+# OPENAI_TTS_VOICE=fable         # British (default)
+# OPENAI_TTS_SPEED=1.2
 ```
 
 Free ElevenLabs accounts **cannot** use Voice Library IDs via the API. Open
 [Voices](https://elevenlabs.io/app/voice-lab) → My Voices → ⋯ → **Copy voice ID**
 → paste as `ELEVENLABS_VOICE_ID` on Vercel → redeploy. If unset, Nova tries the
-first voice on your account instead of a library default.
+first voice on your account instead of a library default. OpenAI fallback uses
+British voice `fable` at speed `1.2`.
 
 Nova can call Nexus tools: status, list drafts/companies, start search, run a
 tick, queue approved sends, and store memory/trials.
