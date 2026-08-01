@@ -1,6 +1,6 @@
 /**
- * Nova-owned send plan. She chooses daily volume (usually 20–50).
- * Hard safety still lives in outreach-policy + env kill switch.
+ * Nova-owned send plan. Daily volume is chosen from pipeline + learn signal,
+ * then clamped by outreach-policy safety rails + env kill switch.
  */
 
 import {

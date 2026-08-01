@@ -222,7 +222,9 @@ async function toolStatus() {
     );
   }
   if (!isWithinOutreachWindow()) {
-    blockers.push("outside 10am–3pm ET send window (matters when live)");
+    blockers.push(
+      "outside configured ET send window (current operational rail; matters when live)"
+    );
   }
 
   return {
@@ -307,7 +309,7 @@ async function toolStatus() {
       city: c.city,
       reviews: c.metadata?.userRatingCount ?? null,
     })),
-    tip: "Be honest about prep_only. Mention OpenAI/Places cost. Use business for MRR/clients.",
+    tip: "Be honest about prep_only. Mention OpenAI/Places cost. Use business for MRR/clients. Treat todayTarget and send-window blockers as current settings/rails, not best-practice gospel.",
   };
 }
 

@@ -1,9 +1,10 @@
 /**
- * Send-window policy for the Outreach send hand (Mailtrap now, Gmail later).
+ * Operational send rails for the Outreach send hand (not "best practice" dogma).
  *
- * Pace: one email every 5–15 minutes (randomized), 10:00–15:00 America/New_York.
- * Hard daily cap so jitter never turns into a spray.
+ * Default pace: one email every 5–15 minutes (randomized), 10:00–15:00
+ * America/New_York weekdays. Hard daily cap so jitter never turns into a spray.
  * Kill switch: NEXUS_SEND_ENABLED must be exactly "true".
+ * Nova should treat these as current rails/settings she can recommend changing.
  */
 
 export const OUTREACH_TZ = "America/New_York";

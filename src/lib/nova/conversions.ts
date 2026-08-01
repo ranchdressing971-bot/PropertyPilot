@@ -423,7 +423,7 @@ function whyHints(features: MessageFeatures, match: {
     hints.push("kept the email relatively concise");
   }
   if (features.hourEt != null && features.hourEt >= 10 && features.hourEt < 15) {
-    hints.push("sent inside 10am–3pm ET window");
+    hints.push("sent inside the configured ET send window");
   }
   if (match.daysToSignup <= 2) hints.push("signed up within 2 days — strong message-market fit");
   if (match.daysToSubscribe != null && match.daysToSubscribe <= 7) {

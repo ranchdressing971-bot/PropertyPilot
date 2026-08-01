@@ -175,12 +175,13 @@ Outreach keeps running without `/nova` or `/nexus` open when the scheduler is
 on. Every 10 minutes the GitHub Action hits `/api/nexus/tick`, which:
 
 - Processes queued jobs (search → research → draft → AI review → send)
-- **Plans Nova's day automatically**: she sets her own daily target from
-  approved drafts, learn data, and `NEXUS_MAX_SENDS_PER_DAY` (floor 20)
+- **Plans Nova's day automatically**: she sets a daily target from approved
+  drafts + learn data, clamped by operational rails (`NEXUS_MAX_SENDS_PER_DAY`,
+  floor 20). Those rails are settings, not Nova's "perfect" cadence opinion.
 - **Replenishes sends** while she is running (not paused): queues approved
   drafts up to her target, prioritizing high-confidence and winning themes
   (still gated by `NEXUS_SEND_ENABLED`, pause flag, suppressions, and the
-  10–3 ET window for live send)
+  configured ET send window for live send)
 - **Refreshes learning** every ~6 hours (or when new sends land): updates
   `nova_memory` keys `outreach.learning` and `outreach.strategy` so the next
   chat session sees fresh dossier data

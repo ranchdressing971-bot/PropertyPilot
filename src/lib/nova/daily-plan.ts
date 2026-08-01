@@ -190,7 +190,8 @@ export function sortApprovedDrafts(
 }
 
 /**
- * Delay with optional bias toward learn's best ET hours (still inside 10–3 window).
+ * Delay with optional bias toward learn's best ET hours
+ * (still inside the configured ET send window).
  */
 export function outreachSendDelayWithBias(
   bestHoursEt: number[] = [],
