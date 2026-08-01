@@ -1045,7 +1045,20 @@ function beep() {
   }
 }
 
-export function NovaConsole() {
+function readListenIntentFromLocation(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const listen = params.get("listen");
+    if (listen === "1" || listen === "true") return true;
+    const hash = window.location.hash.replace(/^#/, "").toLowerCase();
+    return hash === "listen" || hash === "listen=1" || hash.startsWith("listen&");
+  } catch {
+    return false;
+  }
+}
+
+export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [lines, setLines] = useState<ChatLine[]>([]);
   const [input, setInput] = useState("");
@@ -1055,6 +1068,10 @@ export function NovaConsole() {
   const [listeningOn, setListeningOn] = useState(true);
   const [, setNeedsGesture] = useState(false);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
+  /** Opened via Siri Shortcut / ?listen=1 — skip wake phrase. */
+  const [shortcutListen, setShortcutListen] = useState(autoListen);
+  /** iOS blocked mic without a gesture — wait for one tap. */
+  const [listenTapNeeded, setListenTapNeeded] = useState(false);
   const [voicePathLabel, setVoicePathLabel] = useState<string | null>(null);
   const [clock, setClock] = useState(() =>
     new Date().toLocaleTimeString("en-US", {
@@ -1108,6 +1125,8 @@ export function NovaConsole() {
   const startMicRef = useRef<(mode?: ListenMode) => void>(() => {});
   const openConversationRef = useRef<() => void>(() => {});
   const goDormantRef = useRef<() => void>(() => {});
+  const autoListenRef = useRef(autoListen);
+  const listenTapNeededRef = useRef(false);
 
   /**
    * Unlock audio inside a user gesture without clobbering a prefetched voice URL.
@@ -1510,6 +1529,23 @@ export function NovaConsole() {
         return true;
       }
       unlockAudioInGesture();
+      // First interaction after Shortcut open: finish auto-listen if mic was blocked.
+      if (
+        autoListenRef.current &&
+        (listenTapNeededRef.current ||
+          phaseRef.current === "idle" ||
+          (phaseRef.current === "listening_wake" && !recognitionRef.current))
+      ) {
+        listenTapNeededRef.current = false;
+        setListenTapNeeded(false);
+        listeningOnRef.current = true;
+        setListeningOn(true);
+        if (phaseRef.current !== "speaking" && phaseRef.current !== "thinking") {
+          phaseRef.current = "listening_command";
+          setPhase("listening_command");
+        }
+        if (!recognitionRef.current) startMicRef.current("command");
+      }
       return false;
     },
     [resumeAudioContextInGesture, unlockAudioInGesture]
@@ -1691,6 +1727,45 @@ export function NovaConsole() {
     }, SILENCE_END_MS);
   }, [clearSilenceEnd]);
 
+  /**
+   * Shortcut / ?listen=1 path: unlock audio + open command listen (no wake word).
+   * Safe to call from mount (best-effort) or from the first user tap on iOS.
+   */
+  const bootCommandListen = useCallback(
+    (fromGesture: boolean) => {
+      autoListenRef.current = true;
+      setShortcutListen(true);
+      listeningOnRef.current = true;
+      setListeningOn(true);
+      if (fromGesture) {
+        unlockAudioInGesture();
+      } else {
+        void unlockAudio();
+      }
+      if (phaseRef.current === "speaking") return;
+      if (phaseRef.current !== "thinking") {
+        phaseRef.current = "listening_command";
+        setPhase("listening_command");
+      }
+      armSilenceEnd();
+      if (!recognitionRef.current) {
+        startMicRef.current("command");
+      }
+      // SpeechRecognition may refuse without a gesture — retry on first tap.
+      window.setTimeout(() => {
+        if (!autoListenRef.current) return;
+        if (recognitionRef.current) {
+          listenTapNeededRef.current = false;
+          setListenTapNeeded(false);
+          return;
+        }
+        listenTapNeededRef.current = true;
+        setListenTapNeeded(true);
+      }, 500);
+    },
+    [armSilenceEnd, unlockAudio, unlockAudioInGesture]
+  );
+
   const startMic = useCallback(
     (mode: ListenMode = "wake") => {
       if (!listeningOnRef.current) return;
@@ -1830,11 +1905,20 @@ export function NovaConsole() {
 
       recognition.onerror = (ev) => {
         if (ev.error === "not-allowed") {
-          setError("Allow the microphone. Nova needs it to always listen.");
+          setError(
+            autoListenRef.current
+              ? "Allow the microphone, then tap once to listen."
+              : "Allow the microphone. Nova needs it to always listen."
+          );
           setNeedsGesture(true);
-          setListeningOn(false);
-          listeningOnRef.current = false;
-          setPhase("idle");
+          if (autoListenRef.current) {
+            listenTapNeededRef.current = true;
+            setListenTapNeeded(true);
+          } else {
+            setListeningOn(false);
+            listeningOnRef.current = false;
+            setPhase("idle");
+          }
           recognitionRef.current = null;
         }
       };
@@ -1866,10 +1950,20 @@ export function NovaConsole() {
       try {
         recognition.start();
         setNeedsGesture(false);
+        if (autoListenRef.current && mode === "command") {
+          listenTapNeededRef.current = false;
+          setListenTapNeeded(false);
+        }
       } catch {
         setNeedsGesture(true);
-        setError("Tap the orb once to enable always-on listening.");
         recognitionRef.current = null;
+        if (autoListenRef.current) {
+          listenTapNeededRef.current = true;
+          setListenTapNeeded(true);
+          setError(null);
+        } else {
+          setError("Tap the orb once to enable always-on listening.");
+        }
       }
     },
     [armSilenceEnd, clearSilenceEnd, killMic]
@@ -2295,11 +2389,16 @@ export function NovaConsole() {
     askNovaRef.current = askNova;
   }, [askNova]);
 
-  // Always-on on mount — dormant until intentional speech.
+  // Always-on on mount — wake word by default; ?listen=1 opens command listen.
   useEffect(() => {
     listeningOnRef.current = true;
     setListeningOn(true);
-    startMic("wake");
+    const wantListen = autoListen || readListenIntentFromLocation();
+    if (wantListen) {
+      bootCommandListen(false);
+    } else {
+      startMic("wake");
+    }
     return () => {
       listeningOnRef.current = false;
       killMic();
@@ -2331,7 +2430,7 @@ export function NovaConsole() {
     setListeningOn(true);
     listeningOnRef.current = true;
     setNeedsGesture(false);
-    startMic("wake");
+    startMic(autoListenRef.current ? "command" : "wake");
   };
 
   const onSubmit = (e: React.FormEvent) => {
@@ -2364,17 +2463,21 @@ export function NovaConsole() {
 
   const phaseLabel = !listeningOn
     ? "mic off · tap orb to listen"
-    : phase === "idle"
-      ? "starting…"
-      : phase === "listening_wake"
-        ? "say “hey nova”"
-        : phase === "listening_command"
-          ? "listening: no wake needed"
-          : phase === "thinking"
-            ? "working · talk anytime"
-            : phase === "speaking"
-              ? "speaking"
-              : "";
+    : listenTapNeeded
+      ? "tap once to listen"
+      : phase === "idle"
+        ? "starting…"
+        : phase === "listening_wake"
+          ? "say “hey nova”"
+          : phase === "listening_command"
+            ? shortcutListen
+              ? "Listening…"
+              : "listening: no wake needed"
+            : phase === "thinking"
+              ? "working · talk anytime"
+              : phase === "speaking"
+                ? "speaking"
+                : "";
 
   const pipelineBars = [
     { label: "Lds", value: status?.companies ?? 0, tone: "cyan" as const },
@@ -2478,6 +2581,9 @@ export function NovaConsole() {
             </Link>
             <Link href="/nova/download" className="nova-link">
               Download
+            </Link>
+            <Link href="/nova/shortcut" className="nova-link">
+              Siri Shortcut
             </Link>
           </div>
           <div className="nova-clock-block" aria-hidden>
@@ -2663,7 +2769,22 @@ export function NovaConsole() {
       <main className="nova-stage">
         <h1 className="nova-brand font-display">NOVA</h1>
         <p className="nova-tagline">
-          Systems online. Say <span>“Hey Nova”</span> for outreach, MRR, clients.
+          {shortcutListen ? (
+            listenTapNeeded ? (
+              <>
+                Shortcut opened. <span>Tap once</span> to unlock the mic, then speak.
+              </>
+            ) : (
+              <>
+                Systems online. <span>Listening…</span> Speak your command.
+              </>
+            )
+          ) : (
+            <>
+              Systems online. Say <span>“Hey Nova”</span> for outreach, MRR,
+              clients.
+            </>
+          )}
         </p>
 
         <div className={wrapClass}>

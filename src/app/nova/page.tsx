@@ -29,11 +29,18 @@ const deniedCopy: Record<string, { title: string; body: string }> = {
   },
 };
 
-export default async function NovaPage() {
+type PageProps = {
+  searchParams: Promise<{ listen?: string }>;
+};
+
+export default async function NovaPage({ searchParams }: PageProps) {
   const admin = await checkNexusAdmin();
+  const sp = await searchParams;
+  const autoListen = sp.listen === "1" || sp.listen === "true";
 
   if (!admin.allowed) {
     const copy = deniedCopy[admin.reason ?? "not_admin"] ?? deniedCopy.not_admin!;
+    const next = autoListen ? "/nova?listen=1" : "/nova";
     return (
       <main className="flex min-h-[100dvh] items-center justify-center bg-canvas px-5">
         <Card className="max-w-md text-center">
@@ -43,7 +50,7 @@ export default async function NovaPage() {
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-ink-600">{copy.body}</p>
           <Link
-            href="/login"
+            href={`/login?next=${encodeURIComponent(next)}`}
             className="mt-5 inline-flex text-sm font-medium text-brand-700 hover:text-brand-800"
           >
             Sign in
@@ -53,5 +60,5 @@ export default async function NovaPage() {
     );
   }
 
-  return <NovaConsole />;
+  return <NovaConsole autoListen={autoListen} />;
 }
