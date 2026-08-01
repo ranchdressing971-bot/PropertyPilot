@@ -30,17 +30,22 @@ const deniedCopy: Record<string, { title: string; body: string }> = {
 };
 
 type PageProps = {
-  searchParams: Promise<{ listen?: string }>;
+  searchParams: Promise<{ listen?: string; q?: string }>;
 };
 
 export default async function NovaPage({ searchParams }: PageProps) {
   const admin = await checkNexusAdmin();
   const sp = await searchParams;
   const autoListen = sp.listen === "1" || sp.listen === "true";
+  const q = typeof sp.q === "string" ? sp.q.trim() : "";
 
   if (!admin.allowed) {
     const copy = deniedCopy[admin.reason ?? "not_admin"] ?? deniedCopy.not_admin!;
-    const next = autoListen ? "/nova?listen=1" : "/nova";
+    const nextParams = new URLSearchParams();
+    if (autoListen) nextParams.set("listen", "1");
+    if (q) nextParams.set("q", q);
+    const qs = nextParams.toString();
+    const next = qs ? `/nova?${qs}` : "/nova";
     return (
       <main className="flex min-h-[100dvh] items-center justify-center bg-canvas px-5">
         <Card className="max-w-md text-center">
@@ -60,5 +65,5 @@ export default async function NovaPage({ searchParams }: PageProps) {
     );
   }
 
-  return <NovaConsole autoListen={autoListen} />;
+  return <NovaConsole autoListen={autoListen || Boolean(q)} />;
 }

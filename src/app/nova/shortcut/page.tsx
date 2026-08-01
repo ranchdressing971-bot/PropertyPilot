@@ -7,7 +7,7 @@ import { checkNexusAdmin } from "@/lib/nexus/admin";
 export const metadata: Metadata = {
   title: "Hey Nova · iOS Shortcut",
   description:
-    "Set up the Hey Nova Siri Shortcut for Bluetooth glasses and iPhone.",
+    "Set up the Hey Nova Siri Shortcut for Bluetooth glasses and iPhone — no in-page tap.",
   robots: { index: false, follow: false },
 };
 
@@ -20,6 +20,7 @@ export default async function NovaShortcutPage() {
     ""
   );
   const listenUrl = `${appUrl}/nova?listen=1`;
+  const listenWithQExample = `${appUrl}/nova?listen=1&q=`;
   const goUrl = `${appUrl}/nova/go`;
 
   return (
@@ -32,19 +33,22 @@ export default async function NovaShortcutPage() {
           HEY NOVA
         </h1>
         <p className="mt-3 text-center text-sm leading-relaxed text-white/55">
-          One Siri Shortcut so the glasses button opens Nova already listening.
-          No second wake phrase.
+          Bluetooth glasses + Siri button: the Shortcut is your gesture. No
+          in-page tap required after setup.
         </p>
 
         <div className="mt-7 rounded-2xl border border-cyan-300/20 bg-white/[0.04] px-4 py-4">
           <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200/55">
-            URL for the shortcut
+            Open URL base
           </p>
           <p className="mt-2 break-all font-mono text-sm text-cyan-100/90">
-            {listenUrl}
+            {listenWithQExample}
+            <span className="text-white/45">[Dictated Text]</span>
           </p>
           <p className="mt-2 text-xs text-white/40">
-            Same result:{" "}
+            Mic-only fallback (no dictation):{" "}
+            <span className="font-mono text-white/55">{listenUrl}</span>
+            {" · "}
             <span className="font-mono text-white/55">{goUrl}</span>
           </p>
         </div>
@@ -52,7 +56,7 @@ export default async function NovaShortcutPage() {
         <div className="mt-8 space-y-5 text-left text-xs leading-relaxed text-white/50">
           <div>
             <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-cyan-200/50">
-              Create the shortcut
+              Glasses / no-tap Shortcut (recommended)
             </p>
             <ol className="space-y-2.5">
               <li>
@@ -63,52 +67,68 @@ export default async function NovaShortcutPage() {
                 >
                   Shortcuts
                 </a>{" "}
-                app on your iPhone.
+                app → <span className="text-white/75">+</span> new shortcut.
               </li>
               <li>
-                2. Tap <span className="text-white/75">+</span> (or All
-                Shortcuts → +) to create a new shortcut.
+                2. Add action:{" "}
+                <span className="text-white/75">Speak Text</span> → text exactly{" "}
+                <span className="text-white/80">whats up big dog</span> (no
+                comma). This is Nova&apos;s greeting from the glasses.
               </li>
               <li>
                 3. Add action:{" "}
-                <span className="text-white/75">Open URLs</span> (search
-                &quot;Open URL&quot;).
+                <span className="text-white/75">Dictate Text</span> (or{" "}
+                <span className="text-white/75">Ask for Input</span> with Input
+                Type → Dictate). Speak your command after the greeting.
               </li>
               <li>
-                4. Paste this URL:
+                4. Optional:{" "}
+                <span className="text-white/75">Set variable</span> named{" "}
+                <span className="text-white/80">Dictation</span> from that
+                result (makes the next step clearer).
+              </li>
+              <li>
+                5. Add action:{" "}
+                <span className="text-white/75">Open URLs</span>. URL:
                 <code className="mt-1.5 block rounded-lg bg-white/5 px-2.5 py-2 font-mono text-[11px] text-cyan-100/85">
-                  {listenUrl}
+                  {listenWithQExample}
+                  <span className="text-amber-100/80">Dictated Text</span>
                 </code>
+                Insert the Dictate Text / Dictation variable after{" "}
+                <span className="font-mono text-white/70">q=</span>. Shortcuts
+                URL-encodes the variable when you insert it into the URL field.
               </li>
               <li>
-                5. Tap the shortcut name at the top → rename to{" "}
-                <span className="text-white/80">Hey Nova</span> exactly.
-              </li>
-              <li>
-                6. Tap Done. Optional: Add to Home Screen, or set as the
-                Side Button / Action Button shortcut if you use that.
+                6. Rename the shortcut to{" "}
+                <span className="text-white/80">Hey Nova</span> exactly → Done.
+                Assign it to the Siri / glasses button if you use that.
               </li>
             </ol>
           </div>
 
           <div>
             <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-cyan-200/50">
-              Run from Siri / glasses
+              What happens
             </p>
             <ol className="space-y-2.5">
               <li>
-                1. Say <span className="text-white/80">&quot;Hey Siri, Hey
-                Nova&quot;</span> or press the Siri button / glasses stem and
-                say <span className="text-white/80">&quot;Hey Nova&quot;</span>.
+                1. Press the glasses / Siri button and run{" "}
+                <span className="text-white/80">Hey Nova</span>.
               </li>
               <li>
-                2. Safari (or your default browser) opens Nova with the mic in
-                open listen. Speak your command; do not say &quot;hey nova&quot;
-                again.
+                2. Siri speaks <span className="text-white/80">whats up big
+                dog</span>, then captures your command via Dictate Text.
               </li>
               <li>
-                3. Stay signed in to the operator account in that browser so the
-                shortcut skips the login wall.
+                3. Safari opens Nova with{" "}
+                <span className="font-mono text-white/70">listen=1</span> and{" "}
+                <span className="font-mono text-white/70">q=</span> your
+                utterance. Nova processes that turn immediately, then resumes
+                listening for follow-ups (no page tap).
+              </li>
+              <li>
+                4. Stay signed in to the operator account in Safari so the
+                Shortcut skips the login wall.
               </li>
             </ol>
           </div>
@@ -130,25 +150,30 @@ export default async function NovaShortcutPage() {
 
           <div>
             <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-amber-200/45">
-              iPhone / Safari notes
+              First-time setup
             </p>
             <ul className="list-disc space-y-2 pl-4">
               <li>
-                First open: allow Microphone when Safari asks. Without that
-                grant, Nova cannot listen.
-              </li>
-              <li>
-                iOS sometimes needs one screen tap after a Shortcut opens a
-                page before the mic starts. If you see &quot;Tap once to
-                listen,&quot; tap the orb or anywhere on the screen once.
+                Open Nova once in Safari and allow{" "}
+                <span className="text-white/75">Microphone</span> when asked.
+                That grant persists; later Shortcut opens can listen without a
+                tap.
               </li>
               <li>
                 Prefer Safari with the site already signed in. Private mode or
                 a cold session will hit the login screen first.
               </li>
               <li>
-                Speech recognition works best while the Nova tab stays in the
-                foreground; backgrounding Safari may stop the mic.
+                Keep the Nova tab in the foreground while talking; backgrounding
+                Safari may stop recognition.
+              </li>
+              <li>
+                Mic-only fallback ({" "}
+                <span className="font-mono text-white/60">?listen=1</span> with
+                no <span className="font-mono text-white/60">q</span>): Nova
+                tries to greet in-page and opens the mic. If autoplay is
+                blocked, listening still starts — the Shortcut Speak Text path
+                above is preferred for glasses.
               </li>
             </ul>
           </div>

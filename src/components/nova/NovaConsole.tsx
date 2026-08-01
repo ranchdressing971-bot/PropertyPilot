@@ -1207,6 +1207,53 @@ function readListenIntentFromLocation(): boolean {
   }
 }
 
+/** Shortcut Dictate Text (or typed) utterance from ?q= — process without waiting on mic. */
+function readQueryUtteranceFromLocation(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (!q) return null;
+    const trimmed = q.trim();
+    return trimmed.length ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
+function stripQueryParamFromUrl(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(key)) return;
+    url.searchParams.delete(key);
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState({}, "", next);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Mic permission often persists after a prior Safari grant. Recognition can start
+ * without a tap even when HTMLAudioElement autoplay cannot. Prefer starting the
+ * mic; treat "denied" as the only hard stop.
+ */
+async function probeMicrophoneAccess(): Promise<"granted" | "denied" | "unknown"> {
+  try {
+    const perms = navigator.permissions;
+    if (perms?.query) {
+      const status = await perms.query({
+        name: "microphone" as PermissionName,
+      });
+      if (status.state === "granted") return "granted";
+      if (status.state === "denied") return "denied";
+    }
+  } catch {
+    /* Safari / WebKit may reject Permissions API for microphone */
+  }
+  return "unknown";
+}
+
 /** One-shot greeting when ?listen=1 (or /nova/go / #listen) is ready. */
 const LISTEN_READY_GREETING = "whats up big dog";
 
@@ -1222,7 +1269,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   /** Opened via Siri Shortcut / ?listen=1 — skip wake phrase. */
   const [shortcutListen, setShortcutListen] = useState(autoListen);
-  /** iOS blocked mic without a gesture — wait for one tap. */
+  /**
+   * Optional recovery only (never the primary glasses path).
+   * Shortcut / ?listen=1 must not soft-lock behind a full-screen tap wall.
+   */
   const [listenTapNeeded, setListenTapNeeded] = useState(false);
   const [voicePathLabel, setVoicePathLabel] = useState<string | null>(null);
   const [clock, setClock] = useState(() =>
@@ -1728,7 +1778,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         playPendingNowRef.current();
         return true;
       }
-      // Shortcut / ?listen=1 wake gate: play() MUST stay in this tap call stack.
+      // Optional orb tap: if greeting never autoplayed, play() must stay in-gesture.
       if (
         autoListenRef.current &&
         !listenGreetingDoneRef.current &&
@@ -1932,10 +1982,29 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     }, SILENCE_END_MS);
   }, [clearSilenceEnd]);
 
+  /**
+   * Legacy helper kept for gesture-retry paths. For Shortcut / glasses (?listen=1),
+   * never raise the full-screen tap wall — start command listen instead.
+   */
   const showWakeGate = useCallback(() => {
+    if (autoListenRef.current) {
+      listenTapNeededRef.current = false;
+      setListenTapNeeded(false);
+      if (
+        listeningOnRef.current &&
+        phaseRef.current !== "speaking" &&
+        phaseRef.current !== "thinking" &&
+        !recognitionRef.current
+      ) {
+        phaseRef.current = "listening_command";
+        setPhase("listening_command");
+        armSilenceEnd();
+        startMicRef.current("command");
+      }
+      return;
+    }
     listenTapNeededRef.current = true;
     setListenTapNeeded(true);
-    // Idle — never claim Listening… / Mic live while waiting for the wake tap.
     if (
       phaseRef.current === "listening_wake" ||
       phaseRef.current === "listening_command" ||
@@ -1945,7 +2014,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       phaseRef.current = "idle";
       setPhase("idle");
     }
-  }, [killMic]);
+  }, [armSilenceEnd, killMic]);
 
   /** Prefetch "whats up big dog" TTS so the wake tap only calls play() in-gesture. */
   const prefetchListenGreeting = useCallback(() => {
@@ -2195,10 +2264,13 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   }, [playListenGreetingInGesture]);
 
   /**
-   * Shortcut / ?listen=1 ready path:
-   * iOS/mobile: show wake gate + prefetch (shortcut open is NOT a gesture).
-   * Desktop: unlock → speak → command listen.
-   * Gesture path uses playListenGreetingInGesture (sync play).
+   * Shortcut / ?listen=1 ready path (glasses-first):
+   * - Never soft-lock behind a full-screen tap wall.
+   * - If ?q= is present, treat it as the user utterance immediately (Shortcut
+   *   Speak Text already greeted; DictateText supplied the command).
+   * - Otherwise try autoplay greeting; if blocked, still open command listen.
+   * - Aggressively start the mic when permission was previously granted.
+   * Optional orb tap can still unlock audio / replay greeting.
    */
   const runListenReadySequence = useCallback(
     async (fromGesture: boolean) => {
@@ -2208,65 +2280,76 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       setShortcutListen(true);
       listeningOnRef.current = true;
       setListeningOn(true);
+      listenTapNeededRef.current = false;
+      setListenTapNeeded(false);
 
-      try {
-        if (fromGesture) {
-          // Prefer sync wake player (already invoked from handleUserGesture when needed).
-          if (!listenGreetingDoneRef.current) {
-            playListenGreetingInGesture();
-            return;
-          }
-          unlockAudioInGesture();
-          listenTapNeededRef.current = false;
-          setListenTapNeeded(false);
-          if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
-            return;
-          }
-          phaseRef.current = "listening_command";
-          setPhase("listening_command");
-          armSilenceEnd();
-          if (!recognitionRef.current) startMicRef.current("command");
-          return;
-        }
-
-        // Mount / auto boot — prefetch immediately for the wake tap.
-        prefetchListenGreeting();
-
-        // iPhone / mobile: never pretend unlock+speak worked without a tap.
-        if (needsGestureForVoice()) {
-          showWakeGate();
-          return;
-        }
-
-        const unlocked = await unlockAudio();
-        if (!unlocked) {
-          showWakeGate();
-          return;
-        }
-
-        listenTapNeededRef.current = false;
-        setListenTapNeeded(false);
-
-        if (!listenGreetingDoneRef.current) {
-          // Desktop autoplay — speak() finally arms command listen via resumeAfterSpeech.
-          listenGreetingDoneRef.current = true;
-          await speakRef.current(LISTEN_READY_GREETING, "command");
-          // If autoplay was blocked, silent-recovery is queued — surface wake gate.
-          if (waitingForTapRef.current && pendingVoiceRef.current) {
-            listenGreetingDoneRef.current = false;
-            showWakeGate();
-          }
-          return;
-        }
-
+      const armCommandListen = () => {
         if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
           return;
         }
         phaseRef.current = "listening_command";
         setPhase("listening_command");
         armSilenceEnd();
-        if (!recognitionRef.current) {
-          startMicRef.current("command");
+        if (!recognitionRef.current) startMicRef.current("command");
+      };
+
+      try {
+        if (fromGesture) {
+          if (!listenGreetingDoneRef.current) {
+            playListenGreetingInGesture();
+            return;
+          }
+          unlockAudioInGesture();
+          armCommandListen();
+          return;
+        }
+
+        prefetchListenGreeting();
+
+        const initialQ = readQueryUtteranceFromLocation();
+        if (initialQ) {
+          // Shortcut already spoke the greeting; skip web greeting for this turn.
+          stripQueryParamFromUrl("q");
+          listenGreetingDoneRef.current = true;
+          void unlockAudio();
+          void askNovaRef.current(initialQ);
+          return;
+        }
+
+        const micAccess = await probeMicrophoneAccess();
+        if (micAccess === "denied") {
+          setError(
+            "Microphone is blocked for this site. Enable it in Safari Settings, then reopen Hey Nova from the Shortcut."
+          );
+          phaseRef.current = "idle";
+          setPhase("idle");
+          return;
+        }
+
+        // Mic permission often survives refresh; start recognition before TTS.
+        // Autoplay may still fail — that must not block listening.
+        armCommandListen();
+
+        if (listenGreetingDoneRef.current) return;
+
+        const unlocked = await unlockAudio();
+        listenGreetingDoneRef.current = true;
+        if (!unlocked) return;
+
+        // Best-effort greeting; speak() pauses mic then resumeAfterSpeech reopens it.
+        // skipTapRecovery: never soft-lock if play() is blocked.
+        await speakRef.current(LISTEN_READY_GREETING, "command", undefined, {
+          skipTapRecovery: true,
+        });
+        pendingVoiceRef.current = null;
+        waitingForTapRef.current = false;
+        if (
+          listeningOnRef.current &&
+          !recognitionRef.current &&
+          phaseRef.current !== "speaking" &&
+          phaseRef.current !== "thinking"
+        ) {
+          armCommandListen();
         }
       } finally {
         listenReadyInFlightRef.current = false;
@@ -2276,7 +2359,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       armSilenceEnd,
       playListenGreetingInGesture,
       prefetchListenGreeting,
-      showWakeGate,
       unlockAudio,
       unlockAudioInGesture,
     ]
@@ -2427,19 +2509,22 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         if (ev.error === "not-allowed") {
           setError(
             autoListenRef.current
-              ? "Allow the microphone, then tap once to listen."
+              ? "Microphone blocked. Enable it in Safari Settings for this site, then reopen via the Hey Nova Shortcut."
               : "Allow the microphone. Nova needs it to always listen."
           );
           setNeedsGesture(true);
+          recognitionRef.current = null;
           if (autoListenRef.current) {
-            listenTapNeededRef.current = true;
-            setListenTapNeeded(true);
+            // Do not raise a tap wall — glasses / Shortcut cannot satisfy it.
+            listenTapNeededRef.current = false;
+            setListenTapNeeded(false);
+            setPhase("idle");
+            phaseRef.current = "idle";
           } else {
             setListeningOn(false);
             listeningOnRef.current = false;
             setPhase("idle");
           }
-          recognitionRef.current = null;
         }
       };
 
@@ -2473,14 +2558,21 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         if (autoListenRef.current && mode === "command") {
           listenTapNeededRef.current = false;
           setListenTapNeeded(false);
+          setError(null);
         }
       } catch {
         setNeedsGesture(true);
         recognitionRef.current = null;
         if (autoListenRef.current) {
-          listenTapNeededRef.current = true;
-          setListenTapNeeded(true);
+          // Retry shortly — prior mic grant often works after Safari settles.
+          listenTapNeededRef.current = false;
+          setListenTapNeeded(false);
           setError(null);
+          window.setTimeout(() => {
+            if (!listeningOnRef.current || recognitionRef.current) return;
+            if (phaseRef.current === "speaking") return;
+            startMicRef.current(mode);
+          }, 400);
         } else {
           setError("Tap the orb once to enable always-on listening.");
         }
@@ -3150,12 +3242,13 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     askNovaRef.current = askNova;
   }, [askNova]);
 
-  // Always-on on mount — wake word by default; ?listen=1 unlocks → greets → listens.
+  // Always-on on mount — wake word by default; ?listen=1 / ?q= → Shortcut path.
   useEffect(() => {
     listeningOnRef.current = true;
     setListeningOn(true);
     const wantListen = autoListen || readListenIntentFromLocation();
-    if (wantListen) {
+    const initialQ = readQueryUtteranceFromLocation();
+    if (wantListen || initialQ) {
       void runListenReadySequence(false);
     } else {
       startMic("wake");
@@ -3232,11 +3325,13 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       phase === "thinking");
 
   const phaseLabel = listenTapNeeded
-    ? "tap to wake Nova"
+    ? "tap orb to unlock voice"
     : !listeningOn
       ? "mic off · tap orb to listen"
       : phase === "idle"
-        ? "starting…"
+        ? shortcutListen
+          ? "stand by…"
+          : "starting…"
         : phase === "listening_wake"
           ? "say “hey nova”"
           : phase === "listening_command"
@@ -3364,19 +3459,13 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             <div className="flex items-center gap-2">
               <span
                 className={
-                  listenTapNeeded
-                    ? "nova-status-dot"
-                    : listeningOn
-                      ? "nova-status-dot nova-status-dot-on"
-                      : "nova-status-dot nova-status-dot-off"
+                  listeningOn
+                    ? "nova-status-dot nova-status-dot-on"
+                    : "nova-status-dot nova-status-dot-off"
                 }
               />
               <span>
-                {listenTapNeeded
-                  ? "Tap to wake"
-                  : listeningOn
-                    ? "Mic live"
-                    : "Mic muted"}
+                {listeningOn ? "Mic live" : "Mic muted"}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -3548,14 +3637,13 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         <h1 className="nova-brand font-display">NOVA</h1>
         <p className="nova-tagline">
           {shortcutListen ? (
-            listenTapNeeded ? (
-              <>
-                Shortcut opened. <span>Tap the orb</span> to wake Nova — she
-                greets, then listens.
-              </>
-            ) : phase === "speaking" && !lines.length ? (
+            phase === "speaking" && !lines.length ? (
               <>
                 Systems online. <span>Greeting…</span>
+              </>
+            ) : phase === "thinking" ? (
+              <>
+                Systems online. <span>Working…</span>
               </>
             ) : phase === "listening_command" ? (
               <>
@@ -3574,53 +3662,21 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           )}
         </p>
 
-        <div className={`${wrapClass}${listenTapNeeded ? " is-wake-gate" : ""}`}>
+        <div className={wrapClass}>
           <span className="nova-ring nova-ring-a" aria-hidden />
           <span className="nova-ring nova-ring-b" aria-hidden />
           <span className="nova-ring nova-ring-c" aria-hidden />
           <span className="nova-orb-halo nova-orb-halo-a" aria-hidden />
           <span className="nova-orb-halo nova-orb-halo-b" aria-hidden />
           <NovaMeshOrb
-            phase={listenTapNeeded ? "idle" : phase}
+            phase={phase}
             onClick={toggleListening}
             onPointerDown={handleOrbGesture}
             onTouchStart={handleOrbGesture}
             ariaLabel={
-              listenTapNeeded
-                ? "Tap to wake Nova"
-                : listeningOn
-                  ? "Mute Nova mic"
-                  : "Enable always-on listening"
+              listeningOn ? "Mute Nova mic" : "Enable always-on listening"
             }
           />
-          {listenTapNeeded && (
-            <button
-              type="button"
-              className="nova-wake-gate"
-              aria-label="Tap to wake Nova"
-              onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                drainedPendingRef.current = true;
-                playListenGreetingInGesture();
-              }}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                drainedPendingRef.current = true;
-                playListenGreetingInGesture();
-              }}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-            >
-              <span className="nova-wake-gate-label">Tap to wake Nova</span>
-              <span className="nova-wake-gate-sub">
-                Unlocks voice · greets · then listens
-              </span>
-            </button>
-          )}
         </div>
 
         <div
