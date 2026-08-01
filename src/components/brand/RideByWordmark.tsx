@@ -40,8 +40,8 @@ export function RideByWordmark({
     >
       <span
         className={clsx(
-          "relative -mr-[0.04em] inline-flex shrink-0 overflow-hidden rounded-[22%]",
-          "h-[1.32em] w-[1.32em] translate-y-[0.02em]",
+          "relative -mr-[0.1em] inline-flex shrink-0 overflow-hidden rounded-[22%] bg-transparent",
+          "h-[1.38em] w-[1.38em] translate-y-[0.02em]",
           inverted && "invert",
           markClassName
         )}
@@ -52,7 +52,7 @@ export function RideByWordmark({
           alt=""
           width={128}
           height={128}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-cover bg-transparent"
           priority
         />
       </span>

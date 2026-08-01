@@ -14,9 +14,9 @@ interface LogoProps {
 }
 
 const sizes = {
-  sm: "text-lg",
-  md: "text-xl",
-  lg: "text-2xl",
+  sm: "text-xl",
+  md: "text-2xl",
+  lg: "text-3xl",
 };
 
 export function Logo({
