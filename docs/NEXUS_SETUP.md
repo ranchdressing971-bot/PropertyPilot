@@ -142,22 +142,25 @@ When you leave sandbox: verify a Mailtrap sending domain, set
 
 ```bash
 ELEVENLABS_API_KEY=...
-ELEVENLABS_VOICE_ID=...        # required on free tier — copy from My Voices
-# Prefer a British accent voice in My Voices for Nova's accent.
+# Default when unset: Lily (pFZP5JQG7iQjIQuC4Bku) — natural British female
+# ELEVENLABS_VOICE_ID=pFZP5JQG7iQjIQuC4Bku
+# Free tier: if premade Lily is blocked, copy a My Voices ID instead
 # ELEVENLABS_SPEED=1.15          # speaking rate (0.7–1.2)
 # ELEVENLABS_MODEL_ID=eleven_multilingual_v2
 # OpenAI TTS fallback (when ElevenLabs missing/out of credits):
-# OPENAI_TTS_MODEL=gpt-4o-mini-tts
-# OPENAI_TTS_VOICE=coral         # feminine (default); also nova/shimmer/sage
-# OPENAI_TTS_SPEED=1.2
+# OPENAI_TTS_MODEL=tts-1-hd      # plain HD — not mini-tts (avoids cartoon accent steering)
+# OPENAI_TTS_VOICE=nova          # feminine; also shimmer/coral/sage — avoid fable
+# OPENAI_TTS_SPEED=1.15
 ```
 
-Free ElevenLabs accounts **cannot** use Voice Library IDs via the API. Open
+**Voice stack:** ElevenLabs **Lily** (British woman, warm narration) when the
+API key works; OpenAI **`tts-1-hd` + `nova`** otherwise (clean female, not
+strongly British — OpenAI has no great UK female without cartoonish mini-tts
+prompting). On free ElevenLabs plans that block premade IDs, open
 [Voices](https://elevenlabs.io/app/voice-lab) → My Voices → ⋯ → **Copy voice ID**
-→ paste as `ELEVENLABS_VOICE_ID` on Vercel → redeploy. If unset, Nova tries the
-first voice on your account instead of a library default. OpenAI fallback uses
-feminine voice `coral` on `gpt-4o-mini-tts` (light British-woman style) at
-speed `1.2`.
+→ `ELEVENLABS_VOICE_ID` on Vercel → redeploy. If Vercel still has old
+`OPENAI_TTS_*` overrides (`coral` / `gpt-4o-mini-tts` / “Young British…”),
+**clear them** and hard-refresh after deploy.
 
 Nova can call Nexus tools: status, list drafts/companies, start search, run a
 tick, queue approved sends, and store memory/trials.

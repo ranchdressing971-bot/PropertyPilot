@@ -5,17 +5,22 @@
  * Fallback: OpenAI TTS (when OPENAI_API_KEY is set) — required for iPhone
  * autoplay, since WebKit speechSynthesis cannot start after await fetch.
  *
- * Free ElevenLabs accounts cannot use Voice Library IDs via the API. Set
- * ELEVENLABS_VOICE_ID to the id from My Voices, OR ELEVENLABS_VOICE_NAME
- * (e.g. a British voice name) and we resolve it. If unset, we prefer a voice
- * named Nova, then the first account voice.
+ * Default ElevenLabs voice: premade Lily (`pFZP5JQG7iQjIQuC4Bku`) — natural
+ * British female, warm narration (not theatrical). Override with
+ * ELEVENLABS_VOICE_ID or ELEVENLABS_VOICE_NAME. Free-tier accounts that cannot
+ * use premade/library IDs should set a My Voices ID; we also resolve by name
+ * (Lily → Alice → Nova → first account voice).
  *
- * OpenAI fallback defaults: `gpt-4o-mini-tts` + feminine voice `coral`
- * with light British-woman instructions, speed ~1.2.
+ * OpenAI fallback: plain `tts-1-hd` + `nova` at ~1.15 — no mini-tts accent
+ * steering (that path sounded cartoonish). True British accent needs ElevenLabs.
  * ElevenLabs speaking rate defaults to ~1.15 (env: ELEVENLABS_SPEED).
  */
 
 import { getOpenAIApiKey } from "@/lib/openai-env";
+
+/** Premade Lily — British female, warm/clear narration. */
+export const DEFAULT_ELEVENLABS_VOICE_ID = "pFZP5JQG7iQjIQuC4Bku";
+const DEFAULT_ELEVENLABS_VOICE_NAMES = ["Lily", "Alice", "Nova"] as const;
 
 let cachedVoiceId: string | null = null;
 
@@ -73,6 +78,7 @@ function findByName(voices: ElVoice[], name: string): ElVoice | undefined {
 
 /**
  * Resolve a voice the API key is allowed to use.
+ * Prefers British female Lily when env does not override.
  */
 export async function resolveElevenLabsVoiceId(apiKey: string): Promise<string> {
   if (cachedVoiceId) return cachedVoiceId;
@@ -86,6 +92,12 @@ export async function resolveElevenLabsVoiceId(apiKey: string): Promise<string> 
     return cachedVoiceId;
   }
 
+  // No override: default to premade Lily (British female).
+  if (!rawId && !rawName) {
+    cachedVoiceId = DEFAULT_ELEVENLABS_VOICE_ID;
+    return cachedVoiceId;
+  }
+
   const voices = await listAccountVoices(apiKey);
   if (voices.length === 0) {
     throw new Error(
@@ -94,11 +106,14 @@ export async function resolveElevenLabsVoiceId(apiKey: string): Promise<string> 
   }
 
   // Env was a name like "Nova" put in VOICE_ID by mistake — resolve by name.
-  const nameHint = rawName || (rawId && !looksLikeVoiceId(rawId) ? rawId : "Nova");
-  const byName = findByName(voices, nameHint);
-  if (byName) {
-    cachedVoiceId = byName.voice_id;
-    return cachedVoiceId;
+  const nameHint =
+    rawName || (rawId && !looksLikeVoiceId(rawId) ? rawId : "");
+  if (nameHint) {
+    const byName = findByName(voices, nameHint);
+    if (byName) {
+      cachedVoiceId = byName.voice_id;
+      return cachedVoiceId;
+    }
   }
 
   if (rawId && !looksLikeVoiceId(rawId)) {
@@ -106,6 +121,22 @@ export async function resolveElevenLabsVoiceId(apiKey: string): Promise<string> 
     throw new Error(
       `No voice named "${rawId}" on this ElevenLabs account. Available: ${available}. Set ELEVENLABS_VOICE_ID to the voice ID (⋯ → Copy voice ID), not the display name.`
     );
+  }
+
+  for (const name of DEFAULT_ELEVENLABS_VOICE_NAMES) {
+    const match = findByName(voices, name);
+    if (match) {
+      cachedVoiceId = match.voice_id;
+      return cachedVoiceId;
+    }
+  }
+
+  const byDefaultId = voices.find(
+    (v) => v.voice_id === DEFAULT_ELEVENLABS_VOICE_ID
+  );
+  if (byDefaultId) {
+    cachedVoiceId = byDefaultId.voice_id;
+    return cachedVoiceId;
   }
 
   const preferred =
@@ -173,25 +204,20 @@ function markQuotaError(message: string): Error {
   return err;
 }
 
-async function synthesizeElevenLabs(
+async function elevenLabsTtsRequest(
+  apiKey: string,
+  voiceId: string,
   text: string,
   opts?: { format?: NovaSpeechFormat }
-): Promise<{ audio: Buffer; contentType: string }> {
-  const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("ELEVENLABS_API_KEY is not configured");
-  }
-
-  const voiceId = await resolveElevenLabsVoiceId(apiKey);
+): Promise<Response> {
   const model =
     process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2";
   const wantWav = opts?.format === "wav";
   const outputFormat = wantWav ? "pcm_44100" : "mp3_44100_128";
-  const clipped = clipSpeechText(text);
   // Slightly brisker than default (1.0); ElevenLabs accepts ~0.7–1.2.
   const speed = parseSpeechSpeed(process.env.ELEVENLABS_SPEED, 1.15, 0.7, 1.2);
 
-  const response = await fetch(
+  return fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${outputFormat}`,
     {
       method: "POST",
@@ -201,16 +227,77 @@ async function synthesizeElevenLabs(
         Accept: wantWav ? "audio/pcm" : "audio/mpeg",
       },
       body: JSON.stringify({
-        text: clipped,
+        text,
         model_id: model,
         voice_settings: {
-          stability: 0.4,
+          // Higher stability = less theatrical / cartoon expressiveness.
+          stability: 0.55,
           similarity_boost: 0.75,
           speed,
         },
       }),
     }
   );
+}
+
+/** When default Lily is blocked (free tier), pick Lily/Alice/Nova from My Voices. */
+async function resolveAccountFallbackVoiceId(apiKey: string): Promise<string> {
+  const voices = await listAccountVoices(apiKey);
+  if (voices.length === 0) {
+    throw new Error(
+      "No ElevenLabs voices on this account. Create/clone a British female in My Voices, then set ELEVENLABS_VOICE_ID."
+    );
+  }
+  for (const name of DEFAULT_ELEVENLABS_VOICE_NAMES) {
+    const match = findByName(voices, name);
+    if (match) return match.voice_id;
+  }
+  const preferred =
+    voices.find((v) =>
+      /^(premade|cloned|generated|professional)$/i.test(v.category ?? "")
+    ) ?? voices[0];
+  return preferred.voice_id;
+}
+
+async function synthesizeElevenLabs(
+  text: string,
+  opts?: { format?: NovaSpeechFormat }
+): Promise<{ audio: Buffer; contentType: string }> {
+  const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("ELEVENLABS_API_KEY is not configured");
+  }
+
+  const clipped = clipSpeechText(text);
+  const wantWav = opts?.format === "wav";
+  let voiceId = await resolveElevenLabsVoiceId(apiKey);
+  let response = await elevenLabsTtsRequest(apiKey, voiceId, clipped, opts);
+
+  // Premade Lily may need a paid plan — fall back to an account voice once.
+  if (
+    !response.ok &&
+    !process.env.ELEVENLABS_VOICE_ID?.trim() &&
+    !process.env.ELEVENLABS_VOICE_NAME?.trim() &&
+    voiceId === DEFAULT_ELEVENLABS_VOICE_ID
+  ) {
+    const detail = await response.text();
+    const lower = detail.toLowerCase();
+    const blocked =
+      response.status === 404 ||
+      lower.includes("paying") ||
+      lower.includes("library") ||
+      lower.includes("subscription") ||
+      lower.includes("voice_not_found");
+    if (blocked) {
+      cachedVoiceId = null;
+      voiceId = await resolveAccountFallbackVoiceId(apiKey);
+      cachedVoiceId = voiceId;
+      response = await elevenLabsTtsRequest(apiKey, voiceId, clipped, opts);
+    } else {
+      // Re-wrap detail for the shared error path below.
+      response = new Response(detail, { status: response.status });
+    }
+  }
 
   if (!response.ok) {
     const detail = await response.text();
@@ -239,12 +326,12 @@ async function synthesizeElevenLabs(
       lower.includes("subscription")
     ) {
       throw new Error(
-        "That ElevenLabs voice needs a paid plan. Use your custom “Nova” voice from My Voices. Copy its voice ID (not the name) into ELEVENLABS_VOICE_ID."
+        "That ElevenLabs voice needs a paid plan. Add a British female in My Voices and set ELEVENLABS_VOICE_ID (copy voice ID, not the name)."
       );
     }
     if (response.status === 404) {
       throw new Error(
-        "ElevenLabs voice not found. You probably set the name “Nova” instead of the voice ID. In Voices → Nova → ⋯ → Copy voice ID → ELEVENLABS_VOICE_ID."
+        "ElevenLabs voice not found. Set ELEVENLABS_VOICE_ID to a real voice ID (⋯ → Copy voice ID), not a display name."
       );
     }
     throw new Error(
@@ -279,15 +366,15 @@ async function synthesizeOpenAI(
 
   const clipped = clipSpeechText(text);
   const wantWav = opts?.format === "wav";
-  // gpt-4o-mini-tts supports style `instructions` (British young woman).
-  const model = process.env.OPENAI_TTS_MODEL?.trim() || "gpt-4o-mini-tts";
-  // Feminine voices: coral, nova, shimmer, sage. Avoid fable/onyx/echo (male/deep).
-  const voice = process.env.OPENAI_TTS_VOICE?.trim() || "coral";
+  // Plain HD TTS — no mini-tts accent prompts (those sounded cartoonish).
+  // Tradeoff: not strongly British; use ElevenLabs Lily for real UK accent.
+  const model = process.env.OPENAI_TTS_MODEL?.trim() || "tts-1-hd";
+  // Feminine: nova, shimmer, coral, sage. Avoid fable/onyx/echo (male/deep).
+  const voice = process.env.OPENAI_TTS_VOICE?.trim() || "nova";
   // Brisk but natural — OpenAI TTS speed range is 0.25–4.0.
-  const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.2, 0.25, 4.0);
-  const instructions =
-    process.env.OPENAI_TTS_INSTRUCTIONS?.trim() ||
-    "Young British woman. Clear, warm, natural — not deep or masculine.";
+  const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.15, 0.25, 4.0);
+  // Only applied when model is gpt-4o-*-tts; default stack leaves this unset.
+  const instructions = process.env.OPENAI_TTS_INSTRUCTIONS?.trim();
 
   const body: Record<string, unknown> = {
     model,
@@ -297,7 +384,7 @@ async function synthesizeOpenAI(
     response_format: wantWav ? "wav" : "mp3",
   };
   // Style instructions are only honored by gpt-4o-mini-tts (and similar).
-  if (/gpt-4o.*tts/i.test(model)) {
+  if (instructions && /gpt-4o.*tts/i.test(model)) {
     body.instructions = instructions;
   }
 
