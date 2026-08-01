@@ -39,7 +39,7 @@ interface StatusPayload {
   customDomainLikely?: boolean;
   canTransmitLive?: boolean;
   voiceConfigured: boolean;
-  voiceProvider?: "elevenlabs" | "openai" | null;
+  voiceProvider?: "elevenlabs" | "google" | "openai" | null;
   queuedJobs: number;
   companies: number;
   approvedDrafts: number;
@@ -1534,11 +1534,13 @@ export function NovaConsole() {
       setVoicePathLabel(
         provider === "openai"
           ? "OpenAI voice"
-          : provider === "elevenlabs"
-            ? "ElevenLabs"
-            : pending.useBrowserTts
-              ? "Device voice"
-              : null
+          : provider === "google"
+            ? "Google British"
+            : provider === "elevenlabs"
+              ? "ElevenLabs"
+              : pending.useBrowserTts
+                ? "Device voice"
+                : null
       );
       setVoiceDebug(
         formatVoiceDiag({
@@ -1884,9 +1886,11 @@ export function NovaConsole() {
       const providerLabel = (provider?: string) =>
         provider === "openai"
           ? "OpenAI voice"
-          : provider === "elevenlabs"
-            ? "ElevenLabs"
-            : null;
+          : provider === "google"
+            ? "Google British"
+            : provider === "elevenlabs"
+              ? "ElevenLabs"
+              : null;
 
       const playServerBlob = async (blob: Blob): Promise<string> => {
         let ctx = audioCtxRef.current;
@@ -2411,10 +2415,12 @@ export function NovaConsole() {
               {voicePathLabel ??
                 (status?.voiceProvider === "openai"
                   ? "OpenAI voice"
-                  : status?.voiceProvider === "elevenlabs" ||
-                      status?.voiceConfigured
-                    ? "ElevenLabs"
-                    : "Device voice")}
+                  : status?.voiceProvider === "google"
+                    ? "Google British"
+                    : status?.voiceProvider === "elevenlabs" ||
+                        status?.voiceConfigured
+                      ? "ElevenLabs"
+                      : "Device voice")}
               {" · "}
               {audioUnlocked ? "sound on" : "sound locked"}
               {" · "}

@@ -138,7 +138,7 @@ When you leave sandbox: verify a Mailtrap sending domain, set
 1. Open `/nova` while signed in as a Nexus admin
 2. Tap the orb → allow mic → say **“Hey Nova, how are the emails going?”**
 3. Or type in the box (Safari/wake-word fallback)
-4. Voice replies use server TTS (ElevenLabs preferred; OpenAI automatic fallback):
+4. Voice replies use server TTS (ElevenLabs → Google British → OpenAI):
 
 ```bash
 ELEVENLABS_API_KEY=...
@@ -147,20 +147,23 @@ ELEVENLABS_API_KEY=...
 # Only when unset: Lily (pFZP5JQG7iQjIQuC4Bku)
 # ELEVENLABS_SPEED=1.15
 # ELEVENLABS_MODEL_ID=eleven_multilingual_v2
-# OpenAI is automatic when ElevenLabs is out of credits / quota / auth fails:
-# (uses OPENAI_API_KEY — no extra toggle)
+# Real British female when ElevenLabs is dry (enable Cloud Text-to-Speech API):
+GOOGLE_TTS_API_KEY=...
+# GOOGLE_TTS_VOICE=en-GB-Neural2-A   # British female neural
+# GOOGLE_TTS_SPEED=1.18
+# OpenAI last resort only (uses OPENAI_API_KEY — not British; no accent theater):
 # OPENAI_TTS_MODEL=gpt-4o-mini-tts
-# OPENAI_TTS_VOICE=nova          # feminine; shimmer/coral also fine — avoid fable
+# OPENAI_TTS_VOICE=nova              # feminine; avoid fable (male British)
 # OPENAI_TTS_SPEED=1.16
-# OPENAI_TTS_INSTRUCTIONS=British English accent. Adult woman. Natural conversational tone. Not theatrical, not cartoonish.
 ```
 
 **Voice stack:** ElevenLabs with your `ELEVENLABS_VOICE_ID` when credits work.
-If ElevenLabs returns credits/quota/401/402/403/429, the API **automatically
-falls through to OpenAI `gpt-4o-mini-tts` + `nova`** at ~1.16 with restrained
-British-accent instructions (natural adult woman — not theatrical). Device/Web
-Speech is last resort only when both server providers fail. Clear stale Vercel
-`OPENAI_TTS_*` overrides that used theatrical/cartoon prompts, then redeploy.
+If ElevenLabs fails (credits/quota/401/402/403/429), fall through to **Google
+Cloud TTS `en-GB-Neural2-A`** (real British woman) when `GOOGLE_TTS_API_KEY`
+is set. OpenAI `nova` is last-resort female only — OpenAI cannot do a
+convincing British woman (`fable` is British but male). Device/Web Speech is
+only when all server providers fail. Set `GOOGLE_TTS_API_KEY` on Vercel for
+British fallback when ElevenLabs is dry, then redeploy.
 
 Nova can call Nexus tools: status, list drafts/companies, start search, run a
 tick, queue approved sends, and store memory/trials.

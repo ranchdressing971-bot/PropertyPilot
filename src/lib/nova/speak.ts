@@ -1,18 +1,14 @@
 /**
  * Server TTS for Nova voice replies.
  *
- * Primary: ElevenLabs when ELEVENLABS_API_KEY is set. Uses env
- * ELEVENLABS_VOICE_ID as-is when configured — never replaced by the Lily
- * default. Lily (`pFZP5JQG7iQjIQuC4Bku`) is only the default when VOICE_ID
- * (and VOICE_NAME) are unset.
+ * Fallback chain (first configured + working wins):
+ *   1. ElevenLabs — user's ELEVENLABS_VOICE_ID when credits work
+ *   2. Google Cloud TTS — real en-GB neural female (British when ElevenLabs is dry)
+ *   3. OpenAI TTS — female / natural last resort (NOT British; stock voices
+ *      cannot do a convincing British woman — only `fable` is British, and male)
  *
- * Automatic fallback: OpenAI TTS (OPENAI_API_KEY) when ElevenLabs fails for
- * any reason — especially credits / quota / 401 / 402 / 403 / 429 / payment.
  * Required for iPhone autoplay (WebKit speechSynthesis cannot start after
  * await fetch).
- *
- * OpenAI fallback: `gpt-4o-mini-tts` + `nova` at ~1.16 with restrained
- * British-accent instructions (natural adult woman — not theatrical).
  */
 
 import { getOpenAIApiKey } from "@/lib/openai-env";
@@ -21,16 +17,23 @@ import { getOpenAIApiKey } from "@/lib/openai-env";
 export const DEFAULT_ELEVENLABS_VOICE_ID = "pFZP5JQG7iQjIQuC4Bku";
 const DEFAULT_ELEVENLABS_VOICE_NAMES = ["Lily", "Alice", "Nova"] as const;
 
+/** Google Neural2 British female — clear adult woman, not theatrical. */
+export const DEFAULT_GOOGLE_TTS_VOICE = "en-GB-Neural2-A";
+
 /** OpenAI voices that sound male/deep — never use these for Nova fallback. */
 const OPENAI_DEEP_VOICES = new Set(["fable", "onyx", "echo"]);
 
 let cachedVoiceId: string | null = null;
 
-export type NovaVoiceProvider = "elevenlabs" | "openai";
+export type NovaVoiceProvider = "elevenlabs" | "google" | "openai";
 export type NovaSpeechFormat = "mpeg" | "wav";
 
 export function isElevenLabsConfigured(): boolean {
   return Boolean(process.env.ELEVENLABS_API_KEY?.trim());
+}
+
+export function isGoogleTtsConfigured(): boolean {
+  return Boolean(process.env.GOOGLE_TTS_API_KEY?.trim());
 }
 
 export function isOpenAITtsConfigured(): boolean {
@@ -39,13 +42,22 @@ export function isOpenAITtsConfigured(): boolean {
 
 /** True when at least one server TTS provider can return audio bytes. */
 export function isServerTtsConfigured(): boolean {
-  return isElevenLabsConfigured() || isOpenAITtsConfigured();
+  return (
+    isElevenLabsConfigured() ||
+    isGoogleTtsConfigured() ||
+    isOpenAITtsConfigured()
+  );
 }
 
 export function preferredNovaVoiceProvider(): NovaVoiceProvider | null {
   if (isElevenLabsConfigured()) return "elevenlabs";
+  if (isGoogleTtsConfigured()) return "google";
   if (isOpenAITtsConfigured()) return "openai";
   return null;
+}
+
+function hasBritishServerFallback(): boolean {
+  return isGoogleTtsConfigured();
 }
 
 type ElVoice = { voice_id: string; name: string; category?: string };
@@ -207,9 +219,19 @@ function markQuotaError(message: string): Error {
   return err;
 }
 
+function hasAnyLaterProvider(after: NovaVoiceProvider): boolean {
+  if (after === "elevenlabs") {
+    return isGoogleTtsConfigured() || isOpenAITtsConfigured();
+  }
+  if (after === "google") {
+    return isOpenAITtsConfigured();
+  }
+  return false;
+}
+
 /**
  * ElevenLabs credit / billing / auth failures that should fall through to
- * OpenAI immediately — not retry another ElevenLabs voice.
+ * the next provider immediately — not retry another ElevenLabs voice.
  */
 export function isElevenLabsQuotaOrBillingFailure(
   status: number,
@@ -362,7 +384,7 @@ async function synthesizeElevenLabs(
   if (!response.ok) {
     const detail = await response.text();
 
-    // Credits / quota / auth → stop ElevenLabs immediately (OpenAI fallthrough).
+    // Credits / quota / auth → stop ElevenLabs immediately (next-provider fallthrough).
     if (isElevenLabsQuotaOrBillingFailure(response.status, detail)) {
       console.warn(
         `[nova speak] ElevenLabs quota/billing failure (${response.status}):`,
@@ -419,6 +441,98 @@ async function synthesizeElevenLabs(
   };
 }
 
+/**
+ * Google Cloud Text-to-Speech — genuine British female neural voice.
+ * Uses REST + API key (no SDK). Enable Cloud Text-to-Speech API, then set
+ * GOOGLE_TTS_API_KEY on Vercel. Default voice: en-GB-Neural2-A.
+ */
+async function synthesizeGoogle(
+  text: string,
+  opts?: { format?: NovaSpeechFormat }
+): Promise<{ audio: Buffer; contentType: string }> {
+  const apiKey = process.env.GOOGLE_TTS_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("GOOGLE_TTS_API_KEY is not configured");
+  }
+
+  const clipped = clipSpeechText(text);
+  const wantWav = opts?.format === "wav";
+  const voiceName =
+    process.env.GOOGLE_TTS_VOICE?.trim() || DEFAULT_GOOGLE_TTS_VOICE;
+  // Google speakingRate 0.25–4.0; keep British woman ~1.15–1.2.
+  const speakingRate = parseSpeechSpeed(
+    process.env.GOOGLE_TTS_SPEED,
+    1.18,
+    0.25,
+    4.0
+  );
+  const sampleRateHertz = 24000;
+
+  const body = {
+    input: { text: clipped },
+    voice: {
+      languageCode: "en-GB",
+      name: voiceName,
+      ssmlGender: "FEMALE" as const,
+    },
+    audioConfig: {
+      audioEncoding: wantWav ? ("LINEAR16" as const) : ("MP3" as const),
+      speakingRate,
+      sampleRateHertz,
+    },
+  };
+
+  const response = await fetch(
+    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    const lower = detail.toLowerCase();
+    if (
+      response.status === 401 ||
+      response.status === 403 ||
+      response.status === 429 ||
+      lower.includes("quota") ||
+      lower.includes("rate limit") ||
+      lower.includes("billing") ||
+      lower.includes("permission") ||
+      lower.includes("api key")
+    ) {
+      throw markQuotaError(
+        `Google TTS unavailable (${response.status}). Check GOOGLE_TTS_API_KEY and that Cloud Text-to-Speech API is enabled.`
+      );
+    }
+    throw new Error(
+      `Google TTS failed (${response.status}): ${detail.slice(0, 300)}`
+    );
+  }
+
+  const data = (await response.json()) as { audioContent?: string };
+  if (!data.audioContent) {
+    throw new Error("Google TTS returned empty audioContent");
+  }
+  const raw = Buffer.from(data.audioContent, "base64");
+
+  if (wantWav) {
+    return {
+      audio: pcm16ToWav(raw, sampleRateHertz),
+      contentType: "audio/wav",
+    };
+  }
+
+  return {
+    audio: raw,
+    contentType: "audio/mpeg",
+  };
+}
+
 async function synthesizeOpenAI(
   text: string,
   opts?: { format?: NovaSpeechFormat }
@@ -430,17 +544,17 @@ async function synthesizeOpenAI(
 
   const clipped = clipSpeechText(text);
   const wantWav = opts?.format === "wav";
-  // mini-tts + restrained instructions → British female without cartoon energy.
+  // Last resort only. OpenAI has no convincing British female stock voice
+  // (`fable` is British but male — user rejected). Do not fake an accent.
   const model = process.env.OPENAI_TTS_MODEL?.trim() || "gpt-4o-mini-tts";
   // Feminine: nova, shimmer, coral, sage. Avoid fable/onyx/echo (male/deep).
   const rawVoice = (process.env.OPENAI_TTS_VOICE?.trim() || "nova").toLowerCase();
   const voice = OPENAI_DEEP_VOICES.has(rawVoice) ? "nova" : rawVoice;
-  // Slightly slower than the prior 1.32 snappy default — OpenAI range 0.25–4.0.
   const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.16, 0.25, 4.0);
-  // Restrained accent steering only — avoid theatrical "Young British woman" prompts.
+  // Honest natural female — no British-accent prompt theater.
   const instructions =
     process.env.OPENAI_TTS_INSTRUCTIONS?.trim() ||
-    "British English accent. Adult woman. Natural conversational tone. Not theatrical, not cartoonish.";
+    "Adult woman. Natural conversational tone. Clear and warm. Not theatrical, not cartoonish.";
 
   const body: Record<string, unknown> = {
     model,
@@ -493,7 +607,8 @@ async function synthesizeOpenAI(
 }
 
 /**
- * Synthesize reply audio. Prefers ElevenLabs, falls back to OpenAI TTS.
+ * Synthesize reply audio.
+ * Chain: ElevenLabs → Google en-GB female → OpenAI female (non-British).
  * Throws with code FALLBACK_BROWSER only when no server audio is possible.
  */
 export async function synthesizeNovaSpeech(
@@ -516,11 +631,41 @@ export async function synthesizeNovaSpeech(
           ? String((err as { code?: string }).code ?? "")
           : "";
       errors.push(msg);
-      if (!isOpenAITtsConfigured()) {
+      if (!hasAnyLaterProvider("elevenlabs")) {
         throw err;
       }
+      const next = hasBritishServerFallback()
+        ? "Google TTS (British female)"
+        : "OpenAI TTS (non-British last resort)";
       console.warn(
-        `[nova speak] ElevenLabs failed (${code || "error"}); falling through to OpenAI TTS:`,
+        `[nova speak] ElevenLabs failed (${code || "error"}); falling through to ${next}:`,
+        msg
+      );
+    }
+  }
+
+  if (isGoogleTtsConfigured()) {
+    try {
+      const result = await synthesizeGoogle(text, opts);
+      const viaFallback = isElevenLabsConfigured();
+      const voice =
+        process.env.GOOGLE_TTS_VOICE?.trim() || DEFAULT_GOOGLE_TTS_VOICE;
+      console.info(
+        `[nova speak] provider=google${viaFallback ? " (ElevenLabs fallback)" : ""} voice=${voice} bytes=${result.audio.length}`
+      );
+      return { ...result, provider: "google" };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Google TTS failed";
+      errors.push(msg);
+      if (!hasAnyLaterProvider("google")) {
+        const out = markQuotaError(
+          errors.join(" | ") || "Server TTS unavailable. Using free device voice."
+        );
+        (out as Error & { code?: string }).code = "FALLBACK_BROWSER";
+        throw out;
+      }
+      console.warn(
+        "[nova speak] Google TTS failed; falling through to OpenAI TTS:",
         msg
       );
     }
@@ -529,9 +674,10 @@ export async function synthesizeNovaSpeech(
   if (isOpenAITtsConfigured()) {
     try {
       const result = await synthesizeOpenAI(text, opts);
-      const viaFallback = isElevenLabsConfigured();
+      const viaFallback =
+        isElevenLabsConfigured() || isGoogleTtsConfigured();
       console.info(
-        `[nova speak] provider=openai${viaFallback ? " (ElevenLabs fallback)" : ""} model=${process.env.OPENAI_TTS_MODEL?.trim() || "gpt-4o-mini-tts"} voice=${process.env.OPENAI_TTS_VOICE?.trim() || "nova"} bytes=${result.audio.length}`
+        `[nova speak] provider=openai${viaFallback ? " (last resort)" : ""} model=${process.env.OPENAI_TTS_MODEL?.trim() || "gpt-4o-mini-tts"} voice=${process.env.OPENAI_TTS_VOICE?.trim() || "nova"} bytes=${result.audio.length}`
       );
       return { ...result, provider: "openai" };
     } catch (err) {
@@ -547,7 +693,7 @@ export async function synthesizeNovaSpeech(
   }
 
   const err = new Error(
-    "No server TTS configured. Set ELEVENLABS_API_KEY or OPENAI_API_KEY."
+    "No server TTS configured. Set ELEVENLABS_API_KEY, GOOGLE_TTS_API_KEY, or OPENAI_API_KEY."
   );
   (err as Error & { code?: string }).code = "FALLBACK_BROWSER";
   throw err;

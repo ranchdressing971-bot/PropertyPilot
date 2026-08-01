@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "No server TTS configured. Set ELEVENLABS_API_KEY or OPENAI_API_KEY.",
+            "No server TTS configured. Set ELEVENLABS_API_KEY, GOOGLE_TTS_API_KEY, or OPENAI_API_KEY.",
           code: "FALLBACK_BROWSER",
         },
         { status: 503 }
