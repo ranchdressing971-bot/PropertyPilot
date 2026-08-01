@@ -17,11 +17,18 @@ function parseDataUrl(dataUrl: string): { contentType: string; buffer: Buffer } 
  * Upload frame data-URLs to Supabase and return HTTPS signed URLs for OpenAI vision.
  * OpenAI often rejects large/malformed base64 data URLs with "did not follow the pattern".
  */
+type VisionFrame = {
+  index: number;
+  timestamp: number;
+  dataUrl: string;
+  contentScore?: number;
+};
+
 export async function uploadFramesForVision(
   userId: string,
   inspectionId: string,
-  frames: { index: number; timestamp: number; dataUrl: string }[]
-): Promise<{ index: number; timestamp: number; dataUrl: string }[]> {
+  frames: VisionFrame[]
+): Promise<VisionFrame[]> {
   const admin = createAdminClient();
   const supabase = admin ?? (await createClient());
   if (!supabase) {
@@ -73,7 +80,5 @@ export async function uploadFramesForVision(
     })
   );
 
-  return uploaded.filter(
-    (f): f is { index: number; timestamp: number; dataUrl: string } => Boolean(f)
-  );
+  return uploaded.filter((f): f is VisionFrame => Boolean(f));
 }

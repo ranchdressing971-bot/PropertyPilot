@@ -23,10 +23,12 @@ For EACH frame image, look for:
 - Address numbers on gates or garage trim
 
 Rules:
-- Return the FULL address when possible: "123 Oak Lane" (not just "123" unless that's all you see)
-- Use standard abbreviations: St, Dr, Ln, Ave, Ct, Blvd
+- Return the FULL address when the house number AND street name are both readable
+- If only a house number is visible, return that number alone — do not invent a street name
+- Use standard abbreviations when the sign uses them: St, Dr, Ln, Ave, Ct, Blvd
 - If the SAME house appears in multiple frames you will analyze separately, still report what you see — duplicates are merged later
-- Do NOT guess street names you cannot see
+- Do NOT guess street names or numbers you cannot see
+- Never copy placeholder text from these instructions into the output
 - confidence 80+ only when you clearly read the number; 50-70 for partial reads
 
 Respond with JSON only:
@@ -34,10 +36,10 @@ Respond with JSON only:
   "detections": [
     {
       "frameIndex": 0,
-      "visibleAddress": "123 Oak Lane" or null,
-      "houseNumber": "123" or null,
+      "visibleAddress": "<exact address text visible, or null>",
+      "houseNumber": "<digits only if visible, or null>",
       "confidence": 0-100,
-      "reasoning": "mailbox shows 123 Oak Ln"
+      "reasoning": "<what you saw, e.g. mailbox digits / street sign>"
     }
   ]
 }
@@ -53,21 +55,24 @@ List each DISTINCT home visible across all frames — each physical house ONCE.
 How to identify unique homes:
 - Same mailbox/house number in nearby frames = ONE home (pick the clearest frame)
 - Different house numbers = different homes
-- A house usually takes 2-4 seconds in a slow drive-through — do not list it twice
+- A house may appear for only ~1 second between blank/sky frames — still list it once
+- Do not skip a home just because intervening frames are blank
 
 For each unique home:
-- Prefer full address: "456 Maple Drive"
-- If only number visible: "456" plus any visible street name
-- confidence: 85+ clear mailbox, 60-75 partial
+- Prefer the full address only when BOTH house number and street name are visible
+- If only a number is visible, use that number alone (do not invent a street)
+- If no number is visible, use "Unknown" (not a fabricated street address)
+- Never invent or copy example addresses — only report text you can read in the images
+- confidence: 85+ clear mailbox, 60-75 partial, 40-55 house visible with no readable number
 
 Respond with JSON only:
 {
   "homes": [
     {
       "frameIndex": 0,
-      "address": "456 Maple Drive",
+      "address": "<exact visible address, house number only, or Unknown>",
       "confidence": 0-100,
-      "reasoning": "mailbox 456, street sign Maple Dr"
+      "reasoning": "<brief visual evidence from the frame>"
     }
   ]
 }`;

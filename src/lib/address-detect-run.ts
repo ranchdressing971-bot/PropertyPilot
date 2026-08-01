@@ -6,6 +6,7 @@ import {
   type AddressDetection,
 } from "./address-detect";
 import type { DiscoveredHome } from "./frame-property-map";
+import { pickHomeDiscoveryIndices } from "./home-discovery-sample";
 import type { Property } from "./mock-data";
 import { sanitizeImageDataUrl } from "./image-data-url";
 import { createChatCompletion, mapPool } from "./openai-retry";
@@ -101,14 +102,16 @@ export async function runAddressDetection(
 
 /** Holistic pass: find distinct homes and addresses across all frames */
 export async function runHomeDiscovery(
-  imageUrls: string[]
+  imageUrls: string[],
+  contentScores?: Array<number | undefined>
 ): Promise<DiscoveredHome[]> {
-  const sample =
-    imageUrls.length > 8
-      ? imageUrls.filter(
-          (_, i) => i % Math.ceil(imageUrls.length / 8) === 0
-        )
-      : imageUrls;
+  // Prefer contentful frames + even temporal spread (max 12). Map model
+  // frameIndex (sample position) back to the original extracted-frame index.
+  const sourceIndices = pickHomeDiscoveryIndices(
+    imageUrls.length,
+    contentScores
+  );
+  const sample = sourceIndices.map((i) => imageUrls[i]);
 
   const content: ChatCompletionContentPart[] = [
     { type: "text", text: buildHomeDiscoveryPrompt(sample.length) },
@@ -142,5 +145,14 @@ export async function runHomeDiscovery(
       ? (response.choices[0]?.message?.content ?? "{}")
       : "{}";
   const parsed = parseAiJson<{ homes?: DiscoveredHome[] }>(text, { homes: [] });
-  return parsed.homes ?? [];
+  return (parsed.homes ?? []).map((home) => {
+    const sampleIdx = home.frameIndex;
+    const mapped =
+      Number.isFinite(sampleIdx) &&
+      sampleIdx >= 0 &&
+      sampleIdx < sourceIndices.length
+        ? sourceIndices[sampleIdx]
+        : sampleIdx;
+    return { ...home, frameIndex: mapped };
+  });
 }

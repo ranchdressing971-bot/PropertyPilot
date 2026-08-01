@@ -7,6 +7,9 @@
 # testing
 /coverage
 
+# local offline probes / scratch artifacts
+/tmp/
+
 # next.js
 /.next/
 /out/

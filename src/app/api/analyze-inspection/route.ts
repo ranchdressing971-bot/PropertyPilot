@@ -64,6 +64,8 @@ interface VideoFrameInput {
   index: number;
   timestamp: number;
   dataUrl: string;
+  /** Optional spatial-detail score from client frame extraction */
+  contentScore?: number;
 }
 
 interface TrashScheduleOpts {
@@ -246,11 +248,20 @@ export async function POST(request: NextRequest) {
         .map((f) => {
           const dataUrl = sanitizeImageDataUrl(f.dataUrl);
           if (!dataUrl) return null;
-          return {
+          const frame: {
+            index: number;
+            timestamp: number;
+            dataUrl: string;
+            contentScore?: number;
+          } = {
             index: f.index,
             timestamp: f.timestamp,
             dataUrl,
           };
+          if (typeof f.contentScore === "number") {
+            frame.contentScore = f.contentScore;
+          }
+          return frame;
         })
         .filter((f): f is NonNullable<typeof f> => Boolean(f));
 
@@ -333,7 +344,10 @@ export async function POST(request: NextRequest) {
           ).length < expectedHomes;
 
         if (stillShort) {
-          const homes = await runHomeDiscovery(imageUrls);
+          const homes = await runHomeDiscovery(
+            imageUrls,
+            extractedFrames.map((f) => f.contentScore)
+          );
           const fromHomes = propertiesFromHomeDiscovery(
             extractedFrames,
             homes,
@@ -573,7 +587,7 @@ export async function POST(request: NextRequest) {
 
     const inspection: AIInspectionData = {
       id,
-      name: `AI Inspection — ${date}`,
+      name: `AI Inspection: ${date}`,
       date,
       videoName,
       neighborhood,
@@ -646,7 +660,7 @@ export async function POST(request: NextRequest) {
       code = "INVALID_FRAMES";
     } else if (isQuotaError(error) || msg.includes("insufficient_quota")) {
       userMessage =
-        "OpenAI credits ran out. Add $5–10 at platform.openai.com/settings/organization/billing — then wait ~2 min and try again.";
+        "OpenAI credits ran out. Add $5–10 at platform.openai.com/settings/organization/billing, then wait ~2 min and try again.";
       code = "NO_CREDITS";
     } else if (
       msg.includes("429") ||
@@ -655,7 +669,7 @@ export async function POST(request: NextRequest) {
       msg.toLowerCase().includes("requests per min")
     ) {
       userMessage =
-        "OpenAI’s per-minute token limit was hit (speed limit, not dollar credits). Wait about 60 seconds, then upload again — scans are paced so this happens less often.";
+        "OpenAI’s per-minute token limit was hit (speed limit, not dollar credits). Wait about 60 seconds, then upload again. Scans are paced so this happens less often.";
       code = "RATE_LIMIT";
     }
 

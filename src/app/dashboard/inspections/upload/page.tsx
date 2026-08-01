@@ -105,8 +105,8 @@ export default function UploadPage() {
         // Sample a short GPS track while frames extract for community route/boundary
         const [frames, geo] = await Promise.all([
           extractVideoFrames(file, {
-            intervalSec: 1.8,
-            maxFrames: 14,
+            intervalSec: 1.2,
+            maxFrames: 16,
             maxWidth: 960,
             quality: 0.68,
           }),
@@ -138,6 +138,7 @@ export default function UploadPage() {
               index: f.index,
               timestamp: f.timestamp,
               dataUrl: f.dataUrl,
+              contentScore: f.contentScore,
             })),
             // Backup if Supabase roster is empty (CSV only in localStorage)
             properties: localRoster.length > 0 ? localRoster : undefined,
@@ -252,8 +253,8 @@ export default function UploadPage() {
         title="Upload Inspection"
         subtitle={
           isDemo
-            ? "Demo mode — simulated analysis with sample data"
-            : "Live mode — AI reads mailbox numbers from your video"
+            ? "Demo mode: simulated analysis with sample data"
+            : "Live mode: AI reads mailbox numbers from your video"
         }
       />
       <PageContent className="flex min-h-[calc(100vh-12rem)] items-center">
@@ -264,7 +265,7 @@ export default function UploadPage() {
               <a href="/dashboard/properties" className="font-medium text-brand-800 underline">
                 Properties
               </a>{" "}
-              first — matching house numbers to a roster is much more accurate.
+              first. Matching house numbers to a roster is much more accurate.
             </p>
           )}
           {error && (
@@ -327,7 +328,7 @@ export default function UploadPage() {
                     )
                   }
                 >
-                  Skip for now — view results
+                  Skip for now: view results
                 </button>
               </motion.div>
             ) : !isProcessing ? (
@@ -362,7 +363,7 @@ export default function UploadPage() {
                     </p>
                     {!isDemo && (
                       <p className="mt-2 max-w-sm text-center text-xs text-ink-400">
-                        Recording for {communityName} — stay on its main streets
+                        Recording for {communityName}: stay on its main streets
                       </p>
                     )}
                     <div
