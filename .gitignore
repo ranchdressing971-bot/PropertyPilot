@@ -36,3 +36,6 @@ android-nova/.gradle/
 android-nova/build/
 android-nova/app/build/
 android-nova/.idea/
+mac-nova/Nova.iconset/
+mac-nova/Nova.icns
+mac-nova/Nova.app/

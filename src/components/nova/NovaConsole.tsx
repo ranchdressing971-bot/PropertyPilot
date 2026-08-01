@@ -1958,7 +1958,7 @@ export function NovaConsole() {
               Nexus
             </Link>
             <Link href="/nova/download" className="nova-link">
-              Get APK
+              Download
             </Link>
           </div>
           <div className="nova-clock-block" aria-hidden>
