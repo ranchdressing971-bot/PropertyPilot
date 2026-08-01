@@ -206,6 +206,28 @@
   color: rgba(255, 210, 140, 0.9);
 }
 
+.nova-enable-sound {
+  display: block;
+  margin: 0.65rem auto 0;
+  min-height: 2.5rem;
+  padding: 0.55rem 1.25rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(120, 220, 255, 0.45);
+  background: rgba(12, 48, 64, 0.9);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(190, 245, 255, 0.95);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nova-enable-sound:active {
+  transform: scale(0.98);
+}
+
 .nova-hint-mobile {
   max-width: 18rem;
   font-size: 0.68rem;
