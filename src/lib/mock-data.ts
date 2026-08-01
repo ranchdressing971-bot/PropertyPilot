@@ -26,6 +26,8 @@ export interface Property {
   status: PropertyStatus;
   lastInspection: string;
   neighborhood: string;
+  /** Optional link to a communities row */
+  communityId?: string;
   /** GPS + vision address match confidence (0–100) */
   addressConfidence?: number;
   needsAddressReview?: boolean;
@@ -35,6 +37,41 @@ export interface Property {
   priorInspectionDate?: string;
   priorInspectionId?: string;
 }
+
+/** Demo-mode community workspaces (no Supabase). */
+export interface DemoCommunity {
+  id: string;
+  name: string;
+  communityKey: string;
+  companyId: string | null;
+  userId: string;
+  createdAt: string;
+  propertyCount: number;
+  inspectionCount: number;
+}
+
+export const DEMO_COMMUNITIES: DemoCommunity[] = [
+  {
+    id: "demo-willow",
+    name: "Willow Creek Estates",
+    communityKey: "willowcreek",
+    companyId: null,
+    userId: "demo",
+    createdAt: "2026-04-01T12:00:00Z",
+    propertyCount: 20,
+    inspectionCount: 2,
+  },
+  {
+    id: "demo-oak",
+    name: "Oak Ridge Village",
+    communityKey: "oakridge",
+    companyId: null,
+    userId: "demo",
+    createdAt: "2026-04-12T12:00:00Z",
+    propertyCount: 0,
+    inspectionCount: 1,
+  },
+];
 
 export interface Violation {
   id: string;
@@ -222,6 +259,7 @@ export const properties: Property[] = streets.map((address, i) => {
     status,
     lastInspection: "2026-06-25",
     neighborhood: "Willow Creek Estates",
+    communityId: "demo-willow",
   };
 });
 

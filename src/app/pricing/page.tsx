@@ -18,8 +18,10 @@ export default function PricingPage() {
           {FREE_TRIAL_INSPECTIONS === 1
             ? "1 free inspection per account"
             : `${FREE_TRIAL_INSPECTIONS} free inspections per account`}
-          . Then pay monthly by how many communities you manage, not a
-          one-size sticker price.
+          and 1 community on trial. Subscribe for the number of communities you
+          need: each one keeps that HOA&apos;s inspections and properties
+          organized. Monthly price scales with community count, not a one-size
+          sticker.
         </p>
 
         <div className="mt-14">

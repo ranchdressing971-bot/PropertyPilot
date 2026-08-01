@@ -19,6 +19,7 @@ import {
 import { persistEvidenceImages, persistPropertyThumbnails } from "@/lib/supabase/evidence-storage";
 import { uploadFramesForVision } from "@/lib/supabase/vision-frames";
 import { canRunLiveInspection, getUserSubscription, hasActiveSubscription } from "@/lib/subscription";
+import { getCommunityById, ensureDefaultCommunity } from "@/lib/communities";
 import { rulesToMap, DEFAULT_CCR_RULES } from "@/lib/ccr-rules";
 import type { AddressReviewItem } from "@/lib/ai-analyze";
 import { runAddressMatchPipeline } from "@/lib/address-match-run";
@@ -168,7 +169,11 @@ export async function POST(request: NextRequest) {
     const videoName = (body.videoName as string) || "inspection.mp4";
     const mode = (body.mode as string) || "live";
     const clientRoster = body.properties as Property[] | undefined;
-    const neighborhood = (body.neighborhood as string) || "Your Community";
+    let neighborhood = (body.neighborhood as string) || "Your Community";
+    let communityId =
+      typeof body.communityId === "string" && body.communityId.trim()
+        ? body.communityId.trim()
+        : undefined;
     const ccrRules = Array.isArray(body.ccrRules)
       ? (body.ccrRules as typeof DEFAULT_CCR_RULES)
       : undefined;
@@ -231,10 +236,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Resolve selected community (or bootstrap default from profile HOA)
+    if (communityId) {
+      const selected = await getCommunityById(userId, communityId);
+      if (selected) {
+        neighborhood = selected.name;
+        communityId = selected.id;
+      } else {
+        communityId = undefined;
+      }
+    }
+    if (!communityId) {
+      const fallback = await ensureDefaultCommunity(userId, neighborhood);
+      if (fallback) {
+        communityId = fallback.id;
+        neighborhood = fallback.name;
+      }
+    }
+
     // Supabase roster is source of truth; client body is backup only
     const dbRoster = await loadPropertiesFromDb(userId);
+    const scopedRoster = communityId
+      ? dbRoster.filter(
+          (p) =>
+            p.communityId === communityId ||
+            p.neighborhood.trim().toLowerCase() === neighborhood.trim().toLowerCase()
+        )
+      : dbRoster;
     let roster: Property[] =
-      dbRoster.length > 0 ? dbRoster : clientRoster?.length ? clientRoster : [];
+      scopedRoster.length > 0
+        ? scopedRoster
+        : clientRoster?.length
+          ? clientRoster
+          : [];
 
     const id = `ai-${Date.now()}`;
     const date = new Date().toISOString().split("T")[0];
@@ -593,6 +627,7 @@ export async function POST(request: NextRequest) {
       date,
       videoName,
       neighborhood,
+      communityId,
       aiPowered: true,
       results,
       violations: storedViolations,

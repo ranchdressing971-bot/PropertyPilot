@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { loadCcrRules } from "@/lib/ccr-rules";
@@ -21,6 +22,10 @@ import { captureUploadGeo } from "@/lib/geo/capture-geo";
 import { rosterFromStorage } from "@/lib/roster";
 import { CommunityDriveBriefing } from "@/components/inspections/CommunityDriveBriefing";
 import { CommunityVerificationPanel } from "@/components/inspections/CommunityVerificationPanel";
+import {
+  CommunityPicker,
+  type SelectedCommunity,
+} from "@/components/communities/CommunityPicker";
 import {
   Upload,
   Film,
@@ -47,9 +52,33 @@ const LIVE_STEPS = [
 ];
 
 export default function UploadPage() {
+  return (
+    <Suspense
+      fallback={
+        <DashboardLayout>
+          <Header title="Upload Inspection" subtitle="Loading..." />
+          <PageContent>
+            <div className="flex justify-center py-24">
+              <Loader2 className="h-6 w-6 animate-spin text-ink-400" />
+            </div>
+          </PageContent>
+        </DashboardLayout>
+      }
+    >
+      <UploadPageInner />
+    </Suspense>
+  );
+}
+
+function UploadPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preferredCommunityId = searchParams.get("community");
   const { isDemo, ready } = useAppMode();
   const { profile } = useUserProfile();
+  const [selectedCommunity, setSelectedCommunity] =
+    useState<SelectedCommunity | null>(null);
+  const [communityPicked, setCommunityPicked] = useState(false);
   const [briefingDone, setBriefingDone] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -66,7 +95,16 @@ export default function UploadPage() {
   );
 
   const steps = isDemo ? DEMO_STEPS : LIVE_STEPS;
-  const communityName = profile?.hoaName?.trim() || "Your Community";
+  const communityName = useMemo(
+    () =>
+      selectedCommunity?.name?.trim() ||
+      profile?.hoaName?.trim() ||
+      "Your Community",
+    [selectedCommunity, profile?.hoaName]
+  );
+  const onCommunityChange = useCallback((c: SelectedCommunity) => {
+    setSelectedCommunity(c);
+  }, []);
 
   const startProcessing = useCallback(
     async (file: File) => {
@@ -143,6 +181,7 @@ export default function UploadPage() {
             // Backup if Supabase roster is empty (CSV only in localStorage)
             properties: localRoster.length > 0 ? localRoster : undefined,
             neighborhood: communityName,
+            communityId: selectedCommunity?.id,
             ccrRules,
             trashCollectionDays,
           }),
@@ -223,7 +262,7 @@ export default function UploadPage() {
         setIsProcessing(false);
       }
     },
-    [router, isDemo, communityName]
+    [router, isDemo, communityName, selectedCommunity?.id]
   );
 
   const handleDrop = useCallback(
@@ -245,7 +284,14 @@ export default function UploadPage() {
 
   if (!ready) return null;
 
-  const showBriefing = !isDemo && !briefingDone && !isProcessing && !pendingVerification;
+  const showCommunityPicker =
+    !communityPicked && !isProcessing && !pendingVerification;
+  const showBriefing =
+    !isDemo &&
+    communityPicked &&
+    !briefingDone &&
+    !isProcessing &&
+    !pendingVerification;
 
   return (
     <DashboardLayout>
@@ -259,11 +305,18 @@ export default function UploadPage() {
       />
       <PageContent className="flex min-h-[calc(100vh-12rem)] items-center">
         <div className="w-full max-w-2xl">
-          {!isDemo && !showBriefing && (
+          {!isDemo && communityPicked && !showBriefing && !showCommunityPicker && (
             <p className="mb-4 rounded-xl border border-brand-200 bg-brand-50/70 px-4 py-3 text-sm text-ink-700">
               Tip: Import your community CSV under{" "}
-              <a href="/dashboard/properties" className="font-medium text-brand-800 underline">
-                Properties
+              <a
+                href={
+                  selectedCommunity
+                    ? `/dashboard/communities/${selectedCommunity.id}`
+                    : "/dashboard/communities"
+                }
+                className="font-medium text-brand-800 underline"
+              >
+                Communities
               </a>{" "}
               first. Matching house numbers to a roster is much more accurate.
             </p>
@@ -279,7 +332,29 @@ export default function UploadPage() {
           )}
 
           <AnimatePresence mode="wait">
-            {showBriefing ? (
+            {showCommunityPicker ? (
+              <motion.div
+                key="community-pick"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="space-y-4"
+              >
+                <CommunityPicker
+                  value={selectedCommunity}
+                  onChange={onCommunityChange}
+                  preferredId={preferredCommunityId}
+                />
+                <Button
+                  className="w-full"
+                  size="lg"
+                  disabled={!selectedCommunity}
+                  onClick={() => setCommunityPicked(true)}
+                >
+                  Continue with {selectedCommunity?.name ?? "community"}
+                </Button>
+              </motion.div>
+            ) : showBriefing ? (
               <motion.div
                 key="briefing"
                 initial={{ opacity: 0, y: 8 }}

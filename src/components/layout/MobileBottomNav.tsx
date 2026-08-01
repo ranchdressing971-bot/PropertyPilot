@@ -7,7 +7,7 @@ import clsx from "clsx";
 import {
   LayoutDashboard,
   Video,
-  Home,
+  Building2,
   AlertTriangle,
   Plus,
   MoreHorizontal,
@@ -21,7 +21,7 @@ const tabs = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, match: "/dashboard" },
   { href: "/dashboard/inspections", label: "Inspections", icon: Video, match: "/dashboard/inspections" },
   { href: "/dashboard/inspections/upload", label: "Upload", icon: Plus, primary: true },
-  { href: "/dashboard/properties", label: "Properties", icon: Home, match: "/dashboard/properties" },
+  { href: "/dashboard/communities", label: "Communities", icon: Building2, match: "/dashboard/communities" },
 ];
 
 const moreLinks = [

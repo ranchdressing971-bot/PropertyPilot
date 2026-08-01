@@ -48,6 +48,8 @@ export interface AIInspectionData {
   date: string;
   videoName: string;
   neighborhood: string;
+  /** Linked communities row when selected at upload */
+  communityId?: string;
   aiPowered: true;
   results: AIPropertyResult[];
   violations: Violation[];

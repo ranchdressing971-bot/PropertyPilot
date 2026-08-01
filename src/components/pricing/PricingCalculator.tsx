@@ -19,6 +19,7 @@ const FEATURES = [
   "Mailbox address matching",
   "Evidence frames + human review",
   "Violation notices (you approve)",
+  "Organize inspections and properties by community",
   "Community roster import",
   "Cancel anytime",
 ];
@@ -59,8 +60,10 @@ export function PricingCalculator() {
           Pay for the communities you manage
         </h2>
         <p className="mt-2 text-sm text-ink-500">
-          Price scales with volume, not a flat jump every time you add an HOA.
-          Formula: $99 × communities<sup>0.7</sup>
+          Each community on your plan is one HOA workspace: inspections and
+          properties stay organized there. Price scales with volume (not a flat
+          jump every time you add an HOA). Formula: $99 × communities
+          <sup>0.7</sup>
         </p>
 
         <div className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-ink-100 bg-ink-50/70 px-4 py-4">
@@ -69,7 +72,7 @@ export function PricingCalculator() {
               Communities
             </p>
             <p className="mt-1 text-sm text-ink-600">
-              How many HOAs will you run on RideBy?
+              How many HOA communities will you create on RideBy?
             </p>
           </div>
           <div className="flex items-center gap-2">

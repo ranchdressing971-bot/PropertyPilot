@@ -13,6 +13,7 @@ import {
   isStripeConfigured,
   priceForCommunities,
 } from "@/lib/stripe";
+import { getCommunityLimitStatus } from "@/lib/communities";
 
 export async function GET() {
   const supabase = await createClient();
@@ -31,6 +32,7 @@ export async function GET() {
   const trial = await getTrialInspectionUsage(user.id);
   const access = await canRunLiveInspection(user.id);
   const community = await getCommunityTrialStatus(user.id, sub.hoaName);
+  const communityLimit = await getCommunityLimitStatus(user.id);
 
   const communityCount = sub.communityCount || 1;
   const priceMonthly =
@@ -42,6 +44,9 @@ export async function GET() {
     status: sub.status,
     plan: sub.plan,
     communityCount,
+    communitiesUsed: communityLimit.currentCount,
+    communitiesLimit: communityLimit.limit,
+    canCreateCommunity: communityLimit.canCreate,
     priceMonthly,
     price: formatPriceMonthly(priceMonthly),
     hoaName: sub.hoaName,

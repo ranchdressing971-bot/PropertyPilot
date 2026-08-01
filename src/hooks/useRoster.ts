@@ -45,11 +45,15 @@ export function useRoster() {
     });
   }
 
-  async function importCsv(csv: string, neighborhood: string) {
+  async function importCsv(
+    csv: string,
+    neighborhood: string,
+    communityId?: string
+  ) {
     const res = await fetch("/api/properties/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ csv, neighborhood }),
+      body: JSON.stringify({ csv, neighborhood, communityId }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Import failed");

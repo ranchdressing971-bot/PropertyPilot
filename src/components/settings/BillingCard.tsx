@@ -19,6 +19,9 @@ interface SubStatus {
   price: string;
   priceMonthly?: number;
   communityCount?: number;
+  communitiesUsed?: number;
+  communitiesLimit?: number;
+  canCreateCommunity?: boolean;
   hoaName?: string | null;
   communityTrialStatus?: string;
   accessReason?: string;
@@ -84,16 +87,18 @@ export function BillingCard() {
             {subscribed
               ? `${sub?.price ?? fromPrice}${
                   sub?.communityCount
-                    ? ` · ${sub.communityCount} community${
-                        sub.communityCount === 1 ? "" : "ies"
+                    ? ` · up to ${sub.communityCount} communit${
+                        sub.communityCount === 1 ? "y" : "ies"
                       }`
                     : ""
                 } · ${sub?.status}`
               : sub
                 ? `${sub.trialInspectionsRemaining} of ${sub.trialInspectionsLimit} free inspection${
                     sub.trialInspectionsLimit === 1 ? "" : "s"
-                  } left${sub.hoaName ? ` · ${sub.hoaName}` : ""}`
-                : `1 free inspection per account, then from ${fromPrice}`}
+                  } left · 1 community on trial${
+                    sub.hoaName ? ` (${sub.hoaName})` : ""
+                  }`
+                : `1 free inspection + 1 community on trial, then from ${fromPrice}`}
           </p>
         </div>
       </div>

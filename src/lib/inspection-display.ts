@@ -9,6 +9,8 @@ export interface InspectionDisplayData {
   id: string;
   name: string;
   date: string;
+  neighborhood?: string;
+  communityId?: string;
   aiPowered?: boolean;
   propertiesScanned: number;
   frameCount?: number;
@@ -37,6 +39,8 @@ export function formatInspectionForDisplay(
     id: aiInspection.id,
     name: aiInspection.name,
     date: aiInspection.date,
+    neighborhood: aiInspection.neighborhood,
+    communityId: aiInspection.communityId,
     aiPowered: true,
     propertiesScanned: aiInspection.results.length,
     frameCount: aiInspection.frameCount,
@@ -64,6 +68,7 @@ export function formatInspectionForDisplay(
           status: violation ? "Needs Review" : "Good Standing",
           lastInspection: aiInspection.date,
           neighborhood: aiInspection.neighborhood,
+          communityId: aiInspection.communityId,
           addressConfidence: review?.confidence,
           needsAddressReview: review?.needsReview,
           addressMatchReason: review?.reasoning,

@@ -1,5 +1,6 @@
-import { PropertiesPageClient } from "@/components/pages/PropertiesPageClient";
+import { redirect } from "next/navigation";
 
+/** Properties list is now under Communities. Detail routes stay at /properties/[id]. */
 export default function PropertiesPage() {
-  return <PropertiesPageClient />;
+  redirect("/dashboard/communities");
 }

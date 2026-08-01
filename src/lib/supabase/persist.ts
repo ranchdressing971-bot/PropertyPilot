@@ -45,6 +45,7 @@ export async function persistInspection(
     created_by: userId,
   };
   if (companyId) baseRow.company_id = companyId;
+  if (lean.communityId) baseRow.community_id = lean.communityId;
 
   const withMeta = {
     ...baseRow,
@@ -72,6 +73,14 @@ export async function persistInspection(
       ({ error } = await client
         .from("inspections")
         .upsert(baseRow, { onConflict: "id" }));
+    }
+
+    if (error?.message?.includes("community_id")) {
+      const withoutCommunity: Record<string, unknown> = { ...withMeta };
+      delete withoutCommunity.community_id;
+      ({ error } = await client
+        .from("inspections")
+        .upsert(withoutCommunity, { onConflict: "id" }));
     }
 
     if (error?.message?.includes("company_id") || error?.message?.includes("created_by")) {
@@ -128,6 +137,7 @@ function mapInspectionRow(row: {
   created_at?: string;
   video_name?: string;
   neighborhood?: string;
+  community_id?: string | null;
   results?: AIInspectionData["results"];
   violations?: AIInspectionData["violations"];
   metadata?: {
@@ -147,6 +157,7 @@ function mapInspectionRow(row: {
     date: row.created_at?.split("T")[0] ?? "",
     videoName: row.video_name ?? "",
     neighborhood: row.neighborhood ?? "",
+    communityId: row.community_id ?? undefined,
     aiPowered: true,
     results: row.results ?? [],
     violations: row.violations ?? [],
@@ -255,6 +266,7 @@ export async function persistProperties(
       created_by: userId,
     };
     if (companyId) row.company_id = companyId;
+    if (p.communityId) row.community_id = p.communityId;
     return row;
   });
 
@@ -323,6 +335,7 @@ export async function loadPropertiesFromDb(
     status: "Good Standing" as const,
     lastInspection: "·",
     neighborhood: row.neighborhood ?? "",
+    communityId: row.community_id ?? undefined,
   }));
 }
 

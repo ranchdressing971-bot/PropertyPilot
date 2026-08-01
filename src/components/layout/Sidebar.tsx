@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   LayoutDashboard,
   Video,
-  Home,
+  Building2,
   AlertTriangle,
   FileText,
   Settings,
@@ -29,7 +29,7 @@ const navItems: {
 }[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, roles: ["owner", "admin", "inspector"] },
   { href: "/dashboard/inspections", label: "Inspections", icon: Video, roles: ["owner", "admin", "inspector"] },
-  { href: "/dashboard/properties", label: "Properties", icon: Home, roles: ["owner", "admin", "inspector"] },
+  { href: "/dashboard/communities", label: "Communities", icon: Building2, roles: ["owner", "admin", "inspector"] },
   { href: "/dashboard/violations", label: "Violations", icon: AlertTriangle, roles: ["owner", "admin", "inspector"] },
   { href: "/dashboard/reports", label: "Reports", icon: FileText, roles: ["owner", "admin"] },
   { href: "/dashboard/settings", label: "Settings", icon: Settings, roles: ["owner", "admin", "inspector"] },

@@ -11,6 +11,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { InspectionResultCard } from "@/components/inspections/InspectionResultCard";
 import { CommunityVerificationPanel } from "@/components/inspections/CommunityVerificationPanel";
+import { AssignToCommunityBar } from "@/components/inspections/AssignToCommunityBar";
 import type { InspectionDisplayData } from "@/lib/inspection-display";
 import {
   getCachedInspectionClient,
@@ -251,6 +252,19 @@ export function InspectionResultsView({ id }: { id: string }) {
             <p className="text-xs leading-relaxed sm:text-sm">{scheduleNote}</p>
           </motion.div>
         )}
+
+        <AssignToCommunityBar
+          inspectionId={data.id}
+          neighborhood={data.neighborhood ?? ""}
+          communityIdHint={data.communityId}
+          properties={data.results
+            .filter((r) => r.property)
+            .map((r) => ({
+              id: r.propertyId,
+              address: r.property.address,
+              image: r.property.image,
+            }))}
+        />
 
         {addressReviewItems.length > 0 && (
           <motion.div

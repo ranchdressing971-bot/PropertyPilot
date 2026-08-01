@@ -81,6 +81,8 @@ OPENAI_API_KEY=sk-proj-your-key-here
 
 Run the full schema in **`docs/schema.sql`** (or the snippet below) in Supabase → **SQL Editor** to enable property rosters, persisted inspections, and audit logging.
 
+For multi-community workspaces (Communities nav), also run **`docs/COMPANY_SCHEMA.sql`** then **`docs/COMMUNITIES_SCHEMA.sql`**.
+
 ```sql
 -- Profiles (extends auth.users)
 create table public.profiles (
