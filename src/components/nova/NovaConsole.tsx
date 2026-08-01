@@ -1727,20 +1727,40 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       rec.onresult = null;
       rec.onerror = null;
       rec.onend = null;
+      // Abort + stop: some WebViews keep the capture session after abort alone.
       try {
         rec.abort();
       } catch {
-        try {
-          rec.stop();
-        } catch {
-          /* ignore */
-        }
+        /* ignore */
+      }
+      try {
+        rec.stop();
+      } catch {
+        /* ignore */
       }
     }
     window.setTimeout(() => {
       restartingRef.current = false;
     }, 100);
   }, []);
+
+  /**
+   * Duplex fix: recognition / capture must release the audio session BEFORE
+   * any TTS play(). Otherwise glasses/phone hold output until the user mutes.
+   * Synchronous kill first; async settle is for WebKit session teardown.
+   */
+  const pauseMicForSpeech = useCallback(
+    (opts?: { settleMs?: number }): Promise<void> => {
+      phaseRef.current = "speaking";
+      killMic({ keepSpeech: true });
+      const settleMs = opts?.settleMs ?? 50;
+      if (settleMs <= 0) return Promise.resolve();
+      return new Promise((resolve) => {
+        window.setTimeout(resolve, settleMs);
+      });
+    },
+    [killMic]
+  );
 
   const prefetchVoiceUrl = useCallback((blob: Blob, formatHint?: string): string => {
     if (objectUrlRef.current) {
@@ -1761,8 +1781,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
    * Any intentional tap (orb / mic / send / page): unlock audio for the session
    * and immediately play a queued reply if one is waiting (device-TTS / blocked play).
    *
-   * iOS critical: when a reply is queued, speak()/play() must be the first
-   * side-effect in this handler — before silent-WAV unlock or killMic.
+   * Duplex: pause mic before playPendingNow so capture cannot hold the session.
    */
   const handleUserGesture = useCallback(
     (e?: React.SyntheticEvent) => {
@@ -1854,8 +1873,8 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   );
 
   /**
-   * Safari/iOS emergency: speak()/play() MUST fire synchronously inside
-   * pointerdown/touchstart — before setState/killMic (those can steal the gesture).
+   * Tap recovery: pause mic FIRST (duplex), then speak()/play() in-gesture.
+   * setState stays after play() so React work cannot steal the gesture token.
    */
   const playPendingNow = useCallback(() => {
     if (gesturePlayLockRef.current) return;
@@ -1880,10 +1899,14 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     waitingForTapRef.current = false;
     audioUnlockedRef.current = true;
 
+    // 1) Release capture BEFORE play — open mic blocks/delays TTS on glasses.
+    phaseRef.current = "speaking";
+    killMic({ keepSpeech: true });
+
     let playback: Promise<void>;
     let path = "tap";
 
-    // 1) Kick off playback FIRST — still inside the user-gesture stack.
+    // 2) Kick off playback — still inside the user-gesture stack.
     try {
       if (snapshot.blob && !snapshot.useBrowserTts && el) {
         const srcReady =
@@ -1926,12 +1949,11 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       return;
     }
 
-    // 2) UI + mic teardown only AFTER speak()/play() has been invoked.
+    // 3) UI updates only AFTER speak()/play() has been invoked.
     setPhase("speaking");
     setAudioUnlocked(true);
     setNeedsGesture(false);
     setVoiceDebug(formatVoiceDiag({ unlocked: true, path }));
-    killMic({ keepSpeech: true });
 
     void playback
       .then(() => {
@@ -2071,7 +2093,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   }, []);
 
   /**
-   * Wake-tap critical path (iOS): unlock + play greeting in the SAME gesture stack.
+   * Wake-tap path: pause mic FIRST (duplex), then unlock + play greeting.
    * Prefetched blob → playPreparedInGesture; else device TTS sync speak().
    * Mic starts only after greeting ends (resumeAfterSpeech → startMic).
    */
@@ -2100,6 +2122,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     const pref = greetPrefetchRef.current;
     const synth =
       typeof window !== "undefined" ? window.speechSynthesis : undefined;
+
+    // Release capture before any play — open mic blocks TTS until user mutes.
+    phaseRef.current = "speaking";
+    killMic({ keepSpeech: true });
 
     // Resume AC before play — do NOT run silent-WAV unlock first (can steal gesture).
     resumeAudioContextInGesture();
@@ -2134,16 +2160,16 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         unlockAudioInGesture();
         path = "wake:await-prefetch";
         setPhase("speaking");
-        phaseRef.current = "speaking";
         listenTapNeededRef.current = false;
         setListenTapNeeded(false);
-        killMic({ keepSpeech: true });
         const waitPrefetch = async () => {
           const deadline = Date.now() + 8000;
           while (Date.now() < deadline) {
             if (greetPrefetchRef.current?.ready) break;
             await new Promise((r) => window.setTimeout(r, 50));
           }
+          // Mic may have been restarted while waiting — release again before play.
+          await pauseMicForSpeech();
           const ready = greetPrefetchRef.current;
           if (ready?.blob && audioElRef.current) {
             await playBlobOnElement(
@@ -2210,11 +2236,8 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     audioUnlockedRef.current = true;
     setAudioUnlocked(true);
     setNeedsGesture(false);
-    phaseRef.current = "speaking";
     setPhase("speaking");
     setVoiceDebug(formatVoiceDiag({ unlocked: true, path }));
-    // Tear down mic AFTER play()/speak() has been invoked (keeps gesture token).
-    killMic({ keepSpeech: true });
 
     void playback
       .then(() => {
@@ -2253,6 +2276,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   }, [
     armSilenceEnd,
     killMic,
+    pauseMicForSpeech,
     resumeAfterSpeech,
     resumeAudioContextInGesture,
     showWakeGate,
@@ -2309,8 +2333,13 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         const initialQ = readQueryUtteranceFromLocation();
         if (initialQ) {
           // Shortcut already spoke the greeting; skip web greeting for this turn.
+          // Do NOT arm mic first — capture would hold the session until mute and
+          // delay/block the assistant reply TTS (glasses duplex).
           stripQueryParamFromUrl("q");
           listenGreetingDoneRef.current = true;
+          phaseRef.current = "thinking";
+          setPhase("thinking");
+          killMic();
           void unlockAudio();
           void askNovaRef.current(initialQ);
           return;
@@ -2326,15 +2355,19 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           return;
         }
 
-        // Mic permission often survives refresh; start recognition before TTS.
-        // Autoplay may still fail — that must not block listening.
-        armCommandListen();
+        if (listenGreetingDoneRef.current) {
+          armCommandListen();
+          return;
+        }
 
-        if (listenGreetingDoneRef.current) return;
-
+        // Speak greeting FIRST with mic off; resumeAfterSpeech arms command listen.
+        // Starting recognition before TTS is the classic duplex stall ("mute yourself").
         const unlocked = await unlockAudio();
         listenGreetingDoneRef.current = true;
-        if (!unlocked) return;
+        if (!unlocked) {
+          armCommandListen();
+          return;
+        }
 
         // Best-effort greeting; speak() pauses mic then resumeAfterSpeech reopens it.
         // skipTapRecovery: never soft-lock if play() is blocked.
@@ -2357,6 +2390,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     },
     [
       armSilenceEnd,
+      killMic,
       playListenGreetingInGesture,
       prefetchListenGreeting,
       unlockAudio,
@@ -2371,7 +2405,8 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const startMic = useCallback(
     (mode: ListenMode = "wake") => {
       if (!listeningOnRef.current) return;
-      // Speaking locks the mic (echo). Thinking stays open so Isaac can barge in.
+      // Speaking locks the mic (echo + duplex). Thinking also stays muted so
+      // capture cannot hold the audio session until TTS finishes.
       if (phaseRef.current === "speaking") {
         return;
       }
@@ -2425,8 +2460,11 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       };
 
       recognition.onresult = (event) => {
-        // Allow barge-in while thinking; only mute recognition while she speaks.
-        if (phaseRef.current === "speaking") {
+        // Mute recognition while she speaks (and while thinking — duplex).
+        if (
+          phaseRef.current === "speaking" ||
+          phaseRef.current === "thinking"
+        ) {
           return;
         }
 
@@ -2531,14 +2569,20 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       recognition.onend = () => {
         if (restartingRef.current) return;
         if (!listeningOnRef.current) return;
-        // Keep listening through thinking (barge-in); only pause while speaking.
-        if (phaseRef.current === "speaking") {
+        // Do not revive capture while thinking/speaking — that stalls TTS.
+        if (
+          phaseRef.current === "speaking" ||
+          phaseRef.current === "thinking"
+        ) {
           return;
         }
         // Chrome drops continuous sessions — spawn a fresh one.
         window.setTimeout(() => {
           if (!listeningOnRef.current) return;
-          if (phaseRef.current === "speaking") {
+          if (
+            phaseRef.current === "speaking" ||
+            phaseRef.current === "thinking"
+          ) {
             return;
           }
           if (recognitionRef.current !== recognition) return;
@@ -2570,7 +2614,12 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           setError(null);
           window.setTimeout(() => {
             if (!listeningOnRef.current || recognitionRef.current) return;
-            if (phaseRef.current === "speaking") return;
+            if (
+              phaseRef.current === "speaking" ||
+              phaseRef.current === "thinking"
+            ) {
+              return;
+            }
             startMicRef.current(mode);
           }, 400);
         } else {
@@ -2607,6 +2656,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       resumeModeRef.current = after;
       phaseRef.current = "speaking";
       setPhase("speaking");
+      // Pause capture immediately — do not wait for user silence / mute.
       killMic();
       waitingForTapRef.current = false;
       pendingVoiceRef.current = null;
@@ -2619,6 +2669,13 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             : provider === "elevenlabs"
               ? "ElevenLabs"
               : null;
+
+      /** Re-assert mic off + brief settle right before each play() attempt. */
+      const beforePlay = async () => {
+        if (!stillCurrent()) throw new DOMException("aborted", "AbortError");
+        await pauseMicForSpeech();
+        if (!stillCurrent()) throw new DOMException("aborted", "AbortError");
+      };
 
       const playServerBlob = async (blob: Blob): Promise<string> => {
         let ctx = audioCtxRef.current;
@@ -2638,6 +2695,8 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
               if (ctx.state === "suspended") {
                 await ctx.resume();
               }
+              // Pause mic immediately before output — not after play() starts.
+              await beforePlay();
               await playBlobViaAudioContext(ctx, blob, {
                 signal: speakAc.signal,
                 onSource: (source) => {
@@ -2661,6 +2720,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         if (audioElRef.current) {
           if (!stillCurrent()) throw new DOMException("aborted", "AbortError");
           try {
+            await beforePlay();
             await playBlobOnElement(audioElRef.current, blob, objectUrlRef);
             return "auto:audio";
           } catch (err) {
@@ -2843,6 +2903,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
 
           if (isNovaApk() && hasNativeTts()) {
             setVoicePathLabel("Device voice");
+            await beforePlay();
             await speakWithNative(speakAll);
             if (!stillCurrent()) return;
             setVoiceDebug(null);
@@ -2871,6 +2932,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           }
 
           setVoicePathLabel("Device voice");
+          await beforePlay();
           await speakWithFreeVoice(speakAll);
           if (!stillCurrent()) return;
           setVoiceDebug(null);
@@ -2907,6 +2969,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         }
         try {
           if (!(isIOS() || isMobileTouchDevice())) {
+            await beforePlay();
             await speakWithFreeVoice(joined);
             if (!stillCurrent()) return;
             setVoiceDebug(null);
@@ -2938,6 +3001,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     },
     [
       killMic,
+      pauseMicForSpeech,
       prefetchVoiceUrl,
       queueSilentRecovery,
       resumeAfterSpeech,
@@ -3082,16 +3146,11 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       clearSilenceEnd();
       phaseRef.current = "thinking";
       setPhase("thinking");
-      // Keep / restart mic for barge-in while background tools run.
+      // Keep mic OFF while thinking → speaking. Open capture holds the audio
+      // session on glasses/phone and stalls TTS until the user mutes.
+      // Mic returns via resumeAfterSpeech after she finishes (barge-in after).
       resumeModeRef.current = "command";
-      if (listeningOnRef.current) {
-        window.setTimeout(() => {
-          if (!listeningOnRef.current) return;
-          if (chatSeqRef.current !== seq) return;
-          if (phaseRef.current !== "thinking") return;
-          if (!recognitionRef.current) startMicRef.current("command");
-        }, 120);
-      }
+      killMic();
 
       const assistantId = `a-${Date.now()}`;
       setLines((prev) => [
@@ -3230,6 +3289,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       clearSilenceEnd,
       goDormant,
       interruptOutput,
+      killMic,
       openConversation,
       refreshStatus,
       resumeAfterSpeech,
