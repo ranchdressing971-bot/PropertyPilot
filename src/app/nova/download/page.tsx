@@ -58,7 +58,7 @@ export default async function NovaDownloadPage() {
               <li>1. Download Nova-Mac.zip and unzip it.</li>
               <li>
                 2. Double-click <span className="text-white/70">Open Nova.command</span>{" "}
-                (easiest — avoids the “damaged” Gatekeeper error).
+                (easiest; avoids the “damaged” Gatekeeper error).
               </li>
               <li>
                 3. If macOS blocks it: System Settings → Privacy & Security →

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 
 export const metadata = {
-  title: "Privacy Policy — RideBy",
+  title: "Privacy Policy: RideBy",
 };
 
 const OPERATOR = "HG TAX AND ACCOUNTING SERVICES, CORP";
@@ -30,24 +30,24 @@ export default function PrivacyPage() {
         <h2>2. What we collect</h2>
         <ul>
           <li>
-            <strong>Account data</strong> — email, name, HOA / community name,
+            <strong>Account data</strong>: email, name, HOA / community name,
             and profile settings you provide
           </li>
           <li>
-            <strong>Community data</strong> — property rosters and related
+            <strong>Community data</strong>: property rosters and related
             metadata you import
           </li>
           <li>
-            <strong>Inspection data</strong> — videos or frames you upload, AI
+            <strong>Inspection data</strong>: videos or frames you upload, AI
             analysis results, evidence images, and review decisions
           </li>
           <li>
-            <strong>Billing data</strong> — subscription status and community
+            <strong>Billing data</strong>: subscription status and community
             count; payment card details are processed by Stripe (we do not store
             full card numbers)
           </li>
           <li>
-            <strong>Usage data</strong> — logs needed to operate, secure, and
+            <strong>Usage data</strong>: logs needed to operate, secure, and
             improve the service
           </li>
         </ul>

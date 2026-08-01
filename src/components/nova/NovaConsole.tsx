@@ -378,7 +378,7 @@ async function fetchVoiceAudio(text: string): Promise<VoiceFetchResult> {
       contentType,
       format,
       useBrowserTts: true,
-      error: `401 ${reason} — sign in on this device`,
+      error: `401 ${reason}: sign in on this device`,
     };
   }
 
@@ -1473,7 +1473,7 @@ export function NovaConsole() {
 
       recognition.onerror = (ev) => {
         if (ev.error === "not-allowed") {
-          setError("Allow the microphone — Nova needs it to always listen.");
+          setError("Allow the microphone. Nova needs it to always listen.");
           setNeedsGesture(true);
           setListeningOn(false);
           listeningOnRef.current = false;
@@ -1853,13 +1853,13 @@ export function NovaConsole() {
       phase === "thinking");
 
   const phaseLabel = !listeningOn
-    ? "muted — tap to wake"
+    ? "muted: tap to wake"
     : phase === "idle"
       ? "starting…"
       : phase === "listening_wake"
         ? "say “hey nova”"
         : phase === "listening_command"
-          ? "listening — no wake needed"
+          ? "listening: no wake needed"
           : phase === "thinking"
             ? "thinking"
             : phase === "speaking"
@@ -1995,7 +1995,7 @@ export function NovaConsole() {
               />
               <span>
                 {status?.novaArmed ? "Running" : "Paused"} ·{" "}
-                {status?.dailyTarget ?? "—"}/day
+                {status?.dailyTarget ?? "·"}/day
               </span>
             </div>
             <div className="nova-meta-dim">
@@ -2119,7 +2119,7 @@ export function NovaConsole() {
       <main className="nova-stage">
         <h1 className="nova-brand font-display">NOVA</h1>
         <p className="nova-tagline">
-          Systems online. Say <span>“Hey Nova”</span> — outreach, MRR, clients.
+          Systems online. Say <span>“Hey Nova”</span> for outreach, MRR, clients.
         </p>
 
         <div className={wrapClass}>
@@ -2155,7 +2155,7 @@ export function NovaConsole() {
         <p className="nova-phase">{phaseLabel}</p>
         {needsGesture && (
           <p className="nova-hint">
-            Tap the orb once to unlock sound{isIOS() ? " — turn up media volume" : ""}, then talk to Nova.
+            Tap the orb once to unlock sound{isIOS() ? "; turn up media volume" : ""}, then talk to Nova.
           </p>
         )}
         {showTapToHear && isIOS() && (
@@ -2170,7 +2170,7 @@ export function NovaConsole() {
         )}
         {!micSupported && (
           <p className="nova-hint">
-            Wake word unavailable here — use the keyboard.
+            Wake word unavailable here. Use the keyboard.
           </p>
         )}
       </main>
@@ -2222,7 +2222,7 @@ export function NovaConsole() {
             <span>Live ops mix</span>
             <strong>
               {status?.novaArmed ? "ARMED" : "STANDBY"} ·{" "}
-              {status?.dailyTarget ?? "—"}/day
+              {status?.dailyTarget ?? "·"}/day
             </strong>
           </div>
           <NovaBarChart

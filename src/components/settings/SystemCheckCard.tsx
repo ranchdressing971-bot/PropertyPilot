@@ -84,7 +84,7 @@ export function SystemCheckCard() {
           {status.ok && (
             <p className="flex items-center gap-2 text-sm text-emerald-700">
               <CheckCircle2 className="h-4 w-4" />
-              All checks passed — inspections should save and survive refresh.
+              All checks passed. Inspections should save and survive refresh.
             </p>
           )}
         </div>

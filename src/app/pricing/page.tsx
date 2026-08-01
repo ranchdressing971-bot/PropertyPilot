@@ -3,7 +3,7 @@ import { PricingCalculator } from "@/components/pricing/PricingCalculator";
 import { FREE_TRIAL_INSPECTIONS } from "@/lib/stripe-client";
 
 export const metadata = {
-  title: "Pricing — RideBy",
+  title: "Pricing: RideBy",
 };
 
 export default function PricingPage() {
@@ -18,7 +18,7 @@ export default function PricingPage() {
           {FREE_TRIAL_INSPECTIONS === 1
             ? "1 free inspection per account"
             : `${FREE_TRIAL_INSPECTIONS} free inspections per account`}
-          . Then pay monthly by how many communities you manage — not a
+          . Then pay monthly by how many communities you manage, not a
           one-size sticker price.
         </p>
 

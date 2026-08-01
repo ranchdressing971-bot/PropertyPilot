@@ -155,13 +155,13 @@ function SignupForm() {
       </h1>
       <p className="mt-1 text-sm text-ink-500">
         {fromFreeOffer
-          ? "Create your account, then upload one drive-through of your community — on us."
+          ? "Create your account, then upload one drive-through of your community, on us."
           : "1 free inspection per account · from $99/mo"}
       </p>
 
       {!supabaseReady && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Configure Supabase first — see{" "}
+          Configure Supabase first. See{" "}
           <code className="text-xs">docs/SUPABASE_SETUP.md</code>
         </div>
       )}
@@ -193,7 +193,7 @@ function SignupForm() {
           </div>
           {joiningViaInvite ? (
             <p className="rounded-xl border border-ink-100 bg-ink-50/80 px-3 py-2 text-xs text-ink-600">
-              You’re joining a shared HOA via invite — community name comes from the company.
+              You’re joining a shared HOA via invite; community name comes from the company.
             </p>
           ) : (
             <div>
@@ -208,7 +208,7 @@ function SignupForm() {
                 placeholder="Oak Ridge Village HOA"
               />
               <p className="mt-1 text-xs text-ink-400">
-                One free inspection per account — use your real HOA name.
+                One free inspection per account. Use your real HOA name.
               </p>
             </div>
           )}

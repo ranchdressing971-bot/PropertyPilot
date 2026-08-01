@@ -159,7 +159,7 @@ export function getLiveAIInsights() {
 
   return {
     mostCommonViolation: mostCommon,
-    avgInspectionTime: inspections.length > 0 ? "~20 min" : "—",
+    avgInspectionTime: inspections.length > 0 ? "~20 min" : "·",
     complianceScore,
     repeatOffenders,
   };

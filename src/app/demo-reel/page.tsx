@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { DemoReel } from "@/components/demo/DemoReel";
 
 export const metadata: Metadata = {
-  title: "RideBy — Inspection results (demo reel)",
+  title: "RideBy: Inspection results (demo reel)",
   description:
     "Auto-playing walkthrough of the post-recording inspection results experience for screen recordings.",
   robots: { index: false, follow: false },

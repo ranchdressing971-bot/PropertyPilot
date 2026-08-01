@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     if (!isElevenLabsConfigured()) {
       return NextResponse.json(
         {
-          error: "ElevenLabs not configured — use free device voice.",
+          error: "ElevenLabs not configured. Use free device voice.",
           code: "FALLBACK_BROWSER",
         },
         { status: 503 }

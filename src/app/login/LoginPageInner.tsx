@@ -67,7 +67,7 @@ export default function LoginPageInner() {
       <Card className="w-full max-w-md" padding="lg">
         <h1 className="text-xl font-semibold text-ink-900">Sign in</h1>
         <p className="mt-1 text-sm text-ink-500">
-          Live mode — real AI inspections with your account
+          Live mode: real AI inspections with your account
         </p>
 
         {!supabaseReady && (

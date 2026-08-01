@@ -156,7 +156,7 @@ export function CommunityVerificationPanel({
                 ) : (
                   <CheckCircle2 className="h-3.5 w-3.5" />
                 )}
-                Yes — add to this community
+                Yes: add to this community
               </Button>
               <Button
                 size="sm"

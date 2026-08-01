@@ -40,7 +40,7 @@ export function GoodPropertyReport({ property }: GoodPropertyReportProps) {
             complianceScore: 100,
             inspectionCount: 1,
             violationCount: 0,
-            topViolation: `Good standing — ${property.address}`,
+            topViolation: `Good standing: ${property.address}`,
           })
         }
       >

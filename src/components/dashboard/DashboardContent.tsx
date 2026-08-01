@@ -56,7 +56,7 @@ export function DashboardContent() {
             Your first inspection
           </p>
           <p className="mt-2 text-sm text-ink-500">
-            Three steps — then you&apos;re reviewing flags like a pro.
+            Three steps, then you&apos;re reviewing flags like a pro.
           </p>
           <ol className="mt-8 space-y-4 text-left">
             {[
@@ -166,8 +166,8 @@ export function DashboardContent() {
           ) : (
             <AIInsights
               insights={{
-                mostCommonViolation: "—",
-                avgInspectionTime: "—",
+                mostCommonViolation: "·",
+                avgInspectionTime: "·",
                 complianceScore: 0,
                 repeatOffenders: [],
               }}

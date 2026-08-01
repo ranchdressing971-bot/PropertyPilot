@@ -121,7 +121,7 @@ export function FreeLanding({ variant = "free" }: FreeLandingProps) {
               className="mt-5 max-w-md text-base leading-relaxed text-ink-500 sm:text-lg"
             >
               Film your next drive-through. We match house numbers, pull evidence
-              frames, and hand you a clean review list — you approve before
+              frames, and hand you a clean review list. You approve before
               anything is sent.
             </motion.p>
 
@@ -132,7 +132,7 @@ export function FreeLanding({ variant = "free" }: FreeLandingProps) {
               className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center"
             >
               <Button size="lg" onClick={claimFreeRun} className="sm:min-w-[220px]">
-                {isHome ? "Start free — sign up" : "Claim your free run"}
+                {isHome ? "Start free: sign up" : "Claim your free run"}
                 <ArrowRight className="h-4 w-4" />
               </Button>
               <Button variant="secondary" size="lg" onClick={peekDemo}>
@@ -285,7 +285,7 @@ export function FreeLanding({ variant = "free" }: FreeLandingProps) {
                         animate={{ opacity: 1, y: 0 }}
                         className="text-xs font-medium text-ink-700"
                       >
-                        That feeling — but on{" "}
+                        That feeling, but on{" "}
                         <span className="text-brand-800">your</span> streets.
                         One free run per account.
                       </motion.p>

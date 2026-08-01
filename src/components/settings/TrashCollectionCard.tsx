@@ -69,7 +69,7 @@ export function TrashCollectionCard() {
         <div>
           <h3 className="font-semibold text-ink-900">Trash collection days</h3>
           <p className="text-sm text-ink-500">
-            Bin flags only on non-pickup days — bins are allowed out on these days
+            Bin flags only on non-pickup days; bins are allowed out on these days
           </p>
         </div>
       </div>
@@ -119,7 +119,7 @@ export function TrashCollectionCard() {
         ) : (
           <span className="font-medium text-amber-700">is not pickup</span>
         )}
-        {" — "}
+        {". "}
         {isPickupToday
           ? "visible bins will not be flagged."
           : "visible bins can be flagged."}

@@ -303,13 +303,13 @@ function helpfulMessageFor(
 ): string {
   switch (outcome) {
     case "bootstrap":
-      return `Saved a starting map for ${communityName} from this drive. Optional — helps keep future reports organized.`;
+      return `Saved a starting map for ${communityName} from this drive. Optional; helps keep future reports organized.`;
     case "match":
-      return `Looks like the same community — most homes match ${communityName}.`;
+      return `Looks like the same community; most homes match ${communityName}.`;
     case "small_expansion":
       return `We noticed ${newCount} home${newCount === 1 ? "" : "s"} that haven’t shown up in ${communityName} yet. Want to add them to this community’s map?`;
     case "large_difference":
-      return `This drive covers streets that look different from ${communityName}. You can expand this community’s map, keep it separate later, or skip — your inspection is already saved.`;
+      return `This drive covers streets that look different from ${communityName}. You can expand this community’s map, keep it separate later, or skip. Your inspection is already saved.`;
     default:
       return `Community map tip for ${communityName}.`;
   }
@@ -611,7 +611,7 @@ export async function runCommunityVerification(
       return {
         ...empty,
         outcome: "bootstrap",
-        helpfulMessage: `We’ll gently learn ${communityName}’s streets as addresses are confirmed — nothing to do right now.`,
+        helpfulMessage: `We’ll gently learn ${communityName}’s streets as addresses are confirmed. Nothing to do right now.`,
       };
     }
 
@@ -759,7 +759,7 @@ export async function resolveCommunityVerification(opts: {
   communityName?: string;
 }): Promise<{ ok: boolean; error?: string; message?: string }> {
   if (!isCommunityVerificationEnabled()) {
-    return { ok: true, message: "Thanks — nothing else needed." };
+    return { ok: true, message: "Thanks. Nothing else needed." };
   }
 
   const admin = createAdminClient();
@@ -773,7 +773,7 @@ export async function resolveCommunityVerification(opts: {
 
   if (error) {
     if (isMissingRelationError(error)) {
-      return { ok: true, message: "Thanks — your inspection is already saved." };
+      return { ok: true, message: "Thanks. Your inspection is already saved." };
     }
     return { ok: false, error: "Verification event not found" };
   }
@@ -829,11 +829,11 @@ export async function resolveCommunityVerification(opts: {
       opts.resolution === "confirm_new_homes" ? "expanded" : "expanded";
     message =
       opts.resolution === "confirm_new_homes"
-        ? "Thanks — those homes are now part of this community’s map."
+        ? "Thanks. Those homes are now part of this community’s map."
         : "Community map updated. Your inspection was already saved.";
   } else if (opts.resolution === "ignore_new_homes") {
     outcome = "ignored_new";
-    message = "Got it — we’ll keep the existing community map as-is.";
+    message = "Got it. We’ll keep the existing community map as-is.";
     if (fingerprintId) {
       const { data: fpIgnore } = await admin
         .from("community_fingerprints")
@@ -849,7 +849,7 @@ export async function resolveCommunityVerification(opts: {
   } else if (opts.resolution === "create_new_community") {
     outcome = "new_community_suggested";
     message =
-      "No problem. This inspection stays saved — add another community under Pricing whenever you’re ready. Nothing is locked or charged from this tip.";
+      "No problem. This inspection stays saved. Add another community under Pricing whenever you’re ready. Nothing is locked or charged from this tip.";
     if (fingerprintId) {
       const { data: fp } = await admin
         .from("community_fingerprints")
@@ -863,7 +863,7 @@ export async function resolveCommunityVerification(opts: {
       }
     }
   } else {
-    message = "No problem — your inspection is saved.";
+    message = "No problem. Your inspection is saved.";
   }
 
   await admin

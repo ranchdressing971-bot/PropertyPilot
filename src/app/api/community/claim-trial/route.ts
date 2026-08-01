@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   const limit = checkRateLimit(`claim-community:${userId}`, 20, 60_000);
   if (!limit.allowed) {
     return NextResponse.json(
-      { error: "Too many attempts — wait a minute." },
+      { error: "Too many attempts. Wait a minute." },
       { status: 429 }
     );
   }

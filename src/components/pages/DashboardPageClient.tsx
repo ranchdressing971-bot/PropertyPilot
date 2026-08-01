@@ -14,7 +14,7 @@ export function DashboardPageClient() {
         title="Overview"
         subtitle={
           isDemo
-            ? "Willow Creek Estates — sample data"
+            ? "Willow Creek Estates: sample data"
             : "Your inspection workspace"
         }
       />

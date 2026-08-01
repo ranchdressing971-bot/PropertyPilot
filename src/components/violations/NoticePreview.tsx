@@ -44,7 +44,7 @@ export function NoticePreview({
 
   function handleMailto() {
     const subject = encodeURIComponent(
-      `${hoaLabel} HOA — Violation Notice (${propertyAddress})`
+      `${hoaLabel} HOA: Violation Notice (${propertyAddress})`
     );
     const body = encodeURIComponent(
       `Dear Homeowner,\n\nPlease review the violation notice for ${propertyAddress}.\n\nViolation: ${violation.type}\n${violation.rule}\n\nPlease remedy within 14 days.\n\n${managerName}\n${hoaLabel} HOA`

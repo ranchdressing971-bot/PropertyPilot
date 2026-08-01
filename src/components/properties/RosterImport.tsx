@@ -85,7 +85,7 @@ export function RosterImport({
           </h3>
           <p className="mt-1 text-sm text-ink-500">
             Upload a CSV of every home (house number + street). AI reads mailbox
-            digits from video and matches them to this list — much more accurate
+            digits from video and matches them to this list: much more accurate
             than guessing the street alone.
           </p>
           <ul className="mt-2 space-y-1 text-xs text-ink-500">
@@ -93,7 +93,7 @@ export function RosterImport({
               • Columns: <code className="rounded bg-ink-100 px-1">address</code>{" "}
               required; <code className="rounded bg-ink-100 px-1">lot</code> optional
             </li>
-            <li>• One home per row — e.g. <code className="rounded bg-ink-100 px-1">456 Oak Dr</code></li>
+            <li>• One home per row, e.g. <code className="rounded bg-ink-100 px-1">456 Oak Dr</code></li>
             <li>• Export from Excel / Google Sheets as CSV</li>
           </ul>
         </div>

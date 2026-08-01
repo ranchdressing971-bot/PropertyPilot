@@ -34,7 +34,7 @@ export function BillingCard() {
 
   useEffect(() => {
     if (searchParams.get("billing") === "success") {
-      toast("Billing updated — welcome aboard");
+      toast("Billing updated. Welcome aboard");
     }
   }, [searchParams, toast]);
 
@@ -128,7 +128,7 @@ export function BillingCard() {
           </Button>
         ) : (
           <Link href="/pricing">
-            <Button size="sm">View pricing — from {fromPrice}</Button>
+            <Button size="sm">View pricing, from {fromPrice}</Button>
           </Link>
         )}
       </div>

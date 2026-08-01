@@ -178,7 +178,7 @@ export async function synthesizeNovaSpeech(
       lower.includes("insufficient")
     ) {
       const err = new Error(
-        "ElevenLabs credits exhausted or rate-limited — using free device voice."
+        "ElevenLabs credits exhausted or rate-limited. Using free device voice."
       );
       (err as Error & { code?: string }).code = "QUOTA";
       throw err;
@@ -190,7 +190,7 @@ export async function synthesizeNovaSpeech(
       lower.includes("subscription")
     ) {
       throw new Error(
-        "That ElevenLabs voice needs a paid plan. Use your custom “Nova” voice from My Voices — copy its voice ID (not the name) into ELEVENLABS_VOICE_ID."
+        "That ElevenLabs voice needs a paid plan. Use your custom “Nova” voice from My Voices. Copy its voice ID (not the name) into ELEVENLABS_VOICE_ID."
       );
     }
     if (response.status === 404) {

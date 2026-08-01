@@ -74,7 +74,7 @@ export function PropertiesPageContent() {
             <span>
               {rosterCount > 0
                 ? `Address roster · ${rosterCount} homes (improves mailbox matching)`
-                : "Import address roster — recommended before your next upload"}
+                : "Import address roster: recommended before your next upload"}
             </span>
             <ChevronDown
               className={`h-4 w-4 transition-transform ${showRoster ? "rotate-180" : ""}`}
@@ -97,7 +97,7 @@ export function PropertiesPageContent() {
         <EmptyState
           icon={Home}
           title="No properties yet"
-          description="Import your community CSV above, then upload a drive-through — AI matches mailbox numbers to your roster."
+          description="Import your community CSV above, then upload a drive-through. AI matches mailbox numbers to your roster."
           actionLabel="Upload inspection"
           actionHref="/dashboard/inspections/upload"
         />

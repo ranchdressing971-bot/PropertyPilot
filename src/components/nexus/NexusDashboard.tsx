@@ -106,7 +106,7 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Search failed");
 
       const processed = await runWorkerUntilIdle(
-        "Running outreach pipeline — find → emails → draft → AI review…"
+        "Running outreach pipeline: find → emails → draft → AI review…"
       );
       setMessage(
         processed
@@ -180,7 +180,7 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink-100 bg-ink-50/60 px-4 py-3">
         <p className="text-sm text-ink-600">
           <span className="font-medium text-ink-900">Nova</span> runs this
-          pipeline — she’ll tell you what’s working and push back on weak sends.
+          pipeline. She’ll tell you what’s working and push back on weak sends.
         </p>
         <a
           href="/nova"
@@ -216,7 +216,7 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
         <p className="mt-1.5 max-w-2xl text-sm text-ink-600">
           One click finds small local HOA managers, pulls public emails from
           their sites, writes drafts, and has AI approve or reject them. You
-          don’t review every email — the AI does. Sending (1 email every 5–15 min,
+          don’t review every email; the AI does. Sending (1 email every 5–15 min,
           10am–3pm) plugs in once the mailbox exists.
         </p>
 
@@ -321,7 +321,7 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
             </h3>
             <p className="mt-1 text-sm text-ink-600">
               AI-approved drafts. When the sender is connected, these go out at
-              about one every 5–15 minutes from 10am–3pm — paced so it looks natural.
+              about one every 5–15 minutes from 10am–3pm, paced so it looks natural.
             </p>
           </div>
           <button
@@ -391,7 +391,7 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
               <li key={draft.id} className="text-sm text-ink-700">
                 <span className="font-medium">{draft.company_name ?? draft.to_email}</span>
                 {draft.rejection_reason
-                  ? ` — ${draft.rejection_reason}`
+                  ? `: ${draft.rejection_reason}`
                   : ""}
               </li>
             ))}
@@ -433,7 +433,7 @@ export function NexusDashboard({ initialState }: { initialState: NexusState }) {
                   </p>
                   <p className="text-xs text-ink-500">
                     {[company.city, company.state].filter(Boolean).join(", ") ||
-                      "—"}
+                      "·"}
                     {typeof company.metadata?.userRatingCount === "number"
                       ? ` · ${company.metadata.userRatingCount} Google reviews`
                       : " · reviews unknown"}

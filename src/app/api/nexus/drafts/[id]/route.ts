@@ -141,7 +141,7 @@ export async function POST(
       ok: true,
       status: approving ? "approved" : "rejected",
       note: approving
-        ? "Approved. Nothing sends yet — the sending hand is not built."
+        ? "Approved. Nothing sends yet; the sending hand is not built."
         : undefined,
     });
   } catch (err) {

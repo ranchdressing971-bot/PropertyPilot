@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     id: p.id || `prop-${i + 1}`,
     image: p.image ?? "",
     status: p.status ?? ("Good Standing" as const),
-    lastInspection: p.lastInspection ?? "—",
+    lastInspection: p.lastInspection ?? "·",
   }));
 
   await persistProperties(userId, normalized);

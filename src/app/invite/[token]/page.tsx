@@ -104,7 +104,7 @@ export default function AcceptInvitePage() {
           ) : null}
 
           {status === "done" ? (
-            <p className="text-sm text-ink-600">You’re in — redirecting to the dashboard…</p>
+            <p className="text-sm text-ink-600">You’re in. Redirecting to the dashboard…</p>
           ) : null}
         </div>
       </Card>

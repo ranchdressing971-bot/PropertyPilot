@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 
 export const metadata = {
-  title: "Terms of Service — RideBy",
+  title: "Terms of Service: RideBy",
 };
 
 const OPERATOR = "HG TAX AND ACCOUNTING SERVICES, CORP";

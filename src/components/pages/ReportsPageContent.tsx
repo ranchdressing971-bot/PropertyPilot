@@ -42,7 +42,7 @@ export function ReportsPageContent() {
     : (live?.insights?.complianceScore ?? 0);
   const topViolation = isDemo
     ? aiInsights.mostCommonViolation
-    : (live?.insights?.mostCommonViolation ?? "—");
+    : (live?.insights?.mostCommonViolation ?? "·");
   const repeatCount = isDemo
     ? aiInsights.repeatOffenders.length
     : (live?.insights?.repeatOffenders.length ?? 0);

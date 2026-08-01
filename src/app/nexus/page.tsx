@@ -7,7 +7,7 @@ import { checkNexusAdmin } from "@/lib/nexus/admin";
 import { loadNexusState } from "@/lib/nexus/state";
 
 export const metadata: Metadata = {
-  title: "Nexus — Atlas OS",
+  title: "Nexus: Atlas OS",
   description: "Internal outreach system.",
   robots: { index: false, follow: false },
 };
@@ -65,7 +65,7 @@ export default async function NexusPage() {
               Nexus
             </h1>
             <p className="mt-1.5 text-sm text-ink-600">
-              Automated outreach — AI finds leads, writes emails, and reviews
+              Automated outreach: AI finds leads, writes emails, and reviews
               them. You only plug in the sender.
             </p>
           </div>

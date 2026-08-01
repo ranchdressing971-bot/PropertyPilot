@@ -136,7 +136,7 @@ export function ProfileCard() {
               />
             ) : (
               <p className="text-sm text-ink-500">
-                {hoaName || "Not set — complete your profile"}
+                {hoaName || "Not set: complete your profile"}
               </p>
             )}
           </div>
@@ -156,7 +156,7 @@ export function ProfileCard() {
               />
             ) : (
               <p className="text-sm text-ink-500">
-                {fullName || "Not set — complete your profile"}
+                {fullName || "Not set: complete your profile"}
               </p>
             )}
           </div>

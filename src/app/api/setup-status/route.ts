@@ -20,7 +20,7 @@ export async function GET() {
       openaiOk = false;
       const msg = err instanceof Error ? err.message : "OpenAI check failed";
       openaiMessage = msg.includes("401") || msg.includes("Incorrect API key")
-        ? "Invalid OpenAI API key — paste a fresh key in Vercel and redeploy"
+        ? "Invalid OpenAI API key. Paste a fresh key in Vercel and redeploy"
         : msg;
     }
   }
@@ -62,7 +62,7 @@ export async function GET() {
   }
 
   if (!status.auth.signedIn) {
-    status.fixes.push("Sign in before running live inspections — guest sessions cannot save to the database.");
+    status.fixes.push("Sign in before running live inspections. Guest sessions cannot save to the database.");
   }
 
   if (admin) {
@@ -87,7 +87,7 @@ export async function GET() {
       status.database.inspectionCount = count;
     }
   } else if (status.env.supabaseUrl && status.env.supabaseAnon) {
-    status.database.error = "No service role key — cannot verify database from server.";
+    status.database.error = "No service role key; cannot verify database from server.";
   }
 
   if (supabase && userId) {
@@ -110,7 +110,7 @@ export async function GET() {
         insertError.code === "42501"
       ) {
         status.fixes.push(
-          "Run docs/FIX_SUPABASE.sql in Supabase → SQL Editor — your user cannot write inspections yet."
+          "Run docs/FIX_SUPABASE.sql in Supabase → SQL Editor. Your user cannot write inspections yet."
         );
       }
     } else {

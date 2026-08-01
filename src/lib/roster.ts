@@ -27,7 +27,7 @@ export function parseCsvRoster(csv: string, neighborhood = "Your Community"): Pr
       address,
       image: "",
       status: "Good Standing" as const,
-      lastInspection: "—",
+      lastInspection: "·",
       neighborhood,
     };
   });

@@ -59,7 +59,7 @@ export function PricingCalculator() {
           Pay for the communities you manage
         </h2>
         <p className="mt-2 text-sm text-ink-500">
-          Price scales with volume — not a flat jump every time you add an HOA.
+          Price scales with volume, not a flat jump every time you add an HOA.
           Formula: $99 × communities<sup>0.7</sup>
         </p>
 
@@ -156,7 +156,7 @@ export function PricingCalculator() {
               router.push(`/pricing/checkout?communities=${communities}`)
             }
           >
-            Subscribe — {formatPriceMonthly(price)}
+            Subscribe: {formatPriceMonthly(price)}
           </Button>
         </div>
       </div>

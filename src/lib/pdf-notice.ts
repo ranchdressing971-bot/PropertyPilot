@@ -33,7 +33,7 @@ export function downloadViolationNoticePdf(data: NoticePdfData): void {
   line(propertyAddress, 12, true);
   y += 4;
   line("Violation", 9, true);
-  line(violation.type ?? "—", 12, true);
+  line(violation.type ?? "·", 12, true);
   line(violation.rule, 10);
   y += 4;
   line("Required Action", 9, true);

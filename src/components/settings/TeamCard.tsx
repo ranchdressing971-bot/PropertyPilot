@@ -93,7 +93,7 @@ export function TeamCard() {
       if (!res.ok) throw new Error(data.error ?? "Invite failed");
       setLastInviteUrl(data.inviteUrl);
       setEmail("");
-      toast("Invite created — copy the link to send");
+      toast("Invite created. Copy the link to send");
       await refresh();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Invite failed");

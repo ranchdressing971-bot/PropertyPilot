@@ -26,7 +26,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const limit = checkRateLimit(`confirm-address:${userId}`, 30, 60_000);
   if (!limit.allowed) {
     return NextResponse.json(
-      { error: "Too many address checks — wait a minute and try again." },
+      { error: "Too many address checks. Wait a minute and try again." },
       { status: 429 }
     );
   }
@@ -135,8 +135,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     needsReview: false,
     reasoning:
       source === "roster"
-        ? "Confirmed — matches community roster"
-        : "Confirmed — verified as a real street address",
+        ? "Confirmed: matches community roster"
+        : "Confirmed: verified as a real street address",
   };
   if (reviewIdx >= 0) {
     reviews[reviewIdx] = { ...reviews[reviewIdx], ...confirmed };

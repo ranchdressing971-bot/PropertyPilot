@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     if (!supabase) {
       return NextResponse.json({
         stored: false,
-        message: "Supabase not configured — video still analyzed from frames",
+        message: "Supabase not configured; video still analyzed from frames",
         videoName: file.name,
         sizeBytes: file.size,
       });
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       console.error("video upload skipped:", error.message);
       return NextResponse.json({
         stored: false,
-        message: "Storage backup skipped — video still analyzed from frames",
+        message: "Storage backup skipped; video still analyzed from frames",
         videoName: file.name,
         storageError: error.message,
       });

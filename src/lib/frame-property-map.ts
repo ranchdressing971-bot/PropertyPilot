@@ -76,7 +76,7 @@ function candidateToProperty(
     address: formatAddressTitle(candidate.address),
     image: candidate.frame.dataUrl,
     status: "Good Standing",
-    lastInspection: "—",
+    lastInspection: "·",
     neighborhood,
     addressConfidence: confidence,
     needsAddressReview: needsReview,
@@ -312,7 +312,7 @@ export function propertiesFromAddressMatches(
       address: formatAddressTitle(g.address),
       image: g.frame.dataUrl,
       status: "Good Standing" as const,
-      lastInspection: "—",
+      lastInspection: "·",
       neighborhood,
       addressConfidence: g.confidence,
       needsAddressReview: g.needsReview,
@@ -341,7 +341,7 @@ export function propertiesFromHomeDiscovery(
       address: formatAddressTitle(addr),
       image: frame?.dataUrl ?? "",
       status: "Good Standing",
-      lastInspection: "—",
+      lastInspection: "·",
       neighborhood,
       addressConfidence: confidence,
       needsAddressReview:
@@ -366,7 +366,7 @@ export function propertiesFromFrameFallback(
     address: `Home at ${formatVideoTime(frame.timestamp)}`,
     image: frame.dataUrl,
     status: "Good Standing" as const,
-    lastInspection: "—",
+    lastInspection: "·",
     neighborhood,
   }));
 
@@ -415,7 +415,7 @@ export function supplementPropertiesFromFrames(
       address: `Home at ${formatVideoTime(frame.timestamp)}`,
       image: frame.dataUrl,
       status: "Good Standing",
-      lastInspection: "—",
+      lastInspection: "·",
       neighborhood,
     });
   }

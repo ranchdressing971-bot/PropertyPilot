@@ -6,9 +6,9 @@ import { NovaConsole } from "@/components/nova/NovaConsole";
 import { checkNexusAdmin } from "@/lib/nexus/admin";
 
 export const metadata: Metadata = {
-  title: "Nova — Outreach Manager",
+  title: "Nova: Outreach Manager",
   description:
-    "Nova runs RideBy outreach — warm, direct, and not afraid to push back.",
+    "Nova runs RideBy outreach: warm, direct, and not afraid to push back.",
   robots: { index: false, follow: false },
 };
 

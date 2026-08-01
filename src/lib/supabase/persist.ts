@@ -103,7 +103,7 @@ export async function persistInspection(
       return {
         ok: false,
         error:
-          "Database permission denied — run docs/FIX_SUPABASE.sql in Supabase SQL Editor.",
+          "Database permission denied. Run docs/FIX_SUPABASE.sql in Supabase SQL Editor.",
       };
     }
   }
@@ -118,7 +118,7 @@ export async function persistInspection(
   return {
     ok: false,
     error:
-      "Cannot save inspection — add SUPABASE_SERVICE_ROLE_KEY to Vercel env vars and sign in.",
+      "Cannot save inspection. Add SUPABASE_SERVICE_ROLE_KEY to Vercel env vars and sign in.",
   };
 }
 
@@ -308,7 +308,7 @@ export async function loadPropertiesFromDb(
           address: row.address,
           image: row.image ?? "",
           status: "Good Standing" as const,
-          lastInspection: "—",
+          lastInspection: "·",
           neighborhood: row.neighborhood ?? "",
         }));
       }
@@ -321,7 +321,7 @@ export async function loadPropertiesFromDb(
     address: row.address,
     image: row.image ?? "",
     status: "Good Standing" as const,
-    lastInspection: "—",
+    lastInspection: "·",
     neighborhood: row.neighborhood ?? "",
   }));
 }

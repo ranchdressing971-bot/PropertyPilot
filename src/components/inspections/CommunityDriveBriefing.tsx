@@ -39,11 +39,11 @@ export function CommunityDriveBriefing({
         ))}
       </ul>
       <p className="mt-4 text-xs text-ink-500">
-        Tip only — your inspection always saves. We may optionally ask if new
+        Tip only: your inspection always saves. We may optionally ask if new
         streets should join this community’s map.
       </p>
       <Button className="mt-6 w-full sm:w-auto" size="lg" onClick={onContinue}>
-        Got it — choose video
+        Got it: choose video
       </Button>
     </div>
   );

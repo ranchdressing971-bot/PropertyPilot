@@ -224,8 +224,8 @@ export async function runNovaChat(userMessage: string): Promise<NovaChatResult> 
   if (!finalReply) {
     finalReply =
       toolTrace.length > 0
-        ? "Got the numbers — want the headline or the full breakdown?"
-        : "Didn't catch that — run it by me again?";
+        ? "Got the numbers. Want the headline or the full breakdown?"
+        : "Didn't catch that. Run it by me again?";
   }
 
   await saveNovaMessage({ role: "assistant", content: finalReply });

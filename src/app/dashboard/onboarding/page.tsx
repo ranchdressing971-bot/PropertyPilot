@@ -23,8 +23,8 @@ export default function OnboardingPage() {
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
             Upload one drive-through of {hoaName}. We&apos;ll match house
-            numbers, pull evidence frames, and hand you a review list —
-            you approve before anything is sent.
+            numbers, pull evidence frames, and hand you a review list.
+            You approve before anything is sent.
           </p>
           <ul className="mt-4 space-y-2 text-sm text-ink-600">
             <li className="flex items-start gap-2">

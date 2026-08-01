@@ -73,7 +73,7 @@ export function InspectionResultsView({ id }: { id: string }) {
             json.trashScheduleNote ??
               (shouldEnforceTrashBins(days)
                 ? `Trash bins can be flagged today (pickup: ${formatCollectionDays(days)}).`
-                : `Today is a pickup day (${formatCollectionDays(days)}) — trash bins not flagged.`)
+                : `Today is a pickup day (${formatCollectionDays(days)}): trash bins not flagged.`)
           );
         }
       } catch (e) {
@@ -264,8 +264,8 @@ export function InspectionResultsView({ id }: { id: string }) {
                   {addressReviewItems.length === 1 ? "" : "es"} need confirmation
                 </p>
                 <p className="mt-1 text-xs text-amber-800/90">
-                  Open the <span className="font-medium">Needs review</span> tab —
-                  check the photo, then tap Looks right or Fix number.
+                  Open the <span className="font-medium">Needs review</span> tab.
+                  Check the photo, then tap Looks right or Fix number.
                 </p>
               </div>
             </div>
