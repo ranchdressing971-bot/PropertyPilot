@@ -11,8 +11,8 @@
  * Required for iPhone autoplay (WebKit speechSynthesis cannot start after
  * await fetch).
  *
- * OpenAI fallback: plain `tts-1-hd` + `nova` at ~1.32 — natural female, no
- * mini-tts accent steering. True British accent needs ElevenLabs credits.
+ * OpenAI fallback: `gpt-4o-mini-tts` + `nova` at ~1.16 with restrained
+ * British-accent instructions (natural adult woman — not theatrical).
  */
 
 import { getOpenAIApiKey } from "@/lib/openai-env";
@@ -430,15 +430,17 @@ async function synthesizeOpenAI(
 
   const clipped = clipSpeechText(text);
   const wantWav = opts?.format === "wav";
-  // Plain HD TTS — no mini-tts accent prompts (those sounded cartoonish).
-  const model = process.env.OPENAI_TTS_MODEL?.trim() || "tts-1-hd";
+  // mini-tts + restrained instructions → British female without cartoon energy.
+  const model = process.env.OPENAI_TTS_MODEL?.trim() || "gpt-4o-mini-tts";
   // Feminine: nova, shimmer, coral, sage. Avoid fable/onyx/echo (male/deep).
   const rawVoice = (process.env.OPENAI_TTS_VOICE?.trim() || "nova").toLowerCase();
   const voice = OPENAI_DEEP_VOICES.has(rawVoice) ? "nova" : rawVoice;
-  // Snappy but natural — OpenAI TTS speed range is 0.25–4.0.
-  const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.32, 0.25, 4.0);
-  // Only applied when model is gpt-4o-*-tts; default stack leaves this unset.
-  const instructions = process.env.OPENAI_TTS_INSTRUCTIONS?.trim();
+  // Slightly slower than the prior 1.32 snappy default — OpenAI range 0.25–4.0.
+  const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.16, 0.25, 4.0);
+  // Restrained accent steering only — avoid theatrical "Young British woman" prompts.
+  const instructions =
+    process.env.OPENAI_TTS_INSTRUCTIONS?.trim() ||
+    "British English accent. Adult woman. Natural conversational tone. Not theatrical, not cartoonish.";
 
   const body: Record<string, unknown> = {
     model,
@@ -448,7 +450,7 @@ async function synthesizeOpenAI(
     response_format: wantWav ? "wav" : "mp3",
   };
   // Style instructions are only honored by gpt-4o-mini-tts (and similar).
-  if (instructions && /gpt-4o.*tts/i.test(model)) {
+  if (/gpt-4o.*tts/i.test(model)) {
     body.instructions = instructions;
   }
 
@@ -529,7 +531,7 @@ export async function synthesizeNovaSpeech(
       const result = await synthesizeOpenAI(text, opts);
       const viaFallback = isElevenLabsConfigured();
       console.info(
-        `[nova speak] provider=openai${viaFallback ? " (ElevenLabs fallback)" : ""} model=${process.env.OPENAI_TTS_MODEL?.trim() || "tts-1-hd"} voice=${process.env.OPENAI_TTS_VOICE?.trim() || "nova"} bytes=${result.audio.length}`
+        `[nova speak] provider=openai${viaFallback ? " (ElevenLabs fallback)" : ""} model=${process.env.OPENAI_TTS_MODEL?.trim() || "gpt-4o-mini-tts"} voice=${process.env.OPENAI_TTS_VOICE?.trim() || "nova"} bytes=${result.audio.length}`
       );
       return { ...result, provider: "openai" };
     } catch (err) {

@@ -149,17 +149,18 @@ ELEVENLABS_API_KEY=...
 # ELEVENLABS_MODEL_ID=eleven_multilingual_v2
 # OpenAI is automatic when ElevenLabs is out of credits / quota / auth fails:
 # (uses OPENAI_API_KEY — no extra toggle)
-# OPENAI_TTS_MODEL=tts-1-hd
-# OPENAI_TTS_VOICE=nova          # feminine; shimmer also fine — avoid fable
-# OPENAI_TTS_SPEED=1.32
+# OPENAI_TTS_MODEL=gpt-4o-mini-tts
+# OPENAI_TTS_VOICE=nova          # feminine; shimmer/coral also fine — avoid fable
+# OPENAI_TTS_SPEED=1.16
+# OPENAI_TTS_INSTRUCTIONS=British English accent. Adult woman. Natural conversational tone. Not theatrical, not cartoonish.
 ```
 
 **Voice stack:** ElevenLabs with your `ELEVENLABS_VOICE_ID` when credits work.
 If ElevenLabs returns credits/quota/401/402/403/429, the API **automatically
-falls through to OpenAI `tts-1-hd` + `nova`** (natural female; not strongly
-British). Device/Web Speech is last resort only when both server providers
-fail. Clear stale Vercel `OPENAI_TTS_*` overrides (`gpt-4o-mini-tts` / cartoon
-prompts) if present, then redeploy.
+falls through to OpenAI `gpt-4o-mini-tts` + `nova`** at ~1.16 with restrained
+British-accent instructions (natural adult woman — not theatrical). Device/Web
+Speech is last resort only when both server providers fail. Clear stale Vercel
+`OPENAI_TTS_*` overrides that used theatrical/cartoon prompts, then redeploy.
 
 Nova can call Nexus tools: status, list drafts/companies, start search, run a
 tick, queue approved sends, and store memory/trials.
