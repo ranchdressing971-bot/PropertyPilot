@@ -3575,33 +3575,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       </aside>
 
       <main className="nova-stage">
-        <h1 className="nova-brand font-display">NOVA</h1>
-        <p className="nova-tagline">
-          {shortcutListen ? (
-            phase === "thinking" ? (
-              <>
-                Systems online. <span>Working…</span>
-              </>
-            ) : phase === "listening_command" ? (
-              <>
-                Systems online. <span>Listening…</span> Speak your command.
-              </>
-            ) : phase === "speaking" ? (
-              <>
-                Systems online. <span>Speaking…</span>
-              </>
-            ) : (
-              <>
-                Systems online. <span>Stand by…</span>
-              </>
-            )
-          ) : (
-            <>
-              Systems online. Say <span>“Hey Nova”</span>, or tap the orb.
-            </>
-          )}
-        </p>
-
         <div className={wrapClass}>
           <span className="nova-ring nova-ring-a" aria-hidden />
           <span className="nova-ring nova-ring-b" aria-hidden />
@@ -3618,31 +3591,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             }
           />
         </div>
-
-        <div
-          className={waveLive ? "nova-wave nova-wave-live" : "nova-wave"}
-          aria-hidden
-        >
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-        </div>
-
-        <p className="nova-phase">{phaseLabel}</p>
-        {audioUnlocked && (
-          <p className="nova-sound-status" aria-live="polite">
-            sound on
-          </p>
-        )}
-        {!micSupported && (
-          <p className="nova-hint">
-            Wake word unavailable here. Use the keyboard.
-          </p>
-        )}
       </main>
 
       <section className="nova-telemetry" aria-label="Telemetry">
@@ -3734,6 +3682,57 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           <span>COMMS</span>
           <span className="nova-dock-chrome-mid">VOICE · TEXT · OPS</span>
           <span>{status?.novaArmed ? "ARMED" : "STANDBY"}</span>
+        </div>
+        <div className="nova-dock-status">
+          <h1 className="nova-brand font-display">NOVA</h1>
+          <p className="nova-tagline">
+            {shortcutListen ? (
+              phase === "thinking" ? (
+                <>
+                  Systems online. <span>Working…</span>
+                </>
+              ) : phase === "listening_command" ? (
+                <>
+                  Systems online. <span>Listening…</span> Speak your command.
+                </>
+              ) : phase === "speaking" ? (
+                <>
+                  Systems online. <span>Speaking…</span>
+                </>
+              ) : (
+                <>
+                  Systems online. <span>Stand by…</span>
+                </>
+              )
+            ) : (
+              <>
+                Systems online. Say <span>“Hey Nova”</span>, or tap the orb.
+              </>
+            )}
+          </p>
+          <div
+            className={waveLive ? "nova-wave nova-wave-live" : "nova-wave"}
+            aria-hidden
+          >
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+          <p className="nova-phase">{phaseLabel}</p>
+          {audioUnlocked && (
+            <p className="nova-sound-status" aria-live="polite">
+              sound on
+            </p>
+          )}
+          {!micSupported && (
+            <p className="nova-hint">
+              Wake word unavailable here. Use the keyboard.
+            </p>
+          )}
         </div>
         <div className="nova-transcript" ref={transcriptRef}>
           {lines.length === 0 && (
