@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkNexusAdmin } from "@/lib/nexus/admin";
 import {
-  isMobileSafariUserAgent,
   isServerTtsConfigured,
   synthesizeNovaSpeech,
+  warmNovaSpeechPath,
 } from "@/lib/nova/speak";
 
 export const maxDuration = 30;
@@ -18,7 +18,24 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = (await req.json()) as { text?: string; format?: string };
+    const body = (await req.json()) as {
+      text?: string;
+      format?: string;
+      warmup?: boolean;
+    };
+
+    // Warm provider caches / TLS on orb unlock — no audio bytes, no TTS spend.
+    if (body.warmup) {
+      if (!isServerTtsConfigured()) {
+        return NextResponse.json(
+          { ok: false, warmed: false, code: "FALLBACK_BROWSER" },
+          { status: 503 }
+        );
+      }
+      const warm = await warmNovaSpeechPath();
+      return NextResponse.json({ ok: true, ...warm });
+    }
+
     const text = body.text?.trim();
     if (!text) {
       return NextResponse.json({ error: "text required" }, { status: 400 });
@@ -35,12 +52,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const ua = req.headers.get("user-agent") ?? "";
-    const mobileSafari =
-      isMobileSafariUserAgent(ua) ||
-      req.headers.get("x-nova-mobile") === "ios" ||
-      body.format === "wav";
-    const speechFormat = mobileSafari ? ("wav" as const) : ("mpeg" as const);
+    // Prefer MPEG everywhere (smaller/faster TTFA). WAV only if explicitly requested.
+    // Modern iOS AudioContext decodes mp3; client no longer forces wav on iPhone.
+    const speechFormat =
+      body.format === "wav" || req.headers.get("x-nova-format") === "wav"
+        ? ("wav" as const)
+        : ("mpeg" as const);
 
     const { audio, contentType, provider } = await synthesizeNovaSpeech(text, {
       format: speechFormat,

@@ -291,15 +291,31 @@ async function elevenLabsTtsRequest(
   text: string,
   opts?: { format?: NovaSpeechFormat }
 ): Promise<Response> {
+  // Flash = lowest-latency ElevenLabs model (still British when voice is).
   const model =
-    process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2";
+    process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_flash_v2_5";
   const wantWav = opts?.format === "wav";
-  const outputFormat = wantWav ? "pcm_44100" : "mp3_44100_128";
+  // Smaller mp3 = faster download on cellular; pcm_22050 when WAV needed.
+  const outputFormat = wantWav ? "pcm_22050" : "mp3_22050_32";
   // Slightly brisker than default (1.0); ElevenLabs accepts ~0.7–1.2.
   const speed = parseSpeechSpeed(process.env.ELEVENLABS_SPEED, 1.15, 0.7, 1.2);
+  // Max optimize_streaming_latency (0–4) also speeds non-stream TTS TTFA.
+  const latencyOpt = Math.min(
+    4,
+    Math.max(
+      0,
+      Number.parseInt(process.env.ELEVENLABS_OPTIMIZE_LATENCY?.trim() || "4", 10) ||
+        4
+    )
+  );
+
+  const qs = new URLSearchParams({
+    output_format: outputFormat,
+    optimize_streaming_latency: String(latencyOpt),
+  });
 
   return fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${outputFormat}`,
+    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?${qs}`,
     {
       method: "POST",
       headers: {
@@ -434,7 +450,7 @@ async function synthesizeElevenLabs(
 
   if (wantWav) {
     return {
-      audio: pcm16ToWav(raw, 44100),
+      audio: pcm16ToWav(raw, 22050),
       contentType: "audio/wav",
     };
   }
@@ -471,7 +487,8 @@ async function synthesizeGoogle(
     0.25,
     4.0
   );
-  const sampleRateHertz = 24000;
+  // 22.05 kHz keeps British neural quality with smaller/faster payloads.
+  const sampleRateHertz = 22050;
 
   const body = {
     input: { text: clipped },
@@ -551,7 +568,8 @@ async function synthesizeOpenAI(
   const wantWav = opts?.format === "wav";
   // Last resort only. OpenAI has no convincing British female stock voice
   // (`fable` is British but male — user rejected). Do not fake an accent.
-  const model = process.env.OPENAI_TTS_MODEL?.trim() || "gpt-4o-mini-tts";
+  // tts-1 is the low-latency model (avoid tts-1-hd / mini-tts for snappiness).
+  const model = process.env.OPENAI_TTS_MODEL?.trim() || "tts-1";
   // Feminine: nova, shimmer, coral, sage. Avoid fable/onyx/echo (male/deep).
   const rawVoice = (process.env.OPENAI_TTS_VOICE?.trim() || "nova").toLowerCase();
   const voice = OPENAI_DEEP_VOICES.has(rawVoice) ? "nova" : rawVoice;
@@ -609,6 +627,27 @@ async function synthesizeOpenAI(
     audio: Buffer.from(arrayBuffer),
     contentType: wantWav ? "audio/wav" : "audio/mpeg",
   };
+}
+
+/**
+ * Prime provider caches / TLS without synthesizing audio (no TTS credits).
+ * Call from /api/nova/speak?warmup or { warmup: true }.
+ */
+export async function warmNovaSpeechPath(): Promise<{
+  provider: NovaVoiceProvider | null;
+  warmed: boolean;
+}> {
+  const provider = preferredNovaVoiceProvider();
+  if (!provider) return { provider: null, warmed: false };
+
+  if (provider === "elevenlabs") {
+    const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
+    if (apiKey) {
+      await resolveElevenLabsVoiceId(apiKey);
+    }
+  }
+
+  return { provider, warmed: true };
 }
 
 /**
@@ -682,7 +721,7 @@ export async function synthesizeNovaSpeech(
       const viaFallback =
         isElevenLabsConfigured() || isGoogleTtsConfigured();
       console.info(
-        `[nova speak] provider=openai${viaFallback ? " (last resort)" : ""} model=${process.env.OPENAI_TTS_MODEL?.trim() || "gpt-4o-mini-tts"} voice=${process.env.OPENAI_TTS_VOICE?.trim() || "nova"} bytes=${result.audio.length}`
+        `[nova speak] provider=openai${viaFallback ? " (last resort)" : ""} model=${process.env.OPENAI_TTS_MODEL?.trim() || "tts-1"} voice=${process.env.OPENAI_TTS_VOICE?.trim() || "nova"} bytes=${result.audio.length}`
       );
       return { ...result, provider: "openai" };
     } catch (err) {

@@ -12,6 +12,11 @@ import {
   NovaRadarBars,
   NovaSparkline,
 } from "@/components/nova/NovaHudViz";
+import {
+  forceSplitLongRest,
+  pullCompleteSentences,
+  splitIntoSpeakChunks,
+} from "@/lib/nova/speak-chunks";
 
 type Phase =
   | "idle"
@@ -406,8 +411,126 @@ function formatVoiceDiag(parts: {
   return bits.join(" · ");
 }
 
+/** Warm TTS provider caches / TLS after orb unlock (no audio, no credits). */
+function warmSpeakPath(): void {
+  void fetch("/api/nova/speak", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ warmup: true }),
+  }).catch(() => {
+    /* ignore */
+  });
+}
+
+/** Live sentence queue: chat SSE pushes; speak() pulls and TTS-overlaps. */
+function createLiveSpeakQueue(): {
+  push: (sentence: string) => void;
+  close: () => void;
+  take: () => Promise<string | null>;
+} {
+  const items: string[] = [];
+  let closed = false;
+  let wake: (() => void) | null = null;
+  const notify = () => {
+    const w = wake;
+    wake = null;
+    w?.();
+  };
+  return {
+    push(sentence: string) {
+      const s = sentence.trim();
+      if (!s || closed) return;
+      items.push(s);
+      notify();
+    },
+    close() {
+      closed = true;
+      notify();
+    },
+    take() {
+      return new Promise<string | null>((resolve) => {
+        const tryTake = () => {
+          if (items.length > 0) {
+            resolve(items.shift()!);
+            return;
+          }
+          if (closed) {
+            resolve(null);
+            return;
+          }
+          wake = tryTake;
+        };
+        tryTake();
+      });
+    },
+  };
+}
+
+async function readNovaChatSse(
+  res: Response,
+  handlers: {
+    onDelta: (text: string) => void;
+    onDone: (reply: string) => void;
+  }
+): Promise<string> {
+  if (!res.body) {
+    const data = (await res.json()) as { reply?: string; error?: string };
+    if (!res.ok) throw new Error(data.error ?? "Nova failed");
+    const reply = data.reply ?? "…";
+    handlers.onDone(reply);
+    return reply;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalReply = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+    for (const part of parts) {
+      const line = part
+        .split("\n")
+        .map((l) => l.trim())
+        .find((l) => l.startsWith("data:"));
+      if (!line) continue;
+      const raw = line.slice(5).trim();
+      if (!raw) continue;
+      let payload: {
+        type?: string;
+        text?: string;
+        reply?: string;
+        error?: string;
+      };
+      try {
+        payload = JSON.parse(raw) as typeof payload;
+      } catch {
+        continue;
+      }
+      if (payload.type === "delta" && payload.text) {
+        handlers.onDelta(payload.text);
+      } else if (payload.type === "done") {
+        finalReply = payload.reply ?? finalReply;
+        handlers.onDone(finalReply);
+      } else if (payload.type === "error") {
+        throw new Error(payload.error ?? "Nova failed");
+      }
+    }
+  }
+
+  return finalReply || "…";
+}
+
 /** Fetch TTS audio; never treat JSON error bodies as MPEG. */
-async function fetchVoiceAudio(text: string): Promise<VoiceFetchResult> {
+async function fetchVoiceAudio(
+  text: string,
+  signal?: AbortSignal
+): Promise<VoiceFetchResult> {
   const empty: VoiceFetchResult = {
     blob: null,
     useBrowserTts: true,
@@ -426,12 +549,14 @@ async function fetchVoiceAudio(text: string): Promise<VoiceFetchResult> {
         "Content-Type": "application/json",
         ...(isIOS() ? { "X-Nova-Mobile": "ios" } : {}),
       },
-      body: JSON.stringify({
-        text,
-        ...(isIOS() ? { format: "wav" } : {}),
-      }),
+      // Prefer MPEG for latency (smaller). iOS AudioContext decodes mp3 fine.
+      body: JSON.stringify({ text }),
+      signal,
     });
   } catch (err) {
+    if (signal?.aborted) {
+      return { ...empty, error: "aborted" };
+    }
     return {
       ...empty,
       error: err instanceof Error ? err.message : "network failed",
@@ -679,9 +804,16 @@ function normalizeAudioBlob(blob: Blob, formatHint?: string): Blob {
  */
 function playBlobViaAudioContext(
   ctx: AudioContext,
-  blob: Blob
+  blob: Blob,
+  opts?: {
+    onSource?: (source: AudioBufferSourceNode) => void;
+    signal?: AbortSignal;
+  }
 ): Promise<void> {
   return (async () => {
+    if (opts?.signal?.aborted) {
+      throw new DOMException("aborted", "AbortError");
+    }
     if (ctx.state === "suspended") {
       await ctx.resume();
     }
@@ -713,12 +845,29 @@ function playBlobViaAudioContext(
       }
     });
 
+    if (opts?.signal?.aborted) {
+      throw new DOMException("aborted", "AbortError");
+    }
+
     await new Promise<void>((resolve, reject) => {
       try {
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(ctx.destination);
-        source.onended = () => resolve();
+        opts?.onSource?.(source);
+        const onAbort = () => {
+          try {
+            source.stop(0);
+          } catch {
+            /* ignore */
+          }
+          resolve();
+        };
+        opts?.signal?.addEventListener("abort", onAbort, { once: true });
+        source.onended = () => {
+          opts?.signal?.removeEventListener("abort", onAbort);
+          resolve();
+        };
         source.start(0);
       } catch (err) {
         reject(
@@ -1104,6 +1253,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const speakAbortRef = useRef<AbortController | null>(null);
+  const speakWarmRef = useRef(false);
+  const liveSpeakQueueRef = useRef<{ close: () => void } | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const audioUnlockedRef = useRef(false);
@@ -1217,6 +1370,11 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       setVoiceDebug(
         formatVoiceDiag({ unlocked: true, path: "unlock:gesture" })
       );
+      // Warm /api/nova/speak path once so the first real reply isn't cold.
+      if (!speakWarmRef.current) {
+        speakWarmRef.current = true;
+        warmSpeakPath();
+      }
       return true;
     } catch {
       unlockInFlightRef.current = false;
@@ -1973,21 +2131,28 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     startMicRef.current = startMic;
   }, [startMic]);
 
+  /**
+   * Sentence-streamed server TTS: fetch chunk N+1 while chunk N plays.
+   * Accepts full text, or a live queue fed while chat SSE streams.
+   */
   const speak = useCallback(
-    async (text: string, after: ListenMode = "wake") => {
+    async (
+      input: string | { take: () => Promise<string | null> },
+      after: ListenMode = "wake",
+      fullTextForFallback?: string
+    ) => {
       const epoch = outputEpochRef.current;
       const stillCurrent = () => outputEpochRef.current === epoch;
+
+      speakAbortRef.current?.abort();
+      const speakAc = new AbortController();
+      speakAbortRef.current = speakAc;
 
       resumeModeRef.current = after;
       setPhase("speaking");
       killMic();
       waitingForTapRef.current = false;
       pendingVoiceRef.current = null;
-
-      let voiceBlob: Blob | null = null;
-      let useBrowserTts = false;
-      let prefetchedUrl: string | undefined;
-      let fetchMeta: VoiceFetchResult | null = null;
 
       const providerLabel = (provider?: string) =>
         provider === "openai"
@@ -2009,8 +2174,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         }
 
         let lastErr: unknown;
-        // Prefer AudioContext: once unlocked in a prior orb/send tap, iOS allows
-        // decode+start after await (speechSynthesis does not).
         if (ctx) {
           for (let attempt = 0; attempt < 2; attempt++) {
             if (!stillCurrent()) throw new DOMException("aborted", "AbortError");
@@ -2018,15 +2181,26 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
               if (ctx.state === "suspended") {
                 await ctx.resume();
               }
-              await playBlobViaAudioContext(ctx, blob);
-              return attempt === 0 ? "auto:audiocontext" : "auto:audiocontext-retry";
+              await playBlobViaAudioContext(ctx, blob, {
+                signal: speakAc.signal,
+                onSource: (source) => {
+                  activeSourceRef.current = source;
+                },
+              });
+              activeSourceRef.current = null;
+              return attempt === 0
+                ? "auto:audiocontext"
+                : "auto:audiocontext-retry";
             } catch (err) {
+              activeSourceRef.current = null;
+              if (err instanceof DOMException && err.name === "AbortError") {
+                throw err;
+              }
               lastErr = err;
             }
           }
         }
 
-        // Second path: HTMLAudioElement (works on desktop; sometimes on iOS).
         if (audioElRef.current) {
           if (!stillCurrent()) throw new DOMException("aborted", "AbortError");
           try {
@@ -2042,6 +2216,33 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           : new Error("Server TTS playback failed");
       };
 
+      // Normalize input into an async chunk iterator.
+      let take: () => Promise<string | null>;
+      let fallbackText = fullTextForFallback ?? "";
+      if (typeof input === "string") {
+        const chunks = splitIntoSpeakChunks(input);
+        fallbackText = input;
+        let idx = 0;
+        take = async () => (idx < chunks.length ? chunks[idx++]! : null);
+      } else {
+        take = () => input.take();
+      }
+
+      const prefetch = new Map<number, Promise<VoiceFetchResult>>();
+      const ensureFetch = (i: number, text: string) => {
+        if (!prefetch.has(i)) {
+          prefetch.set(i, fetchVoiceAudio(text, speakAc.signal));
+        }
+        return prefetch.get(i)!;
+      };
+
+      let voiceBlob: Blob | null = null;
+      let useBrowserTts = false;
+      let prefetchedUrl: string | undefined;
+      let fetchMeta: VoiceFetchResult | null = null;
+      let playedAny = false;
+      const spokenParts: string[] = [];
+
       try {
         if (!stillCurrent()) return;
 
@@ -2054,111 +2255,176 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           window.speechSynthesis?.cancel();
         }
 
-        fetchMeta = await fetchVoiceAudio(text);
-        if (!stillCurrent()) return;
-        voiceBlob = fetchMeta.blob;
-        useBrowserTts = fetchMeta.useBrowserTts;
-
-        setVoiceDebug(
-          formatVoiceDiag({
-            unlocked: audioUnlockedRef.current,
-            status: fetchMeta.status,
-            contentType: fetchMeta.contentType,
-            bytes: fetchMeta.bytes,
-            format: fetchMeta.format,
-            path: isIOS() ? "ios:fetch-done" : "fetch-done",
-            error: fetchMeta.error,
-          })
-        );
-
-        const usingDeviceTts = useBrowserTts || !voiceBlob;
-
-        // Server TTS audio → auto-play. This is the iPhone primary path.
-        if (voiceBlob && !usingDeviceTts) {
-          prefetchedUrl = prefetchVoiceUrl(voiceBlob, fetchMeta.format);
-          setVoicePathLabel(providerLabel(fetchMeta.provider));
-
-          if (audioUnlockedRef.current) {
-            try {
-              const path = await playServerBlob(voiceBlob);
-              if (!stillCurrent()) return;
-              setVoiceDebug(
-                formatVoiceDiag({
-                  unlocked: true,
-                  path,
-                  bytes: fetchMeta.bytes,
-                  format: fetchMeta.format,
-                })
-              );
-              setError(null);
-              return;
-            } catch (err) {
-              if (!stillCurrent()) return;
-              const msg =
-                err instanceof Error ? err.message : "autoplay failed";
-              setVoiceDebug(
-                formatVoiceDiag({ path: "auto:fail", error: msg })
-              );
-            }
-          }
-
+        // Pull first chunk (may wait on live SSE sentence queue).
+        let chunkIndex = 0;
+        let nextChunk = await take();
+        if (!nextChunk) {
           if (!stillCurrent()) return;
-          // Invisible recovery on next natural gesture — no "tap orb" copy.
-          queueSilentRecovery(
-            {
-              text,
-              blob: voiceBlob,
-              url: prefetchedUrl,
-              after,
-              useBrowserTts: false,
-            },
-            fetchMeta
-          );
-          setError(null);
+          resumeAfterSpeech(after);
           return;
         }
 
-        // Android APK native TTS (still works without server audio).
-        if (isNovaApk() && hasNativeTts()) {
+        // Pipeline: while playing i, prefetch i+1.
+        while (nextChunk && stillCurrent()) {
+          const text = nextChunk;
+          spokenParts.push(text);
+          const fetchPromise = ensureFetch(chunkIndex, text);
+
+          // Speculatively pull + prefetch the following sentence.
+          const upcomingPromise = take();
+          void upcomingPromise.then((upcoming) => {
+            if (upcoming && stillCurrent()) {
+              ensureFetch(chunkIndex + 1, upcoming);
+            }
+          });
+
+          fetchMeta = await fetchPromise;
+          if (!stillCurrent()) return;
+
+          voiceBlob = fetchMeta.blob;
+          useBrowserTts = fetchMeta.useBrowserTts;
+
+          setVoiceDebug(
+            formatVoiceDiag({
+              unlocked: audioUnlockedRef.current,
+              status: fetchMeta.status,
+              contentType: fetchMeta.contentType,
+              bytes: fetchMeta.bytes,
+              format: fetchMeta.format,
+              path: `chunk:${chunkIndex}`,
+              error: fetchMeta.error,
+            })
+          );
+
+          const usingDeviceTts = useBrowserTts || !voiceBlob;
+
+          if (voiceBlob && !usingDeviceTts) {
+            prefetchedUrl = prefetchVoiceUrl(voiceBlob, fetchMeta.format);
+            setVoicePathLabel(providerLabel(fetchMeta.provider));
+
+            if (audioUnlockedRef.current) {
+              try {
+                const path = await playServerBlob(voiceBlob);
+                if (!stillCurrent()) return;
+                playedAny = true;
+                setVoiceDebug(
+                  formatVoiceDiag({
+                    unlocked: true,
+                    path: `${path}+chunk${chunkIndex}`,
+                    bytes: fetchMeta.bytes,
+                    format: fetchMeta.format,
+                  })
+                );
+                setError(null);
+                chunkIndex += 1;
+                nextChunk = await upcomingPromise;
+                continue;
+              } catch (err) {
+                if (!stillCurrent()) return;
+                if (err instanceof DOMException && err.name === "AbortError") {
+                  return;
+                }
+                const msg =
+                  err instanceof Error ? err.message : "autoplay failed";
+                setVoiceDebug(
+                  formatVoiceDiag({ path: "auto:fail", error: msg })
+                );
+              }
+            }
+
+            // Could not autoplay this chunk — queue silent recovery for remainder.
+            if (!stillCurrent()) return;
+            const remainder = [text, await upcomingPromise]
+              .concat(
+                await (async () => {
+                  const rest: string[] = [];
+                  for (;;) {
+                    const c = await take();
+                    if (!c) break;
+                    rest.push(c);
+                  }
+                  return rest;
+                })()
+              )
+              .filter((s): s is string => Boolean(s))
+              .join(" ");
+            queueSilentRecovery(
+              {
+                text: remainder || fallbackText || text,
+                blob: voiceBlob,
+                url: prefetchedUrl,
+                after,
+                useBrowserTts: false,
+              },
+              fetchMeta
+            );
+            setError(null);
+            return;
+          }
+
+          // Server TTS unavailable — fall back once for the full reply.
+          const remainder = [text, await upcomingPromise]
+            .concat(
+              await (async () => {
+                const rest: string[] = [];
+                for (;;) {
+                  const c = await take();
+                  if (!c) break;
+                  rest.push(c);
+                }
+                return rest;
+              })()
+            )
+            .filter((s): s is string => Boolean(s))
+            .join(" ");
+          const speakAll = remainder || fallbackText || text;
+
+          if (isNovaApk() && hasNativeTts()) {
+            setVoicePathLabel("Device voice");
+            await speakWithNative(speakAll);
+            if (!stillCurrent()) return;
+            setVoiceDebug(null);
+            setError(null);
+            return;
+          }
+
+          if (isIOS() || isMobileTouchDevice()) {
+            if (!stillCurrent()) return;
+            setVoicePathLabel("Device voice");
+            queueSilentRecovery(
+              {
+                text: speakAll,
+                blob: null,
+                after,
+                useBrowserTts: true,
+              },
+              fetchMeta
+            );
+            setError(null);
+            return;
+          }
+
           setVoicePathLabel("Device voice");
-          await speakWithNative(text);
+          await speakWithFreeVoice(speakAll);
           if (!stillCurrent()) return;
           setVoiceDebug(null);
           setError(null);
           return;
         }
 
-        // Device speechSynthesis: desktop last resort only — never iPhone primary.
-        if (isIOS() || isMobileTouchDevice()) {
-          if (!stillCurrent()) return;
-          setVoicePathLabel("Device voice");
-          queueSilentRecovery(
-            {
-              text,
-              blob: null,
-              after,
-              useBrowserTts: true,
-            },
-            fetchMeta
-          );
-          setError(null);
-          return;
-        }
-
-        setVoicePathLabel("Device voice");
-        await speakWithFreeVoice(text);
-        if (!stillCurrent()) return;
-        setVoiceDebug(null);
-        setError(null);
+        if (playedAny) setError(null);
       } catch (err) {
         if (!stillCurrent()) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        const joined =
+          fallbackText || spokenParts.join(" ") || "Nova voice failed";
         if (
           err instanceof NeedsGesturePlaybackError ||
           needsGestureForVoice()
         ) {
           queueSilentRecovery(
             {
-              text,
+              text: joined,
               blob: voiceBlob,
               url: prefetchedUrl,
               after,
@@ -2171,7 +2437,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         }
         try {
           if (!(isIOS() || isMobileTouchDevice())) {
-            await speakWithFreeVoice(text);
+            await speakWithFreeVoice(joined);
             if (!stillCurrent()) return;
             setVoiceDebug(null);
             setError(null);
@@ -2183,7 +2449,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         if (!stillCurrent()) return;
         queueSilentRecovery(
           {
-            text,
+            text: joined,
             blob: voiceBlob,
             url: prefetchedUrl,
             after,
@@ -2193,9 +2459,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         );
         setError(null);
       } finally {
-        // Superseded speak must not steal the mic from a newer ask.
+        if (speakAbortRef.current === speakAc) {
+          speakAbortRef.current = null;
+        }
         if (!stillCurrent()) return;
-        // Always resume listening — silent recovery drains on next natural tap.
         resumeAfterSpeech(after);
       }
     },
@@ -2220,8 +2487,18 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     if (phaseRef.current === "thinking" || phaseRef.current === "speaking") {
       chatAbortRef.current?.abort();
       chatAbortRef.current = null;
+      speakAbortRef.current?.abort();
+      speakAbortRef.current = null;
+      liveSpeakQueueRef.current?.close();
+      liveSpeakQueueRef.current = null;
       chatSeqRef.current += 1;
       outputEpochRef.current += 1;
+      try {
+        activeSourceRef.current?.stop(0);
+      } catch {
+        /* ignore */
+      }
+      activeSourceRef.current = null;
       stopNativeTts();
       try {
         window.speechSynthesis?.cancel();
@@ -2275,7 +2552,17 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const interruptOutput = useCallback(() => {
     chatAbortRef.current?.abort();
     chatAbortRef.current = null;
+    speakAbortRef.current?.abort();
+    speakAbortRef.current = null;
+    liveSpeakQueueRef.current?.close();
+    liveSpeakQueueRef.current = null;
     outputEpochRef.current += 1;
+    try {
+      activeSourceRef.current?.stop(0);
+    } catch {
+      /* ignore */
+    }
+    activeSourceRef.current = null;
     stopNativeTts();
     try {
       window.speechSynthesis?.cancel();
@@ -2332,38 +2619,129 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         }, 120);
       }
 
+      const assistantId = `a-${Date.now()}`;
       setLines((prev) => [
         ...prev,
         { id: `u-${Date.now()}`, role: "user", content: cleaned },
+        { id: assistantId, role: "assistant", content: "" },
       ]);
+
+      const liveQueue = createLiveSpeakQueue();
+      liveSpeakQueueRef.current = liveQueue;
+      let speakPromise: Promise<void> | null = null;
+      let streamBuf = "";
+      let startedSpeak = false;
+
+      const ensureSpeakStarted = () => {
+        if (startedSpeak || chatSeqRef.current !== seq) return;
+        startedSpeak = true;
+        // Kick TTS as soon as sentence 1 is ready — don't wait for full reply.
+        speakPromise = speak(liveQueue, "command").finally(() => {
+          if (liveSpeakQueueRef.current === liveQueue) {
+            liveSpeakQueueRef.current = null;
+          }
+        });
+      };
+
+      const pushFromBuffer = (forceLong = false) => {
+        let { sentences, rest } = pullCompleteSentences(streamBuf);
+        streamBuf = rest;
+        if (forceLong) {
+          const forced = forceSplitLongRest(streamBuf);
+          if (forced.sentences.length) {
+            sentences = [...sentences, ...forced.sentences];
+            streamBuf = forced.rest;
+          }
+        }
+        for (const s of sentences) {
+          liveQueue.push(s);
+          ensureSpeakStarted();
+        }
+      };
 
       try {
         const res = await fetch("/api/nova/chat", {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: cleaned }),
+          body: JSON.stringify({ message: cleaned, stream: true }),
           signal: ac.signal,
         });
-        if (chatSeqRef.current !== seq) return;
-        const data = (await res.json()) as { reply?: string; error?: string };
-        if (!res.ok) throw new Error(data.error ?? "Nova failed");
+        if (chatSeqRef.current !== seq) {
+          liveQueue.close();
+          return;
+        }
+        if (!res.ok) {
+          let errMsg = "Nova failed";
+          try {
+            const data = (await res.json()) as { error?: string };
+            errMsg = data.error ?? errMsg;
+          } catch {
+            /* ignore */
+          }
+          throw new Error(errMsg);
+        }
 
-        const reply = data.reply ?? "…";
-        setLines((prev) => [
-          ...prev,
-          { id: `a-${Date.now()}`, role: "assistant", content: reply },
-        ]);
-        await refreshStatus();
+        const reply = await readNovaChatSse(res, {
+          onDelta: (delta) => {
+            if (chatSeqRef.current !== seq) return;
+            streamBuf += delta;
+            setLines((prev) =>
+              prev.map((line) =>
+                line.id === assistantId
+                  ? { ...line, content: (line.content || "") + delta }
+                  : line
+              )
+            );
+            pushFromBuffer(true);
+          },
+          onDone: (finalReply) => {
+            if (chatSeqRef.current !== seq) return;
+            setLines((prev) =>
+              prev.map((line) =>
+                line.id === assistantId
+                  ? { ...line, content: finalReply || line.content || "…" }
+                  : line
+              )
+            );
+          },
+        });
+
+        if (chatSeqRef.current !== seq) {
+          liveQueue.close();
+          return;
+        }
+
+        // Flush any remainder without terminal punctuation.
+        if (streamBuf.trim()) {
+          liveQueue.push(streamBuf.trim());
+          streamBuf = "";
+          ensureSpeakStarted();
+        } else if (!startedSpeak && reply.trim()) {
+          // No deltas (tool-only path) — speak the finished reply in chunks.
+          for (const chunk of splitIntoSpeakChunks(reply)) {
+            liveQueue.push(chunk);
+          }
+          ensureSpeakStarted();
+        }
+
+        liveQueue.close();
+        void refreshStatus();
         if (chatSeqRef.current !== seq) return;
-        await speak(reply, "command");
+        if (speakPromise) {
+          await speakPromise;
+        } else if (reply.trim()) {
+          await speak(reply, "command");
+        } else {
+          phaseRef.current = "listening_command";
+          setPhase("listening_command");
+          resumeAfterSpeech("command");
+        }
       } catch (err) {
+        liveQueue.close();
         if (ac.signal.aborted || chatSeqRef.current !== seq) return;
         const msg = err instanceof Error ? err.message : "Nova failed";
-        if (
-          err instanceof DOMException &&
-          err.name === "AbortError"
-        ) {
+        if (err instanceof DOMException && err.name === "AbortError") {
           return;
         }
         setError(msg);
@@ -2380,6 +2758,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       interruptOutput,
       openConversation,
       refreshStatus,
+      resumeAfterSpeech,
       speak,
       unlockAudioInGesture,
     ]

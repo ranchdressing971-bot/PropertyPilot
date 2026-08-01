@@ -77,6 +77,11 @@ Talk while you work (critical):
 - One chat reply at a time is fine; background ticks + the job queue are the parallel workers. If he interrupts, drop the old ask and answer the new one.
 - When he asks status mid-run, call status and report queue / armed / blockers plainly.
 
+Spoken replies (voice is default):
+- Keep voice turns tight: usually 1-3 short sentences. Lead with the answer, then one beat of context if needed.
+- Do not pad with recap, options menus, or "let me know if you want more" closers.
+- Still be useful: numbers, blockers, and the next action stay in the reply when they matter. Long dumps only when he explicitly asks for a full breakdown.
+
 Delivery reality (be honest — check status.delivery every time it matters):
 - Mailtrap is NOT verified and is NOT the go-live path.
 - When Isaac gets the custom domain, live outreach will go through Resend — not Mailtrap.
@@ -137,7 +142,131 @@ export interface NovaChatResult {
   toolCalls: Array<{ name: string; result: string }>;
 }
 
-export async function runNovaChat(userMessage: string): Promise<NovaChatResult> {
+export type NovaChatDeltaHandler = (delta: string) => void;
+
+type StreamToolAcc = {
+  id: string;
+  name: string;
+  arguments: string;
+};
+
+async function streamAssistantRound(
+  messages: ChatCompletionMessageParam[],
+  tools: ChatCompletionTool[],
+  onDelta?: NovaChatDeltaHandler
+): Promise<{
+  content: string;
+  toolCalls: Array<{
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }>;
+}> {
+  const completion = await createChatCompletion(
+    {
+      model: MODEL,
+      temperature: 0.65,
+      messages,
+      tools,
+      tool_choice: "auto",
+      stream: true,
+    },
+    "nova-chat"
+  );
+
+  if (
+    !completion ||
+    typeof completion !== "object" ||
+    !(Symbol.asyncIterator in completion)
+  ) {
+    // Non-stream fallback (should not happen when stream:true).
+    const choice =
+      completion && typeof completion === "object" && "choices" in completion
+        ? (
+            completion as {
+              choices?: Array<{
+                message?: {
+                  content?: string | null;
+                  tool_calls?: Array<{
+                    id: string;
+                    type: string;
+                    function: { name: string; arguments?: string };
+                  }>;
+                };
+              }>;
+            }
+          ).choices?.[0]?.message
+        : null;
+    if (!choice) throw new Error("Nova returned empty completion");
+    const toolCalls = (choice.tool_calls ?? [])
+      .filter((c) => c.type === "function")
+      .map((c) => ({
+        id: c.id,
+        type: "function" as const,
+        function: {
+          name: c.function.name,
+          arguments: c.function.arguments ?? "{}",
+        },
+      }));
+    const content = (choice.content ?? "").trim();
+    if (!toolCalls.length && content && onDelta) onDelta(content);
+    return { content, toolCalls };
+  }
+
+  let content = "";
+  let sawToolCall = false;
+  const toolAcc = new Map<number, StreamToolAcc>();
+
+  for await (const chunk of completion as AsyncIterable<{
+    choices?: Array<{
+      delta?: {
+        content?: string | null;
+        tool_calls?: Array<{
+          index?: number;
+          id?: string;
+          function?: { name?: string; arguments?: string };
+        }>;
+      };
+    }>;
+  }>) {
+    const delta = chunk.choices?.[0]?.delta;
+    if (!delta) continue;
+
+    if (delta.tool_calls?.length) {
+      sawToolCall = true;
+      for (const tc of delta.tool_calls) {
+        const idx = tc.index ?? 0;
+        const prev = toolAcc.get(idx) ?? { id: "", name: "", arguments: "" };
+        if (tc.id) prev.id = tc.id;
+        if (tc.function?.name) prev.name = tc.function.name;
+        if (tc.function?.arguments) prev.arguments += tc.function.arguments;
+        toolAcc.set(idx, prev);
+      }
+    }
+
+    if (delta.content) {
+      content += delta.content;
+      // Only stream tokens for text-final rounds (no tool calls).
+      if (!sawToolCall) onDelta?.(delta.content);
+    }
+  }
+
+  const toolCalls = [...toolAcc.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, t]) => ({
+      id: t.id,
+      type: "function" as const,
+      function: { name: t.name, arguments: t.arguments || "{}" },
+    }))
+    .filter((t) => t.id && t.function.name);
+
+  return { content: content.trim(), toolCalls };
+}
+
+export async function runNovaChat(
+  userMessage: string,
+  opts?: { onDelta?: NovaChatDeltaHandler }
+): Promise<NovaChatResult> {
   if (!getOpenAIApiKey()) {
     throw new Error("OPENAI_API_KEY is not configured");
   }
@@ -184,31 +313,21 @@ export async function runNovaChat(userMessage: string): Promise<NovaChatResult> 
   let finalReply = "";
 
   for (let round = 0; round < 4; round++) {
-    const completion = await createChatCompletion(
-      {
-        model: MODEL,
-        temperature: 0.65,
-        messages,
-        tools,
-        tool_choice: "auto",
-      },
-      "nova-chat"
+    const { content, toolCalls } = await streamAssistantRound(
+      messages,
+      tools,
+      // Only stream deltas on rounds that end as text (handler no-ops if tools appear).
+      opts?.onDelta
     );
 
-    const choice =
-      "choices" in completion ? completion.choices[0]?.message : null;
-    if (!choice) throw new Error("Nova returned empty completion");
-
-    const toolCalls = choice.tool_calls;
-    if (toolCalls && toolCalls.length > 0) {
+    if (toolCalls.length > 0) {
       messages.push({
         role: "assistant",
-        content: choice.content,
+        content: content || null,
         tool_calls: toolCalls,
       });
 
       for (const call of toolCalls) {
-        if (call.type !== "function") continue;
         const name = call.function.name;
         const result = await runNovaTool(name, call.function.arguments ?? "{}");
         toolTrace.push({ name, result });
@@ -227,8 +346,7 @@ export async function runNovaChat(userMessage: string): Promise<NovaChatResult> 
       continue;
     }
 
-    finalReply =
-      (choice.content ?? "").trim() || "Alright big dog, what's next?";
+    finalReply = content || "Alright big dog, what's next?";
     break;
   }
 
@@ -237,6 +355,7 @@ export async function runNovaChat(userMessage: string): Promise<NovaChatResult> 
       toolTrace.length > 0
         ? "Got the numbers. Want the headline or the full breakdown?"
         : "Didn't catch that. Run it by me again?";
+    opts?.onDelta?.(finalReply);
   }
 
   await saveNovaMessage({ role: "assistant", content: finalReply });
