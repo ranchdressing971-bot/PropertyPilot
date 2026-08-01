@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { checkNexusAdmin } from "@/lib/nexus/admin";
 import { runNovaChat } from "@/lib/nova/chat";
+import { runTick } from "@/lib/nexus/runner";
 
 export const maxDuration = 60;
 
@@ -21,6 +22,30 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await runNovaChat(message);
+
+    // If Nova kicked pipeline work during this turn, let a tick continue after
+    // the reply is sent so the chat request itself stays short.
+    const kickedAsync = result.toolCalls.some((t) => {
+      try {
+        const parsed = JSON.parse(t.result) as { async?: boolean; kicked?: boolean };
+        return parsed.async === true || parsed.kicked === true;
+      } catch {
+        return false;
+      }
+    });
+    if (kickedAsync) {
+      after(async () => {
+        try {
+          await runTick();
+        } catch (err) {
+          console.error(
+            "[nova chat] after-response tick failed:",
+            err instanceof Error ? err.message : err
+          );
+        }
+      });
+    }
+
     return NextResponse.json({
       reply: result.reply,
       toolCalls: result.toolCalls,

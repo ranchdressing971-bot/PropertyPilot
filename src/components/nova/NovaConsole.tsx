@@ -1100,6 +1100,11 @@ export function NovaConsole() {
   /** After TTS, restart mic in wake (dormant) or command (open) mode. */
   const resumeModeRef = useRef<ListenMode>("command");
   const askNovaRef = useRef<(message: string) => Promise<void>>(async () => {});
+  /** Monotonic id so a newer ask can supersede an in-flight chat/speak. */
+  const chatSeqRef = useRef(0);
+  const chatAbortRef = useRef<AbortController | null>(null);
+  /** Bumped when output is interrupted so a stale speak() bails cleanly. */
+  const outputEpochRef = useRef(0);
   const startMicRef = useRef<(mode?: ListenMode) => void>(() => {});
   const openConversationRef = useRef<() => void>(() => {});
   const goDormantRef = useRef<() => void>(() => {});
@@ -1689,7 +1694,8 @@ export function NovaConsole() {
   const startMic = useCallback(
     (mode: ListenMode = "wake") => {
       if (!listeningOnRef.current) return;
-      if (phaseRef.current === "thinking" || phaseRef.current === "speaking") {
+      // Speaking locks the mic (echo). Thinking stays open so Isaac can barge in.
+      if (phaseRef.current === "speaking") {
         return;
       }
 
@@ -1707,10 +1713,13 @@ export function NovaConsole() {
       recognition.lang = "en-US";
       recognitionRef.current = recognition;
 
-      phaseRef.current =
-        mode === "command" ? "listening_command" : "listening_wake";
-      setPhase(phaseRef.current);
-      if (mode === "command") armSilenceEnd();
+      // Preserve "thinking" chrome while still capturing barge-in commands.
+      if (phaseRef.current !== "thinking") {
+        phaseRef.current =
+          mode === "command" ? "listening_command" : "listening_wake";
+        setPhase(phaseRef.current);
+      }
+      if (mode === "command" || phaseRef.current === "thinking") armSilenceEnd();
       else clearSilenceEnd();
 
       const commitUtterance = (raw: string) => {
@@ -1739,10 +1748,8 @@ export function NovaConsole() {
       };
 
       recognition.onresult = (event) => {
-        if (
-          phaseRef.current === "thinking" ||
-          phaseRef.current === "speaking"
-        ) {
+        // Allow barge-in while thinking; only mute recognition while she speaks.
+        if (phaseRef.current === "speaking") {
           return;
         }
 
@@ -1791,7 +1798,11 @@ export function NovaConsole() {
           return;
         }
 
-        if (phaseRef.current === "listening_command") {
+        // Open conversation OR mid-think barge-in — same command path.
+        if (
+          phaseRef.current === "listening_command" ||
+          phaseRef.current === "thinking"
+        ) {
           armSilenceEnd();
 
           if (isWakeOnly(text)) {
@@ -1831,26 +1842,24 @@ export function NovaConsole() {
       recognition.onend = () => {
         if (restartingRef.current) return;
         if (!listeningOnRef.current) return;
-        if (
-          phaseRef.current === "thinking" ||
-          phaseRef.current === "speaking"
-        ) {
+        // Keep listening through thinking (barge-in); only pause while speaking.
+        if (phaseRef.current === "speaking") {
           return;
         }
         // Chrome drops continuous sessions — spawn a fresh one.
         window.setTimeout(() => {
           if (!listeningOnRef.current) return;
-          if (
-            phaseRef.current === "thinking" ||
-            phaseRef.current === "speaking"
-          ) {
+          if (phaseRef.current === "speaking") {
             return;
           }
           if (recognitionRef.current !== recognition) return;
           recognitionRef.current = null;
-          startMicRef.current(
-            phaseRef.current === "listening_command" ? "command" : "wake"
-          );
+          const mode: ListenMode =
+            phaseRef.current === "listening_command" ||
+            phaseRef.current === "thinking"
+              ? "command"
+              : "wake";
+          startMicRef.current(mode);
         }, 250);
       };
 
@@ -1872,6 +1881,9 @@ export function NovaConsole() {
 
   const speak = useCallback(
     async (text: string, after: ListenMode = "wake") => {
+      const epoch = outputEpochRef.current;
+      const stillCurrent = () => outputEpochRef.current === epoch;
+
       resumeModeRef.current = after;
       setPhase("speaking");
       killMic();
@@ -1907,6 +1919,7 @@ export function NovaConsole() {
         // decode+start after await (speechSynthesis does not).
         if (ctx) {
           for (let attempt = 0; attempt < 2; attempt++) {
+            if (!stillCurrent()) throw new DOMException("aborted", "AbortError");
             try {
               if (ctx.state === "suspended") {
                 await ctx.resume();
@@ -1921,6 +1934,7 @@ export function NovaConsole() {
 
         // Second path: HTMLAudioElement (works on desktop; sometimes on iOS).
         if (audioElRef.current) {
+          if (!stillCurrent()) throw new DOMException("aborted", "AbortError");
           try {
             await playBlobOnElement(audioElRef.current, blob, objectUrlRef);
             return "auto:audio";
@@ -1935,15 +1949,19 @@ export function NovaConsole() {
       };
 
       try {
+        if (!stillCurrent()) return;
+
         if (!isIOS()) {
           if (!audioUnlockedRef.current) {
             await unlockAudio();
           }
+          if (!stillCurrent()) return;
           stopNativeTts();
           window.speechSynthesis?.cancel();
         }
 
         fetchMeta = await fetchVoiceAudio(text);
+        if (!stillCurrent()) return;
         voiceBlob = fetchMeta.blob;
         useBrowserTts = fetchMeta.useBrowserTts;
 
@@ -1969,6 +1987,7 @@ export function NovaConsole() {
           if (audioUnlockedRef.current) {
             try {
               const path = await playServerBlob(voiceBlob);
+              if (!stillCurrent()) return;
               setVoiceDebug(
                 formatVoiceDiag({
                   unlocked: true,
@@ -1980,6 +1999,7 @@ export function NovaConsole() {
               setError(null);
               return;
             } catch (err) {
+              if (!stillCurrent()) return;
               const msg =
                 err instanceof Error ? err.message : "autoplay failed";
               setVoiceDebug(
@@ -1988,6 +2008,7 @@ export function NovaConsole() {
             }
           }
 
+          if (!stillCurrent()) return;
           // Invisible recovery on next natural gesture — no "tap orb" copy.
           queueSilentRecovery(
             {
@@ -2007,6 +2028,7 @@ export function NovaConsole() {
         if (isNovaApk() && hasNativeTts()) {
           setVoicePathLabel("Device voice");
           await speakWithNative(text);
+          if (!stillCurrent()) return;
           setVoiceDebug(null);
           setError(null);
           return;
@@ -2014,6 +2036,7 @@ export function NovaConsole() {
 
         // Device speechSynthesis: desktop last resort only — never iPhone primary.
         if (isIOS() || isMobileTouchDevice()) {
+          if (!stillCurrent()) return;
           setVoicePathLabel("Device voice");
           queueSilentRecovery(
             {
@@ -2030,9 +2053,11 @@ export function NovaConsole() {
 
         setVoicePathLabel("Device voice");
         await speakWithFreeVoice(text);
+        if (!stillCurrent()) return;
         setVoiceDebug(null);
         setError(null);
       } catch (err) {
+        if (!stillCurrent()) return;
         if (
           err instanceof NeedsGesturePlaybackError ||
           needsGestureForVoice()
@@ -2053,6 +2078,7 @@ export function NovaConsole() {
         try {
           if (!(isIOS() || isMobileTouchDevice())) {
             await speakWithFreeVoice(text);
+            if (!stillCurrent()) return;
             setVoiceDebug(null);
             setError(null);
             return;
@@ -2060,6 +2086,7 @@ export function NovaConsole() {
         } catch {
           /* fall through */
         }
+        if (!stillCurrent()) return;
         queueSilentRecovery(
           {
             text,
@@ -2072,6 +2099,8 @@ export function NovaConsole() {
         );
         setError(null);
       } finally {
+        // Superseded speak must not steal the mic from a newer ask.
+        if (!stillCurrent()) return;
         // Always resume listening — silent recovery drains on next natural tap.
         resumeAfterSpeech(after);
       }
@@ -2093,9 +2122,28 @@ export function NovaConsole() {
       commandTimerRef.current = null;
     }
     commandBufferRef.current = "";
+    // Close-intent can land while she's thinking/speaking — cancel and sleep.
     if (phaseRef.current === "thinking" || phaseRef.current === "speaking") {
-      resumeModeRef.current = "wake";
-      return;
+      chatAbortRef.current?.abort();
+      chatAbortRef.current = null;
+      chatSeqRef.current += 1;
+      outputEpochRef.current += 1;
+      stopNativeTts();
+      try {
+        window.speechSynthesis?.cancel();
+      } catch {
+        /* ignore */
+      }
+      const el = audioElRef.current;
+      if (el) {
+        try {
+          el.pause();
+        } catch {
+          /* ignore */
+        }
+      }
+      pendingVoiceRef.current = null;
+      waitingForTapRef.current = false;
     }
     phaseRef.current = "listening_wake";
     setPhase("listening_wake");
@@ -2108,11 +2156,13 @@ export function NovaConsole() {
 
   const openConversation = useCallback(() => {
     handleUserGesture();
-    if (phaseRef.current === "thinking" || phaseRef.current === "speaking") {
+    if (phaseRef.current === "speaking") {
       return;
     }
-    phaseRef.current = "listening_command";
-    setPhase("listening_command");
+    if (phaseRef.current !== "thinking") {
+      phaseRef.current = "listening_command";
+      setPhase("listening_command");
+    }
     armSilenceEnd();
     if (!recognitionRef.current && listeningOnRef.current) {
       startMicRef.current("command");
@@ -2127,6 +2177,29 @@ export function NovaConsole() {
     openConversationRef.current = openConversation;
   }, [openConversation]);
 
+  /** Stop in-flight chat reply audio so a new ask can take over. */
+  const interruptOutput = useCallback(() => {
+    chatAbortRef.current?.abort();
+    chatAbortRef.current = null;
+    outputEpochRef.current += 1;
+    stopNativeTts();
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {
+      /* ignore */
+    }
+    const el = audioElRef.current;
+    if (el) {
+      try {
+        el.pause();
+      } catch {
+        /* ignore */
+      }
+    }
+    pendingVoiceRef.current = null;
+    waitingForTapRef.current = false;
+  }, []);
+
   const askNova = useCallback(
     async (message: string) => {
       const cleaned = message.trim();
@@ -2140,16 +2213,30 @@ export function NovaConsole() {
         return;
       }
 
+      // Supersede any in-flight chat/speak — conversation stays interruptible.
+      interruptOutput();
+      const ac = new AbortController();
+      chatAbortRef.current = ac;
+      const seq = ++chatSeqRef.current;
+
       // Unlock in this call stack when askNova runs from a tap/submit gesture.
       unlockAudioInGesture();
       setError(null);
       waitingForTapRef.current = false;
       pendingVoiceRef.current = null;
       clearSilenceEnd();
+      phaseRef.current = "thinking";
       setPhase("thinking");
-      killMic();
-      // After she answers, stay open until silence / close intent says you're done.
+      // Keep / restart mic for barge-in while background tools run.
       resumeModeRef.current = "command";
+      if (listeningOnRef.current) {
+        window.setTimeout(() => {
+          if (!listeningOnRef.current) return;
+          if (chatSeqRef.current !== seq) return;
+          if (phaseRef.current !== "thinking") return;
+          if (!recognitionRef.current) startMicRef.current("command");
+        }, 120);
+      }
 
       setLines((prev) => [
         ...prev,
@@ -2162,7 +2249,9 @@ export function NovaConsole() {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: cleaned }),
+          signal: ac.signal,
         });
+        if (chatSeqRef.current !== seq) return;
         const data = (await res.json()) as { reply?: string; error?: string };
         if (!res.ok) throw new Error(data.error ?? "Nova failed");
 
@@ -2172,9 +2261,17 @@ export function NovaConsole() {
           { id: `a-${Date.now()}`, role: "assistant", content: reply },
         ]);
         await refreshStatus();
+        if (chatSeqRef.current !== seq) return;
         await speak(reply, "command");
       } catch (err) {
+        if (ac.signal.aborted || chatSeqRef.current !== seq) return;
         const msg = err instanceof Error ? err.message : "Nova failed";
+        if (
+          err instanceof DOMException &&
+          err.name === "AbortError"
+        ) {
+          return;
+        }
         setError(msg);
         phaseRef.current = "listening_wake";
         setPhase("listening_wake");
@@ -2186,7 +2283,7 @@ export function NovaConsole() {
     [
       clearSilenceEnd,
       goDormant,
-      killMic,
+      interruptOutput,
       openConversation,
       refreshStatus,
       speak,
@@ -2274,7 +2371,7 @@ export function NovaConsole() {
         : phase === "listening_command"
           ? "listening: no wake needed"
           : phase === "thinking"
-            ? "thinking"
+            ? "working · talk anytime"
             : phase === "speaking"
               ? "speaking"
               : "";
@@ -2468,7 +2565,31 @@ export function NovaConsole() {
           <span>Send</span>
           <strong>{status?.sendEnabled ? "ON" : "OFF"}</strong>
         </div>
-        <div className="nova-hud-note">Prep · Resend after domain</div>
+        <div className="nova-hud-row">
+          <span>Autonomy</span>
+          <strong
+            className={
+              status?.novaArmed || (status?.queuedJobs ?? 0) > 0
+                ? "nova-ok"
+                : undefined
+            }
+          >
+            {status?.novaArmed
+              ? (status?.queuedJobs ?? 0) > 0
+                ? "RUN+Q"
+                : "RUN"
+              : (status?.queuedJobs ?? 0) > 0
+                ? "QUEUE"
+                : "IDLE"}
+          </strong>
+        </div>
+        <div className="nova-hud-note">
+          {(status?.queuedJobs ?? 0) > 0
+            ? "Background jobs running · chat stays open"
+            : status?.novaArmed
+              ? "Armed · ticks keep working offline"
+              : "Prep · Resend after domain"}
+        </div>
       </aside>
 
       <aside className="nova-hud nova-hud-right" aria-label="Business HUD">
@@ -2722,12 +2843,15 @@ export function NovaConsole() {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type to Nova…"
+            placeholder={
+              phase === "thinking"
+                ? "Talk anytime while she works…"
+                : "Type to Nova…"
+            }
             className="nova-input"
           />
           <button
             type="submit"
-            disabled={phase === "thinking"}
             className="nova-send"
             onTouchStart={handleUserGesture}
             onPointerDown={handleUserGesture}

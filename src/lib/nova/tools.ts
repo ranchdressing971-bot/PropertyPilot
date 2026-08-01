@@ -83,7 +83,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "find_leads",
       description:
-        "Find HOA management companies (Google Places — costs quota). Pass a city like Austin. Prefer one intentional city; skip if approved drafts are already stocked.",
+        "Queue an HOA lead search (Google Places; costs quota) and kick the background pipeline. Returns immediately so chat stays open. Pass a city like Austin. Prefer one intentional city; skip if approved drafts are already stocked.",
       parameters: {
         type: "object",
         properties: {
@@ -104,7 +104,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "work",
       description:
-        "Process research/draft/review/send jobs (OpenAI $). Don't thrash if the queue is empty or you're in prep_only — one solid batch beats spam loops.",
+        "Kick the background research/draft/review/send queue (OpenAI $). Returns immediately so you can keep talking; ticks continue via the runner. Don't thrash if the queue is empty or you're in prep_only.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
@@ -377,6 +377,25 @@ async function toolLearn(args: Record<string, unknown>) {
   };
 }
 
+/**
+ * Start a tick without blocking chat. Background GitHub Action ticks also drain
+ * the queue; this just gets work moving sooner when Nova is in conversation.
+ */
+function kickPipelineInBackground(reason: string): void {
+  void runTick()
+    .then((tick) => {
+      console.info(
+        `[nova] background tick (${reason}): processed=${tick.processed} ok=${tick.succeeded} fail=${tick.failed}`
+      );
+    })
+    .catch((err) => {
+      console.error(
+        `[nova] background tick (${reason}) failed:`,
+        err instanceof Error ? err.message : err
+      );
+    });
+}
+
 async function toolFindLeads(args: Record<string, unknown>) {
   const city = String(args.city ?? "").trim();
   const custom = String(args.query ?? "").trim();
@@ -399,18 +418,19 @@ async function toolFindLeads(args: Record<string, unknown>) {
     db
   );
 
-  // Kick the pipeline once so work starts without a second tool call.
-  const tick = await runTick();
+  // Do not await the tick — chat + voice stay free while the runner works.
+  kickPipelineInBackground("find_leads");
+  const state = await loadNexusState(5);
 
   return {
     query,
     searchQueued: Boolean(job),
-    work: {
-      processed: tick.processed,
-      succeeded: tick.succeeded,
-      failed: tick.failed,
-    },
-    tip: "Call work again later to keep research/drafts moving.",
+    async: true,
+    jobsQueued: state.queuedCount,
+    plainEnglish: job
+      ? "Lead search queued. Pipeline is running in the background; keep talking."
+      : "That search was already queued. Pipeline kick sent; keep talking.",
+    tip: "Ask status later for progress; call work if the queue looks stuck.",
   };
 }
 
@@ -543,12 +563,17 @@ export async function runNovaTool(
 
     case "work":
     case "continue_pipeline": {
-      const tick = await runTick();
+      const state = await loadNexusState(5);
+      kickPipelineInBackground("work");
       return JSON.stringify({
-        processed: tick.processed,
-        succeeded: tick.succeeded,
-        failed: tick.failed,
-        results: tick.results.slice(0, 8),
+        kicked: true,
+        async: true,
+        jobsQueued: state.queuedCount,
+        plainEnglish:
+          state.queuedCount > 0
+            ? `Kicked the pipeline: ${state.queuedCount} job(s) in queue. Running in background; keep talking.`
+            : "Pipeline kicked. Queue looks empty right now; find_leads or wait for the next autonomy tick if you need more work.",
+        tip: "Background ticks (≈every 10 min) keep draining the queue when the console is closed.",
       });
     }
 
