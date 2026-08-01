@@ -1207,6 +1207,9 @@ function readListenIntentFromLocation(): boolean {
   }
 }
 
+/** One-shot greeting when ?listen=1 (or /nova/go / #listen) is ready. */
+const LISTEN_READY_GREETING = "whats up big dog";
+
 export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [lines, setLines] = useState<ChatLine[]>([]);
@@ -1278,8 +1281,18 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const startMicRef = useRef<(mode?: ListenMode) => void>(() => {});
   const openConversationRef = useRef<() => void>(() => {});
   const goDormantRef = useRef<() => void>(() => {});
+  const speakRef = useRef<
+    (
+      input: string | { take: () => Promise<string | null> },
+      after?: ListenMode,
+      fullTextForFallback?: string
+    ) => Promise<void>
+  >(async () => {});
   const autoListenRef = useRef(autoListen);
   const listenTapNeededRef = useRef(false);
+  /** Once per ?listen=1 session — not on every barge-in / mic restart. */
+  const listenGreetingDoneRef = useRef(false);
+  const maybeSpeakListenGreetingRef = useRef<() => void>(() => {});
 
   /**
    * Unlock audio inside a user gesture without clobbering a prefetched voice URL.
@@ -2111,6 +2124,8 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         if (autoListenRef.current && mode === "command") {
           listenTapNeededRef.current = false;
           setListenTapNeeded(false);
+          // Ready: first successful listen-arm — greet once, then stay in command listen.
+          maybeSpeakListenGreetingRef.current();
         }
       } catch {
         setNeedsGesture(true);
@@ -2130,6 +2145,24 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   useEffect(() => {
     startMicRef.current = startMic;
   }, [startMic]);
+
+  /**
+   * ?listen=1 ready greeting: cloud TTS once, then resume command listen.
+   * Fires after first successful listen-arm (mic started), not on barge-ins.
+   */
+  const maybeSpeakListenGreeting = useCallback(() => {
+    if (!autoListenRef.current) return;
+    if (listenGreetingDoneRef.current) return;
+    if (phaseRef.current === "thinking") return;
+    // Already speaking a reply — don't interrupt with the greeting.
+    if (phaseRef.current === "speaking") return;
+    listenGreetingDoneRef.current = true;
+    void speakRef.current(LISTEN_READY_GREETING, "command");
+  }, []);
+
+  useEffect(() => {
+    maybeSpeakListenGreetingRef.current = maybeSpeakListenGreeting;
+  }, [maybeSpeakListenGreeting]);
 
   /**
    * Sentence-streamed server TTS: fetch chunk N+1 while chunk N plays.
@@ -2475,6 +2508,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       unlockAudio,
     ]
   );
+
+  useEffect(() => {
+    speakRef.current = speak;
+  }, [speak]);
 
   const goDormant = useCallback(() => {
     clearSilenceEnd();
