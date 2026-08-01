@@ -207,13 +207,72 @@ function getAudioContextClass(): typeof AudioContext | undefined {
 const SILENT_WAV =
   "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=";
 
+/** Cached after voiceschanged — iOS often returns [] on first getVoices(). */
+let cachedSpeechVoices: SpeechSynthesisVoice[] = [];
+let preferredSpeechVoice: SpeechSynthesisVoice | undefined;
+let speechVoicesListening = false;
+
+function pickPreferredVoice(
+  voices: SpeechSynthesisVoice[]
+): SpeechSynthesisVoice | undefined {
+  return (
+    voices.find((v) =>
+      /samantha|karen|moira|victoria|susan|zira|google us english|siri/i.test(
+        v.name
+      )
+    ) ||
+    voices.find((v) => /^en-US/i.test(v.lang)) ||
+    voices.find((v) => /^en(-|_)/i.test(v.lang)) ||
+    voices.find((v) => v.lang.toLowerCase().startsWith("en"))
+  );
+}
+
+function rememberSpeechVoices(voices: SpeechSynthesisVoice[]) {
+  if (!voices.length) return;
+  cachedSpeechVoices = voices;
+  preferredSpeechVoice = pickPreferredVoice(voices) ?? preferredSpeechVoice;
+}
+
+/** Warm/cache device voices early (iOS fills these async via voiceschanged). */
+function ensureSpeechVoicesWarm(synth?: SpeechSynthesis) {
+  if (typeof window === "undefined") return;
+  const s = synth ?? window.speechSynthesis;
+  if (!s) return;
+  try {
+    rememberSpeechVoices(s.getVoices());
+  } catch {
+    /* ignore */
+  }
+  if (speechVoicesListening) return;
+  speechVoicesListening = true;
+  const onVoices = () => {
+    try {
+      rememberSpeechVoices(s.getVoices());
+    } catch {
+      /* ignore */
+    }
+  };
+  try {
+    s.addEventListener("voiceschanged", onVoices);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Safari often returns [] until voiceschanged — poll instead of failing early. */
 function waitForSpeechVoices(
   synth: SpeechSynthesis,
   maxMs = 2500
 ): Promise<SpeechSynthesisVoice[]> {
+  ensureSpeechVoicesWarm(synth);
   const existing = synth.getVoices();
-  if (existing.length > 0) return Promise.resolve(existing);
+  if (existing.length > 0) {
+    rememberSpeechVoices(existing);
+    return Promise.resolve(existing);
+  }
+  if (cachedSpeechVoices.length > 0) {
+    return Promise.resolve(cachedSpeechVoices);
+  }
 
   return new Promise((resolve) => {
     let settled = false;
@@ -223,7 +282,8 @@ function waitForSpeechVoices(
       synth.removeEventListener("voiceschanged", onVoices);
       clearInterval(poll);
       clearTimeout(hardStop);
-      resolve(voices);
+      rememberSpeechVoices(voices);
+      resolve(voices.length ? voices : cachedSpeechVoices);
     };
     const onVoices = () => {
       const voices = synth.getVoices();
@@ -241,6 +301,7 @@ function waitForSpeechVoices(
 
 function primeSpeechSynthesis(synth: SpeechSynthesis) {
   try {
+    ensureSpeechVoicesWarm(synth);
     synth.getVoices();
     synth.resume();
   } catch {
@@ -263,18 +324,26 @@ function primeSpeechSynthesisInGesture(synth: SpeechSynthesis) {
   }
 }
 
-function pickPreferredVoice(
-  voices: SpeechSynthesisVoice[]
-): SpeechSynthesisVoice | undefined {
-  return (
-    voices.find((v) =>
-      /samantha|karen|moira|victoria|susan|zira|google us english|Samantha/i.test(
-        v.name
-      )
-    ) ||
-    voices.find((v) => /^en(-|_)/i.test(v.lang)) ||
-    voices.find((v) => v.lang.toLowerCase().startsWith("en"))
-  );
+/**
+ * Fully unlock Web Audio inside a user gesture (iOS requires this once).
+ * After this, decode+start can run after awaits.
+ */
+function unlockAudioContextInGesture(ctx: AudioContext): void {
+  try {
+    void ctx.resume();
+    // Tiny silent buffer — more reliable unlock than resume() alone on iOS.
+    const buffer = ctx.createBuffer(1, 1, ctx.sampleRate || 22050);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+  } catch {
+    try {
+      void ctx.resume();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 function needsSafariGesturePlayback(): boolean {
@@ -482,7 +551,10 @@ async function fetchVoiceAudio(text: string): Promise<VoiceFetchResult> {
   };
 }
 
-/** Safari/iOS: call speak() synchronously — no await before speak in this function. */
+/**
+ * Safari/iOS: call speak() synchronously — no await before speak in this function.
+ * Must be invoked at the top of a tap/pointer handler (before killMic / fetch).
+ */
 function speakWithFreeVoiceSync(text: string): Promise<void> {
   const clipped = text.trim().slice(0, 2500);
   if (!clipped) return Promise.resolve();
@@ -496,42 +568,82 @@ function speakWithFreeVoiceSync(text: string): Promise<void> {
     return Promise.reject(new Error("This browser has no free device voice."));
   }
 
-  window.speechSynthesis.cancel();
+  const synth = window.speechSynthesis;
+  ensureSpeechVoicesWarm(synth);
+
+  // Build utterance BEFORE cancel/speak so speak() is the last sync call in-gesture.
   const utterance = new SpeechSynthesisUtterance(clipped);
-  const voices = window.speechSynthesis.getVoices();
-  const preferred = pickPreferredVoice(voices);
-  if (preferred) utterance.voice = preferred;
-  utterance.rate = 1.05;
+  utterance.lang = "en-US";
+  utterance.rate = isIOS() ? 1 : 1.05;
   utterance.pitch = 1.08;
   utterance.volume = 1;
 
+  const voices =
+    synth.getVoices().length > 0 ? synth.getVoices() : cachedSpeechVoices;
+  const preferred =
+    preferredSpeechVoice || pickPreferredVoice(voices) || voices[0];
+  if (preferred) {
+    utterance.voice = preferred;
+    if (preferred.lang) utterance.lang = preferred.lang;
+  }
+
   return new Promise<void>((resolve, reject) => {
     let spoke = false;
-    const watchdog = window.setTimeout(() => {
-      if (!spoke && !window.speechSynthesis.speaking) {
-        reject(new Error("Device voice did not start"));
-      }
-    }, 3000);
+    let settled = false;
+    const finish = (ok: boolean, err?: Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(watchdog);
+      if (ok) resolve();
+      else reject(err ?? new Error("Device voice failed"));
+    };
+
+    const watchdog = window.setTimeout(
+      () => {
+        if (!spoke && !synth.speaking && !synth.pending) {
+          finish(
+            false,
+            new Error(
+              voices.length === 0
+                ? "Device voices not loaded — tap orb again"
+                : "Device voice did not start (check Silent switch / media volume)"
+            )
+          );
+        }
+      },
+      isIOS() ? 4500 : 3000
+    );
+
     utterance.onstart = () => {
       spoke = true;
     };
-    utterance.onend = () => {
-      window.clearTimeout(watchdog);
-      resolve();
-    };
+    utterance.onend = () => finish(true);
     utterance.onerror = (event) => {
-      window.clearTimeout(watchdog);
       if (event.error === "interrupted" || event.error === "canceled") {
-        resolve();
+        finish(true);
         return;
       }
-      reject(new Error(event.error || "Device voice failed"));
+      finish(false, new Error(event.error || "Device voice failed"));
     };
-    window.speechSynthesis.resume();
-    window.speechSynthesis.speak(utterance);
-    if (isSafariBrowser()) {
-      window.speechSynthesis.pause();
-      window.speechSynthesis.resume();
+
+    try {
+      synth.cancel();
+      synth.resume();
+    } catch {
+      /* ignore */
+    }
+
+    // THE critical line — must remain synchronous in the user-gesture stack.
+    synth.speak(utterance);
+
+    // iOS WebKit often won't start until pause/resume after speak().
+    if (isIOS() || isSafariBrowser()) {
+      try {
+        synth.pause();
+        synth.resume();
+      } catch {
+        /* ignore */
+      }
     }
   });
 }
@@ -980,17 +1092,38 @@ export function NovaConsole() {
    * Unlock audio inside a user gesture without clobbering a prefetched voice URL.
    * Overwriting src with a silent WAV was killing Tap-to-hear / in-progress playback.
    */
-  const unlockAudioInGesture = useCallback((): boolean => {
-    const el = audioElRef.current;
-    const synth =
-      typeof window !== "undefined" ? window.speechSynthesis : undefined;
-
+  /**
+   * Resume/create AudioContext only — safe during pending playback.
+   * Does not touch <audio> src (silent WAV can kill speechSynthesis on iOS).
+   */
+  const resumeAudioContextInGesture = useCallback((): boolean => {
     try {
       const AC = getAudioContextClass();
       if (AC) {
         if (!audioCtxRef.current) audioCtxRef.current = new AC();
-        void audioCtxRef.current.resume();
+        unlockAudioContextInGesture(audioCtxRef.current);
       }
+      const synth =
+        typeof window !== "undefined" ? window.speechSynthesis : undefined;
+      if (synth) primeSpeechSynthesis(synth);
+      audioUnlockedRef.current = true;
+      unlockInFlightRef.current = false;
+      setAudioUnlocked(true);
+      setNeedsGesture(false);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const unlockAudioInGesture = useCallback((): boolean => {
+    const el = audioElRef.current;
+    const synth =
+      typeof window !== "undefined" ? window.speechSynthesis : undefined;
+    const wasUnlocked = audioUnlockedRef.current;
+
+    try {
+      resumeAudioContextInGesture();
 
       if (el) {
         primeAudioElement(el);
@@ -1008,9 +1141,21 @@ export function NovaConsole() {
           !el.paused &&
           el.currentTime > 0 &&
           !el.ended;
+        const synthBusy =
+          typeof window !== "undefined" &&
+          Boolean(
+            window.speechSynthesis?.speaking || window.speechSynthesis?.pending
+          );
 
-        // Only warm with silent WAV when nothing voice-related is loaded/playing.
-        if (!hasVoiceSrc && !speakingNow && !waitingForTapRef.current) {
+        // One-time <audio> warm-up only — never while voice is queued/playing.
+        // On iOS, silent WAV after speechSynthesis.speak() steals the session.
+        if (
+          !wasUnlocked &&
+          !hasVoiceSrc &&
+          !speakingNow &&
+          !synthBusy &&
+          !waitingForTapRef.current
+        ) {
           el.src = SILENT_WAV;
           void el.play().then(() => {
             try {
@@ -1040,7 +1185,7 @@ export function NovaConsole() {
       setVoiceDebug(formatVoiceDiag({ unlocked: false, path: "unlock:failed" }));
       return false;
     }
-  }, []);
+  }, [resumeAudioContextInGesture]);
 
   const unlockAudio = useCallback(async (): Promise<boolean> => {
     if (audioUnlockedRef.current) {
@@ -1060,8 +1205,10 @@ export function NovaConsole() {
       const AC = getAudioContextClass();
       if (AC) {
         if (!audioCtxRef.current) audioCtxRef.current = new AC();
-        const ctx = audioCtxRef.current;
-        if (ctx.state === "suspended") await ctx.resume();
+        unlockAudioContextInGesture(audioCtxRef.current);
+        if (audioCtxRef.current.state === "suspended") {
+          await audioCtxRef.current.resume();
+        }
       }
     } catch {
       /* ignore */
@@ -1071,7 +1218,20 @@ export function NovaConsole() {
     const synth =
       typeof window !== "undefined" ? window.speechSynthesis : undefined;
 
-    if (!el) return false;
+    if (!el) {
+      // AudioContext-only unlock still counts on iOS.
+      if (audioCtxRef.current) {
+        audioUnlockedRef.current = true;
+        setAudioUnlocked(true);
+        setNeedsGesture(false);
+        if (synth) {
+          primeSpeechSynthesis(synth);
+          void waitForSpeechVoices(synth, isSafariBrowser() ? 3000 : 1200);
+        }
+        return true;
+      }
+      return false;
+    }
 
     // Warm the persistent <audio> inside a user gesture so later TTS can play.
     try {
@@ -1093,6 +1253,13 @@ export function NovaConsole() {
       return true;
     } catch {
       el.muted = false;
+      // AC may still be unlocked even if <audio> warm-up failed.
+      if (audioCtxRef.current && audioCtxRef.current.state === "running") {
+        audioUnlockedRef.current = true;
+        setAudioUnlocked(true);
+        setNeedsGesture(false);
+        return true;
+      }
       setNeedsGesture(true);
       setAudioUnlocked(false);
       return false;
@@ -1159,6 +1326,10 @@ export function NovaConsole() {
 
   useEffect(() => {
     setMounted(true);
+    // iOS loads speechSynthesis voices asynchronously — cache ASAP.
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      ensureSpeechVoicesWarm(window.speechSynthesis);
+    }
   }, []);
 
   useEffect(() => {
@@ -1300,23 +1471,28 @@ export function NovaConsole() {
   /**
    * Any intentional tap (orb / mic / send / page): unlock audio for the session
    * and immediately play a queued reply if one is waiting (device-TTS / blocked play).
+   *
+   * iOS critical: when a reply is queued, speak()/play() must be the first
+   * side-effect in this handler — before silent-WAV unlock or killMic.
    */
   const handleUserGesture = useCallback(
     (e?: React.SyntheticEvent) => {
       e?.stopPropagation();
-      unlockAudioInGesture();
-      const AC = getAudioContextClass();
-      if (AC) {
-        if (!audioCtxRef.current) audioCtxRef.current = new AC();
-        void audioCtxRef.current.resume();
-      }
-      if (waitingForTapRef.current && pendingVoiceRef.current) {
+      const pending = pendingVoiceRef.current;
+      if (waitingForTapRef.current && pending) {
+        // MPEG/WAV: resume AC first (helps AudioContext fallback paths).
+        // Device TTS: do NOTHING before speak() — even a silent buffer can
+        // consume the iOS user-gesture token and leave speechSynthesis mute.
+        if (pending.blob && !pending.useBrowserTts) {
+          resumeAudioContextInGesture();
+        }
         playPendingNowRef.current();
         return true;
       }
+      unlockAudioInGesture();
       return false;
     },
-    [unlockAudioInGesture]
+    [resumeAudioContextInGesture, unlockAudioInGesture]
   );
 
   /** Orb-only: same unlock/drain, but suppress the following click mute-toggle. */
@@ -1361,70 +1537,102 @@ export function NovaConsole() {
   );
 
   /**
-   * Safari emergency: play() must fire synchronously inside pointerdown/touchstart.
-   * Blob is prefetched — no fetch/await before play().
+   * Safari/iOS emergency: speak()/play() MUST fire synchronously inside
+   * pointerdown/touchstart — before setState/killMic (those can steal the gesture).
    */
   const playPendingNow = useCallback(() => {
     if (gesturePlayLockRef.current) return;
     const pending = pendingVoiceRef.current;
     const el = audioElRef.current;
-    if (!pending || !el) {
+    if (!pending) {
       setVoiceDebug(formatVoiceDiag({ path: "tap", error: "nothing pending" }));
+      return;
+    }
+    // Device TTS does not need the <audio> element; MPEG/WAV does.
+    if (!el && pending.blob && !pending.useBrowserTts) {
+      setVoiceDebug(formatVoiceDiag({ path: "tap", error: "no audio element" }));
       return;
     }
 
     gesturePlayLockRef.current = true;
 
     const snapshot: PendingVoice = { ...pending };
+    // Clear queue refs synchronously before speak so a second touch/pointer
+    // event in the same tap cannot double-drain.
     pendingVoiceRef.current = null;
     waitingForTapRef.current = false;
-    setShowTapToHear(false);
-    setPhase("speaking");
     audioUnlockedRef.current = true;
-    setAudioUnlocked(true);
-    setNeedsGesture(false);
-
-    // Stop mic only — do not cancel speechSynthesis before MPEG play on Safari.
-    killMic({ keepSpeech: Boolean(snapshot.blob && !snapshot.useBrowserTts) });
 
     let playback: Promise<void>;
+    let path = "tap";
 
-    if (snapshot.blob && !snapshot.useBrowserTts) {
-      const srcReady =
-        Boolean(snapshot.url) &&
-        Boolean(el.src) &&
-        (el.src === snapshot.url || el.currentSrc === snapshot.url);
-      if (srcReady) {
-        primeAudioElement(el);
-        el.muted = false;
-        el.volume = 1;
-        playback = playPreparedInGesture(el, objectUrlRef);
+    // 1) Kick off playback FIRST — still inside the user-gesture stack.
+    try {
+      if (snapshot.blob && !snapshot.useBrowserTts && el) {
+        const srcReady =
+          Boolean(snapshot.url) &&
+          Boolean(el.src) &&
+          (el.src === snapshot.url || el.currentSrc === snapshot.url);
+        if (srcReady) {
+          primeAudioElement(el);
+          el.muted = false;
+          el.volume = 1;
+          path = "tap:mpeg-prepared";
+          playback = playPreparedInGesture(el, objectUrlRef);
+        } else {
+          path = "tap:mpeg-rebind";
+          playback = playBlobInGesture(el, snapshot.blob, objectUrlRef);
+          snapshot.url = objectUrlRef.current ?? snapshot.url;
+        }
+      } else if (isNovaApk() && hasNativeTts()) {
+        path = "tap:native";
+        playback = speakWithNative(snapshot.text);
+      } else if (typeof window !== "undefined" && window.speechSynthesis) {
+        path = "tap:device-tts";
+        playback = speakWithFreeVoiceSync(snapshot.text);
+      } else if (hasNativeTts()) {
+        path = "tap:native";
+        playback = speakWithNative(snapshot.text);
       } else {
-        // Src was clobbered or never assigned — re-bind blob and play in-gesture.
-        playback = playBlobInGesture(el, snapshot.blob, objectUrlRef);
-        snapshot.url = objectUrlRef.current ?? snapshot.url;
+        gesturePlayLockRef.current = false;
+        pendingVoiceRef.current = snapshot;
+        waitingForTapRef.current = true;
+        setShowTapToHear(true);
+        setVoiceDebug(formatVoiceDiag({ path: "tap", error: "no playback path" }));
+        setError("This browser has no speaker voice. Try Chrome or the Nova app.");
+        return;
       }
-    } else if (isNovaApk() && hasNativeTts()) {
-      playback = speakWithNative(snapshot.text);
-    } else if (typeof window !== "undefined" && window.speechSynthesis) {
-      const synth = window.speechSynthesis;
-      primeSpeechSynthesis(synth);
-      playback = speakWithFreeVoiceSync(snapshot.text);
-    } else if (hasNativeTts()) {
-      playback = speakWithNative(snapshot.text);
-    } else {
+    } catch (err) {
       gesturePlayLockRef.current = false;
-      setVoiceDebug(formatVoiceDiag({ path: "tap", error: "no playback path" }));
       pendingVoiceRef.current = snapshot;
       waitingForTapRef.current = true;
       setShowTapToHear(true);
-      setError("This browser has no speaker voice. Try Chrome or the Nova app.");
+      const msg = err instanceof Error ? err.message : "speak failed";
+      setVoiceDebug(formatVoiceDiag({ path: "tap:throw", error: msg }));
+      setError(msg);
       return;
     }
 
+    // 2) UI + mic teardown only AFTER speak()/play() has been invoked.
+    setShowTapToHear(false);
+    setPhase("speaking");
+    setAudioUnlocked(true);
+    setNeedsGesture(false);
+    setVoiceDebug(
+      formatVoiceDiag({
+        unlocked: true,
+        path,
+        error:
+          path === "tap:device-tts"
+            ? `speak() sync · voices=${typeof window !== "undefined" ? window.speechSynthesis?.getVoices().length || cachedSpeechVoices.length : 0}`
+            : undefined,
+      })
+    );
+    killMic({ keepSpeech: true });
+
     void playback
       .then(() => {
-        setVoiceDebug(formatVoiceDiag({ unlocked: true, path: "tap:played" }));
+        setVoiceDebug(formatVoiceDiag({ unlocked: true, path: `${path}:ok` }));
         setError(null);
         setVoicePathLabel(null);
       })
@@ -1433,7 +1641,7 @@ export function NovaConsole() {
         setVoiceDebug(
           formatVoiceDiag({
             unlocked: audioUnlockedRef.current,
-            path: "tap:failed",
+            path: `${path}:fail`,
             error: msg,
           })
         );
@@ -1442,7 +1650,7 @@ export function NovaConsole() {
         setShowTapToHear(true);
         setError(
           snapshot.useBrowserTts
-            ? "Voice blocked — tap the orb again (turn media volume up)."
+            ? "Voice blocked — tap the orb again. Unmute the Silent switch and turn media volume up."
             : "Playback blocked — tap the orb again."
         );
       })
@@ -1703,19 +1911,30 @@ export function NovaConsole() {
         const usingDeviceTts = useBrowserTts || !voiceBlob;
 
         // ElevenLabs / WAV-MPEG: try autoplay after a prior unlock (orb/send/mic).
-        // Prefer AudioContext — works on iOS without a second CTA once resumed.
+        // Prefer AudioContext — once resumed in a gesture, iOS allows buffer
+        // playback after awaits (unlike speechSynthesis).
         if (voiceBlob && !usingDeviceTts) {
           prefetchedUrl = prefetchVoiceUrl(voiceBlob, fetchMeta.format);
 
           if (audioUnlockedRef.current) {
-            const ctx = audioCtxRef.current;
+            let ctx = audioCtxRef.current;
+            if (!ctx) {
+              const AC = getAudioContextClass();
+              if (AC) {
+                ctx = new AC();
+                audioCtxRef.current = ctx;
+              }
+            }
             if (ctx) {
               try {
+                if (ctx.state === "suspended") {
+                  await ctx.resume();
+                }
                 await playBlobViaAudioContext(ctx, voiceBlob);
                 setVoiceDebug(
                   formatVoiceDiag({
                     unlocked: true,
-                    path: "auto:audiocontext",
+                    path: isIOS() ? "ios:audiocontext" : "auto:audiocontext",
                     bytes: fetchMeta.bytes,
                     format: fetchMeta.format,
                   })
@@ -1732,7 +1951,9 @@ export function NovaConsole() {
               }
             }
 
-            if (audioElRef.current) {
+            // HTMLAudioElement autoplay is flaky on iOS after await — skip on
+            // iPhone and go straight to queue-for-tap (in-gesture play()).
+            if (audioElRef.current && !isIOS()) {
               try {
                 await playBlobOnElement(
                   audioElRef.current,
@@ -1764,6 +1985,15 @@ export function NovaConsole() {
           );
           setPhase("speaking");
           setError(null);
+          setVoiceDebug(
+            formatVoiceDiag({
+              unlocked: audioUnlockedRef.current,
+              status: fetchMeta.status,
+              bytes: fetchMeta.bytes,
+              format: fetchMeta.format,
+              path: isIOS() ? "ios:queued-mpeg" : "queued-mpeg",
+            })
+          );
           return;
         }
 
@@ -1774,8 +2004,8 @@ export function NovaConsole() {
             : "Device voice"
         );
 
-        // After any await, mobile/Safari cannot start speechSynthesis — queue for
-        // the next orb/mic/send tap instead of showing a dedicated button.
+        // After any await, iOS/WebKit cannot start speechSynthesis — queue for
+        // the next orb/mic/send tap (speak() runs sync at the start of that tap).
         if (needsGestureForVoice() || !audioUnlockedRef.current) {
           queueTapToHear(
             {
@@ -1788,6 +2018,14 @@ export function NovaConsole() {
           );
           setPhase("speaking");
           setError(null);
+          setVoiceDebug(
+            formatVoiceDiag({
+              unlocked: audioUnlockedRef.current,
+              status: fetchMeta?.status,
+              path: isIOS() ? "ios:queued-device-tts" : "queued-device-tts",
+              error: fetchMeta?.error,
+            })
+          );
           return;
         }
 
