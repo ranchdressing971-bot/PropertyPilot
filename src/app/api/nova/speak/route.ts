@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkNexusAdmin } from "@/lib/nexus/admin";
 import {
-  isElevenLabsConfigured,
   isMobileSafariUserAgent,
+  isServerTtsConfigured,
   synthesizeNovaSpeech,
 } from "@/lib/nova/speak";
 
@@ -24,10 +24,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "text required" }, { status: 400 });
     }
 
-    if (!isElevenLabsConfigured()) {
+    if (!isServerTtsConfigured()) {
       return NextResponse.json(
         {
-          error: "ElevenLabs not configured. Use free device voice.",
+          error:
+            "No server TTS configured. Set ELEVENLABS_API_KEY or OPENAI_API_KEY.",
           code: "FALLBACK_BROWSER",
         },
         { status: 503 }
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
       body.format === "wav";
     const speechFormat = mobileSafari ? ("wav" as const) : ("mpeg" as const);
 
-    const { audio, contentType } = await synthesizeNovaSpeech(text, {
+    const { audio, contentType, provider } = await synthesizeNovaSpeech(text, {
       format: speechFormat,
     });
     return new NextResponse(new Uint8Array(audio), {
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "no-store",
-        "X-Nova-Voice": "elevenlabs",
+        "X-Nova-Voice": provider,
         "X-Nova-Format": speechFormat,
         "Content-Length": String(audio.length),
       },
@@ -64,7 +65,8 @@ export async function POST(req: NextRequest) {
 
     if (
       code === "QUOTA" ||
-      /credit|quota|rate-?limit|exhausted/i.test(msg)
+      code === "FALLBACK_BROWSER" ||
+      /credit|quota|rate-?limit|exhausted|no server tts/i.test(msg)
     ) {
       return NextResponse.json(
         { error: msg, code: "FALLBACK_BROWSER" },

@@ -7,7 +7,10 @@ import {
 import { loadNexusState } from "@/lib/nexus/state";
 import { loadBusinessBrief } from "@/lib/nova/business";
 import { loadConversionSummary } from "@/lib/nova/conversions";
-import { isElevenLabsConfigured } from "@/lib/nova/speak";
+import {
+  isServerTtsConfigured,
+  preferredNovaVoiceProvider,
+} from "@/lib/nova/speak";
 import { loadRecentNovaMessages } from "@/lib/nova/memory";
 import { getNovaSendPlan } from "@/lib/nova/send-plan";
 import { isResendConfigured } from "@/lib/resend";
@@ -46,8 +49,9 @@ export async function GET() {
     resendConfigured: isResendConfigured(),
     customDomainLikely: looksCustomDomain,
     canTransmitLive: false,
-    voiceConfigured: isElevenLabsConfigured(),
-    /** Always true — Web Speech API kicks in when ElevenLabs is missing or out of credits. */
+    voiceConfigured: isServerTtsConfigured(),
+    voiceProvider: preferredNovaVoiceProvider(),
+    /** Desktop last resort when no server TTS audio is available. */
     browserVoiceFallback: true,
     queuedJobs: state.queuedCount,
     companies: state.companies.filter((c) => c.status === "active").length,

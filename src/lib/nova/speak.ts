@@ -1,16 +1,40 @@
 /**
- * ElevenLabs TTS for Nova voice replies.
+ * Server TTS for Nova voice replies.
  *
- * Free accounts cannot use Voice Library IDs via the API. Set
+ * Primary: ElevenLabs (when ELEVENLABS_API_KEY is set).
+ * Fallback: OpenAI TTS (when OPENAI_API_KEY is set) — required for iPhone
+ * autoplay, since WebKit speechSynthesis cannot start after await fetch.
+ *
+ * Free ElevenLabs accounts cannot use Voice Library IDs via the API. Set
  * ELEVENLABS_VOICE_ID to the id from My Voices, OR ELEVENLABS_VOICE_NAME
  * (e.g. "Nova") and we resolve it. If unset, we prefer a voice named Nova,
  * then the first account voice.
  */
 
+import { getOpenAIApiKey } from "@/lib/openai-env";
+
 let cachedVoiceId: string | null = null;
+
+export type NovaVoiceProvider = "elevenlabs" | "openai";
+export type NovaSpeechFormat = "mpeg" | "wav";
 
 export function isElevenLabsConfigured(): boolean {
   return Boolean(process.env.ELEVENLABS_API_KEY?.trim());
+}
+
+export function isOpenAITtsConfigured(): boolean {
+  return Boolean(getOpenAIApiKey());
+}
+
+/** True when at least one server TTS provider can return audio bytes. */
+export function isServerTtsConfigured(): boolean {
+  return isElevenLabsConfigured() || isOpenAITtsConfigured();
+}
+
+export function preferredNovaVoiceProvider(): NovaVoiceProvider | null {
+  if (isElevenLabsConfigured()) return "elevenlabs";
+  if (isOpenAITtsConfigured()) return "openai";
+  return null;
 }
 
 type ElVoice = { voice_id: string; name: string; category?: string };
@@ -89,7 +113,7 @@ export async function resolveElevenLabsVoiceId(apiKey: string): Promise<string> 
   return cachedVoiceId;
 }
 
-/** iPhone / iPad Safari — needs WAV for reliable HTMLAudioElement decode. */
+/** iPhone / iPad Safari — needs WAV for reliable HTMLAudioElement / AudioContext decode. */
 export function isMobileSafariUserAgent(ua: string): boolean {
   if (!ua) return false;
   if (/iPhone|iPad|iPod/i.test(ua)) return true;
@@ -120,9 +144,19 @@ function pcm16ToWav(pcm: Buffer, sampleRate = 44100): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
-export type NovaSpeechFormat = "mpeg" | "wav";
+function clipSpeechText(text: string): string {
+  const clipped = text.trim().slice(0, 2500);
+  if (!clipped) throw new Error("Nothing to speak");
+  return clipped;
+}
 
-export async function synthesizeNovaSpeech(
+function markQuotaError(message: string): Error {
+  const err = new Error(message);
+  (err as Error & { code?: string }).code = "QUOTA";
+  return err;
+}
+
+async function synthesizeElevenLabs(
   text: string,
   opts?: { format?: NovaSpeechFormat }
 ): Promise<{ audio: Buffer; contentType: string }> {
@@ -136,9 +170,7 @@ export async function synthesizeNovaSpeech(
     process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2";
   const wantWav = opts?.format === "wav";
   const outputFormat = wantWav ? "pcm_44100" : "mp3_44100_128";
-
-  const clipped = text.trim().slice(0, 2500);
-  if (!clipped) throw new Error("Nothing to speak");
+  const clipped = clipSpeechText(text);
 
   const response = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${outputFormat}`,
@@ -165,7 +197,6 @@ export async function synthesizeNovaSpeech(
     const lower = detail.toLowerCase();
     cachedVoiceId = null;
 
-    // Out of credits / rate limit — client should use free browser TTS.
     if (
       response.status === 401 ||
       response.status === 402 ||
@@ -177,11 +208,9 @@ export async function synthesizeNovaSpeech(
       lower.includes("payment") ||
       lower.includes("insufficient")
     ) {
-      const err = new Error(
-        "ElevenLabs credits exhausted or rate-limited. Using free device voice."
+      throw markQuotaError(
+        "ElevenLabs credits exhausted or rate-limited."
       );
-      (err as Error & { code?: string }).code = "QUOTA";
-      throw err;
     }
 
     if (
@@ -217,4 +246,106 @@ export async function synthesizeNovaSpeech(
     audio: raw,
     contentType: response.headers.get("content-type") || "audio/mpeg",
   };
+}
+
+async function synthesizeOpenAI(
+  text: string,
+  opts?: { format?: NovaSpeechFormat }
+): Promise<{ audio: Buffer; contentType: string }> {
+  const apiKey = getOpenAIApiKey();
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  const clipped = clipSpeechText(text);
+  const wantWav = opts?.format === "wav";
+  const model = process.env.OPENAI_TTS_MODEL?.trim() || "tts-1";
+  const voice = process.env.OPENAI_TTS_VOICE?.trim() || "nova";
+
+  const response = await fetch("https://api.openai.com/v1/audio/speech", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      voice,
+      input: clipped,
+      response_format: wantWav ? "wav" : "mp3",
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    const lower = detail.toLowerCase();
+    if (
+      response.status === 401 ||
+      response.status === 402 ||
+      response.status === 429 ||
+      lower.includes("quota") ||
+      lower.includes("insufficient") ||
+      lower.includes("rate limit") ||
+      lower.includes("billing")
+    ) {
+      throw markQuotaError(
+        "OpenAI TTS unavailable (quota or auth). Using free device voice."
+      );
+    }
+    throw new Error(
+      `OpenAI TTS failed (${response.status}): ${detail.slice(0, 300)}`
+    );
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return {
+    audio: Buffer.from(arrayBuffer),
+    contentType: wantWav ? "audio/wav" : "audio/mpeg",
+  };
+}
+
+/**
+ * Synthesize reply audio. Prefers ElevenLabs, falls back to OpenAI TTS.
+ * Throws with code QUOTA / FALLBACK_BROWSER only when no server audio is possible.
+ */
+export async function synthesizeNovaSpeech(
+  text: string,
+  opts?: { format?: NovaSpeechFormat }
+): Promise<{ audio: Buffer; contentType: string; provider: NovaVoiceProvider }> {
+  const errors: string[] = [];
+
+  if (isElevenLabsConfigured()) {
+    try {
+      const result = await synthesizeElevenLabs(text, opts);
+      return { ...result, provider: "elevenlabs" };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "ElevenLabs failed";
+      errors.push(msg);
+      if (!isOpenAITtsConfigured()) {
+        throw err;
+      }
+      console.warn("nova speak: ElevenLabs failed, trying OpenAI TTS:", msg);
+    }
+  }
+
+  if (isOpenAITtsConfigured()) {
+    try {
+      const result = await synthesizeOpenAI(text, opts);
+      return { ...result, provider: "openai" };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "OpenAI TTS failed";
+      errors.push(msg);
+      const out = markQuotaError(
+        errors.join(" | ") || "Server TTS unavailable. Using free device voice."
+      );
+      (out as Error & { code?: string }).code = "FALLBACK_BROWSER";
+      throw out;
+    }
+  }
+
+  const err = new Error(
+    "No server TTS configured. Set ELEVENLABS_API_KEY or OPENAI_API_KEY."
+  );
+  (err as Error & { code?: string }).code = "FALLBACK_BROWSER";
+  throw err;
 }
