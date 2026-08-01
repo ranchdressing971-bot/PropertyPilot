@@ -1,4 +1,5 @@
 import { Logo } from "@/components/brand/Logo";
+import { RideByWordmark } from "@/components/brand/RideByWordmark";
 import { Shield, Video } from "lucide-react";
 
 interface AuthLayoutProps {
@@ -14,8 +15,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
         <div className="relative space-y-8">
           <div>
-            <p className="text-sm font-medium text-brand-400">RideBy</p>
-            <h2 className="mt-3 max-w-sm text-3xl font-semibold leading-tight tracking-tight text-white">
+            <h2 className="max-w-sm text-3xl font-semibold leading-tight tracking-tight text-white">
               HOA inspections, without the clip-by-clip grind.
             </h2>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-400">
@@ -40,8 +40,9 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           </div>
         </div>
 
-        <p className="relative text-xs text-ink-600">
-          &copy; {new Date().getFullYear()} RideBy
+        <p className="relative inline-flex items-center gap-1.5 text-xs text-ink-600">
+          <span>&copy; {new Date().getFullYear()}</span>
+          <RideByWordmark variant="inherit" className="text-xs text-ink-600" />
         </p>
       </div>
 

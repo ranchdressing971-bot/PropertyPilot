@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { RideByWordmark } from "@/components/brand/RideByWordmark";
 import { NovaMeshOrb } from "@/components/nova/NovaMeshOrb";
 import {
   NovaBarChart,
@@ -1953,7 +1954,15 @@ export function NovaConsole() {
       <header className="nova-top">
         <div className="nova-top-inner">
           <div className="flex flex-col gap-2">
-            <div className="nova-sys-label">RideBy · Systems</div>
+            <div className="nova-sys-label inline-flex items-center gap-1.5 normal-case tracking-normal">
+              <RideByWordmark
+                variant="light"
+                className="text-[0.7rem] text-cyan-200/70"
+              />
+              <span className="uppercase tracking-[0.28em] text-white/35">
+                · Systems
+              </span>
+            </div>
             <Link href="/nexus" className="nova-link">
               Nexus
             </Link>

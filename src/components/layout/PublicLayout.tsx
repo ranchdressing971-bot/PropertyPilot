@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
+import { RideByWordmark } from "@/components/brand/RideByWordmark";
 import { Button } from "@/components/ui/Button";
 import { PageTransition } from "./PageTransition";
 
@@ -50,7 +51,9 @@ export function PublicLayout({ children, showNavActions = true }: PublicLayoutPr
             <Link href="/terms" className="transition-colors hover:text-ink-900">
               Terms
             </Link>
-            <span className="text-ink-400">&copy; 2026 RideBy</span>
+            <span className="inline-flex items-center gap-1.5 text-ink-400">
+              &copy; 2026 <RideByWordmark variant="inherit" className="text-sm" />
+            </span>
           </div>
         </div>
       </footer>

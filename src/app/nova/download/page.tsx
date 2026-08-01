@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { RideByWordmark } from "@/components/brand/RideByWordmark";
 import { checkNexusAdmin } from "@/lib/nexus/admin";
 
 export const metadata: Metadata = {
@@ -16,8 +17,8 @@ export default async function NovaDownloadPage() {
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-[#05030a] px-5 text-white">
       <div className="w-full max-w-md text-center">
-        <p className="text-[11px] uppercase tracking-[0.28em] text-white/40">
-          RideBy
+        <p className="text-[11px] tracking-[0.04em] text-white/40">
+          <RideByWordmark variant="light" className="text-sm text-white/55" />
         </p>
         <h1 className="mt-3 font-display text-4xl font-semibold tracking-[0.18em]">
           NOVA
