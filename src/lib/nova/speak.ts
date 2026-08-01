@@ -11,7 +11,7 @@
  * Required for iPhone autoplay (WebKit speechSynthesis cannot start after
  * await fetch).
  *
- * OpenAI fallback: plain `tts-1-hd` + `nova` at ~1.18 — natural female, no
+ * OpenAI fallback: plain `tts-1-hd` + `nova` at ~1.32 — natural female, no
  * mini-tts accent steering. True British accent needs ElevenLabs credits.
  */
 
@@ -435,8 +435,8 @@ async function synthesizeOpenAI(
   // Feminine: nova, shimmer, coral, sage. Avoid fable/onyx/echo (male/deep).
   const rawVoice = (process.env.OPENAI_TTS_VOICE?.trim() || "nova").toLowerCase();
   const voice = OPENAI_DEEP_VOICES.has(rawVoice) ? "nova" : rawVoice;
-  // Brisk but natural — OpenAI TTS speed range is 0.25–4.0.
-  const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.18, 0.25, 4.0);
+  // Snappy but natural — OpenAI TTS speed range is 0.25–4.0.
+  const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.32, 0.25, 4.0);
   // Only applied when model is gpt-4o-*-tts; default stack leaves this unset.
   const instructions = process.env.OPENAI_TTS_INSTRUCTIONS?.trim();
 

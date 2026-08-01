@@ -151,7 +151,7 @@ ELEVENLABS_API_KEY=...
 # (uses OPENAI_API_KEY — no extra toggle)
 # OPENAI_TTS_MODEL=tts-1-hd
 # OPENAI_TTS_VOICE=nova          # feminine; shimmer also fine — avoid fable
-# OPENAI_TTS_SPEED=1.18
+# OPENAI_TTS_SPEED=1.32
 ```
 
 **Voice stack:** ElevenLabs with your `ELEVENLABS_VOICE_ID` when credits work.
