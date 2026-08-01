@@ -23,8 +23,8 @@ export default async function NovaDownloadPage() {
           NOVA
         </h1>
         <p className="mt-4 text-sm leading-relaxed text-white/55">
-          Voice console for outreach ops. Mac app opens Nova in an app-style
-          window; Android APK is for a burner phone.
+          Voice console for outreach ops. Mac zip includes a simple launcher;
+          Android APK is for a burner phone.
         </p>
 
         {!admin.allowed ? (
@@ -55,12 +55,20 @@ export default async function NovaDownloadPage() {
             </p>
             <ol className="space-y-2">
               <li>1. Download Nova-Mac.zip and unzip it.</li>
-              <li>2. Drag Nova.app to Applications (or Desktop).</li>
               <li>
-                3. First open: right-click → Open (Gatekeeper may warn — it’s
-                unsigned).
+                2. Double-click <span className="text-white/70">Open Nova.command</span>{" "}
+                (easiest — avoids the “damaged” Gatekeeper error).
               </li>
-              <li>4. Sign in, tap the orb once, say “Hey Nova”.</li>
+              <li>
+                3. If macOS blocks it: System Settings → Privacy & Security →
+                Open Anyway.
+              </li>
+              <li>
+                4. Or if Nova.app says “damaged”, run in Terminal:
+                <code className="mt-1 block rounded bg-white/5 px-2 py-1.5 text-[11px] text-cyan-100/80">
+                  xattr -cr ~/Downloads/Nova.app && open ~/Downloads/Nova.app
+                </code>
+              </li>
             </ol>
           </div>
           <div>
