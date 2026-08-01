@@ -104,7 +104,7 @@ export function Sidebar() {
               className="fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(92vw,22.5rem)] flex-col overflow-hidden bg-ink-950 shadow-2xl lg:hidden"
             >
               <div className="flex items-center justify-between border-b border-ink-800/80 px-5 py-4">
-                <Logo size="md" href="/dashboard" variant="light" inverted />
+                <Logo size="lg" href="/dashboard" variant="light" inverted />
                 <button
                   onClick={close}
                   className="rounded-xl p-2 text-ink-400 transition-colors hover:bg-white/5 hover:text-white"
@@ -131,7 +131,7 @@ function SidebarContent({ isDemo }: { isDemo: boolean }) {
   return (
     <>
       <div className="flex h-16 items-center border-b border-ink-800/80 px-5">
-        <Logo size="md" href="/dashboard" variant="light" inverted />
+        <Logo size="lg" href="/dashboard" variant="light" inverted />
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-5">

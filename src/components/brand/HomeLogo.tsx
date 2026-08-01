@@ -11,10 +11,10 @@ interface HomeLogoProps {
 }
 
 const sizes = {
-  sm: "text-base",
-  md: "text-lg",
-  lg: "text-xl sm:text-2xl",
-  xl: "text-3xl",
+  sm: "text-lg",
+  md: "text-xl",
+  lg: "text-2xl sm:text-3xl",
+  xl: "text-4xl",
 };
 
 /**
