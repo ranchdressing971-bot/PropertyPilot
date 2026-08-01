@@ -7,6 +7,8 @@ interface RideByWordmarkProps {
   variant?: "dark" | "light" | "inherit";
   /** Extra class on the logo tile (the R) */
   markClassName?: string;
+  /** Invert mark colors (e.g. dark sidebar chrome) */
+  inverted?: boolean;
 }
 
 /**
@@ -17,6 +19,7 @@ export function RideByWordmark({
   className,
   variant = "dark",
   markClassName,
+  inverted = false,
 }: RideByWordmarkProps) {
   const textColor =
     variant === "light"
@@ -37,8 +40,9 @@ export function RideByWordmark({
     >
       <span
         className={clsx(
-          "relative mr-[0.06em] inline-flex shrink-0 overflow-hidden rounded-[22%]",
-          "h-[1.08em] w-[1.08em] translate-y-[0.02em]",
+          "relative -mr-[0.04em] inline-flex shrink-0 overflow-hidden rounded-[22%]",
+          "h-[1.32em] w-[1.32em] translate-y-[0.02em]",
+          inverted && "invert",
           markClassName
         )}
         aria-hidden

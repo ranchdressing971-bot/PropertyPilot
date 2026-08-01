@@ -9,6 +9,8 @@ interface LogoProps {
   href?: string;
   className?: string;
   variant?: "dark" | "light";
+  /** Invert mark colors (sidebar dark chrome only) */
+  inverted?: boolean;
 }
 
 const sizes = {
@@ -22,10 +24,12 @@ export function Logo({
   href = "/",
   className,
   variant = "dark",
+  inverted = false,
 }: LogoProps) {
   const content = (
     <RideByWordmark
       variant={variant}
+      inverted={inverted}
       className={clsx(sizes[size], className)}
     />
   );
