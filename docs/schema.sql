@@ -8,6 +8,9 @@ create table if not exists public.profiles (
   full_name text,
   hoa_name text,
   notify_violations boolean default true,
+  -- CC&R rules JSON: [{ id, violationType, section, description, enabled, custom? }, ...]
+  -- Built-ins use id "builtin:…"; manager-added customs use id "custom:…" and custom: true.
+  -- Empty array means "use app defaults". Same shape is also stored in localStorage (pp-ccr-rules).
   ccr_rules jsonb default '[]'::jsonb,
   onboarding_complete boolean default false,
   stripe_customer_id text,

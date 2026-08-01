@@ -169,7 +169,9 @@ export async function POST(request: NextRequest) {
     const mode = (body.mode as string) || "live";
     const clientRoster = body.properties as Property[] | undefined;
     const neighborhood = (body.neighborhood as string) || "Your Community";
-    const ccrRules = body.ccrRules as typeof DEFAULT_CCR_RULES | undefined;
+    const ccrRules = Array.isArray(body.ccrRules)
+      ? (body.ccrRules as typeof DEFAULT_CCR_RULES)
+      : undefined;
     const ruleMap = rulesToMap(ccrRules ?? DEFAULT_CCR_RULES);
     const frames = body.frames as VideoFrameInput[] | undefined;
     const uploadGeo = body.geo as UploadGeoContext | undefined;

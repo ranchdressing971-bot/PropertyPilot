@@ -70,13 +70,13 @@ export interface AIInspectionData {
 
 const VIOLATION_RULES: Record<string, string> = {
   "Trash Bin Visible":
-    "CC&R Section 4.2 — Trash containers must not be visible from the street on non-collection days.",
+    "CC&R Section 4.2: Trash containers must not be visible from the street on non-collection days.",
   "Tall Grass":
-    "CC&R Section 6.1 — Lawn grass must not exceed 4 inches in height.",
+    "CC&R Section 6.1: Lawn grass must not exceed 4 inches in height.",
   Debris:
-    "CC&R Section 5.3 — Yards must be free of debris, junk, and unsightly materials.",
+    "CC&R Section 5.3: Yards must be free of debris, junk, and unsightly materials.",
   "Dead Landscaping":
-    "CC&R Section 6.4 — All landscaping must be maintained in a healthy, living condition.",
+    "CC&R Section 6.4: All landscaping must be maintained in a healthy, living condition.",
 };
 
 const RECOMMENDATIONS: Record<string, string> = {
@@ -86,13 +86,24 @@ const RECOMMENDATIONS: Record<string, string> = {
   "Dead Landscaping": "Manager Review",
 };
 
-const VALID_TYPES = [
-  "Trash Bin Visible",
-  "Tall Grass",
-  "Debris",
-  "Dead Landscaping",
-  null,
-] as const;
+const FALLBACK_BUILTIN_TYPES = new Set(Object.keys(VIOLATION_RULES));
+
+/** Resolve AI type against enabled rules (builtins + customs). */
+function resolveViolationType(
+  rawType: string | null | undefined,
+  enabledTypes: Set<string>
+): ViolationType {
+  if (!rawType || typeof rawType !== "string") return null;
+  const trimmed = rawType.trim();
+  if (!trimmed || trimmed.toLowerCase() === "null") return null;
+  if (enabledTypes.has(trimmed)) return trimmed;
+  // Case-insensitive match to enabled rule names (custom or built-in)
+  const lower = trimmed.toLowerCase();
+  for (const enabled of enabledTypes) {
+    if (enabled.toLowerCase() === lower) return enabled;
+  }
+  return null;
+}
 
 interface RawAIResult {
   propertyId: string;
@@ -134,16 +145,12 @@ export function normalizeAIResults(
   const enabledTypes = new Set(Object.keys(rules));
   const enforceTrash = opts?.enforceTrashBins !== false;
 
+  // When caller omitted ruleMap, allow built-ins; empty ruleMap means all toggled off
+  const allowed = ruleMap != null ? enabledTypes : FALLBACK_BUILTIN_TYPES;
+
   return properties.map((prop) => {
     const match = raw.find((r) => r.propertyId === prop.id);
-    let type = VALID_TYPES.includes(match?.violationType as ViolationType)
-      ? (match?.violationType as ViolationType)
-      : null;
-
-    // Only keep violation types that are enabled in the HOA's CCR rules
-    if (type && !enabledTypes.has(type)) {
-      type = null;
-    }
+    let type = resolveViolationType(match?.violationType, allowed);
 
     // Pickup day — bins allowed at curb; don't create enforceable flags
     if (type === "Trash Bin Visible" && !enforceTrash) {
@@ -201,11 +208,16 @@ export function buildInspectionPrompt(
         ? `\nTrash schedule: collection days are ${opts.collectionDaysLabel ?? "configured"}. Today is NOT a collection day — visible curb bins may be flagged as "Trash Bin Visible".`
         : "";
 
+  const typeUnion =
+    Object.keys(rules)
+      .map((t) => `"${t.replace(/"/g, "")}"`)
+      .join(" | ") || '"Trash Bin Visible" | "Tall Grass" | "Debris" | "Dead Landscaping"';
+
   return `You are an HOA compliance inspector analyzing drive-through video frames of residential properties.
 
-For EACH property below, examine its image and determine if any of these violations exist:
+For EACH property below, examine its image and determine if any of these HOA/community violations exist:
 ${ruleLines}
-- null — property is in good standing, no violations
+- null: property is in good standing, no violations
 ${trashNote}
 
 Properties in this batch:
@@ -216,7 +228,7 @@ Respond with JSON only:
   "results": [
     {
       "propertyId": "prop-1",
-      "violationType": "Trash Bin Visible" | "Tall Grass" | "Debris" | "Dead Landscaping" | null,
+      "violationType": ${typeUnion} | null,
       "confidence": 0-100,
       "reasoning": "2-3 sentence professional explanation of what you observed"
     }
@@ -224,10 +236,12 @@ Respond with JSON only:
 }
 
 Be strict:
-- Only flag a violation if it is clearly visible ON THAT property's lot / curb / driveway.
+- Only flag a violation if it is clearly visible from the street (curb / driveway / front lot) in that property's frame.
 - Do NOT invent addresses. Use the propertyId and Address given.
-- Drive-through footage is often angled — judge the lot in the frame, not the neighbor across the street.
+- Drive-through footage is often angled; judge the lot in the frame, not the neighbor across the street.
 - Tall grass only if lawn is clearly overgrown on that lot (not a distant median or roadside strip).
+- For custom rules, match the description: only flag when the described condition is curb-visible.
 - Prefer null (good standing) when unsure. Most homes should be null.
-- confidence below 70 means you should return null instead.`;
+- confidence below 70 means you should return null instead.
+- Use exactly one violationType string from the list above (or null). Do not invent new type names.`;
 }
