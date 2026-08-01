@@ -1210,6 +1210,20 @@ function readListenIntentFromLocation(): boolean {
   }
 }
 
+/** Opt-in in-page greeting via orb tap (?greet=1). Never autoplays on listen=1. */
+function readGreetIntentFromLocation(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const greet = new URLSearchParams(window.location.search).get("greet");
+    return greet === "1" || greet === "true";
+  } catch {
+    return false;
+  }
+}
+
+/** One-shot phone greeting — Shortcut SpeakText owns this for ?listen=1. */
+const LISTEN_READY_GREETING = "whats up big dog";
+
 /** Shortcut Dictate Text (or typed) utterance from ?q= — process without waiting on mic. */
 function readQueryUtteranceFromLocation(): string | null {
   if (typeof window === "undefined") return null;
@@ -1380,16 +1394,17 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   >(async () => {});
   const autoListenRef = useRef(autoListen);
   const listenTapNeededRef = useRef(false);
+  /** Once per session — in-page "whats up big dog" (orb tap / ?greet=1 only). */
+  const phoneGreetDoneRef = useRef(false);
+  /** ?greet=1 — allow in-page greet on orb tap even with listen=1. */
+  const wantInPageGreetRef = useRef(false);
   /** Prevents overlapping unlock→listen boots. */
   const listenReadyInFlightRef = useRef(false);
   const runListenReadySequenceRef = useRef<
     (fromGesture: boolean) => Promise<void>
   >(async () => {});
+  const playPhoneGreetingInGestureRef = useRef<() => boolean>(() => false);
 
-  /**
-   * Unlock audio inside a user gesture without clobbering a prefetched voice URL.
-   * Overwriting src with a silent WAV was killing Tap-to-hear / in-progress playback.
-   */
   /**
    * Resume/create AudioContext only — safe during pending playback.
    * Does not touch <audio> src (silent WAV can kill speechSynthesis on iOS).
@@ -1854,6 +1869,22 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   /** Orb-only: same unlock/drain, but suppress the following click mute-toggle. */
   const handleOrbGesture = useCallback(
     (e: React.SyntheticEvent) => {
+      e.stopPropagation();
+      const pending = pendingVoiceRef.current;
+      if (waitingForTapRef.current && pending) {
+        const drained = handleUserGesture(e);
+        if (drained) drainedPendingRef.current = true;
+        return;
+      }
+      // Phone path: first orb tap can say the greeting once (gesture-unlocked TTS).
+      // listen=1 skips this unless ?greet=1 (Shortcut SpeakText already greeted).
+      const mayGreet =
+        !phoneGreetDoneRef.current &&
+        (!autoListenRef.current || wantInPageGreetRef.current);
+      if (mayGreet && playPhoneGreetingInGestureRef.current()) {
+        drainedPendingRef.current = true;
+        return;
+      }
       const drained = handleUserGesture(e);
       if (drained) drainedPendingRef.current = true;
     },
@@ -2032,45 +2063,62 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   }, [clearSilenceEnd]);
 
   /**
-   * Legacy helper kept for gesture-retry paths. For Shortcut / glasses (?listen=1),
-   * never raise the full-screen tap wall — start command listen instead.
+   * In-gesture phone greeting (orb tap). Sync speechSynthesis.speak — no await
+   * before speak. Mic resumes after TTS. Never used for listen=1 autoplay.
    */
-  const showWakeGate = useCallback(() => {
-    if (autoListenRef.current) {
-      listenTapNeededRef.current = false;
-      setListenTapNeeded(false);
-      if (
-        listeningOnRef.current &&
-        phaseRef.current !== "speaking" &&
-        phaseRef.current !== "thinking" &&
-        !recognitionRef.current
-      ) {
-        phaseRef.current = "listening_command";
-        setPhase("listening_command");
-        armSilenceEnd();
-        startMicRef.current("command");
-      }
-      return;
+  const playPhoneGreetingInGesture = useCallback((): boolean => {
+    if (phoneGreetDoneRef.current || gesturePlayLockRef.current) return false;
+    if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
+      return false;
     }
-    listenTapNeededRef.current = true;
-    setListenTapNeeded(true);
-    if (
-      phaseRef.current === "listening_wake" ||
-      phaseRef.current === "listening_command" ||
-      phaseRef.current === "idle"
-    ) {
-      killMic();
-      phaseRef.current = "idle";
-      setPhase("idle");
+
+    listeningOnRef.current = true;
+    setListeningOn(true);
+    listenTapNeededRef.current = false;
+    setListenTapNeeded(false);
+
+    // Start TTS in-gesture first (iOS token), then hard-mute capture.
+    resumeAudioContextInGesture();
+    let playback: Promise<void>;
+    try {
+      playback = speakWithFreeVoiceSync(LISTEN_READY_GREETING);
+    } catch {
+      return false;
     }
-  }, [armSilenceEnd, killMic]);
+
+    phoneGreetDoneRef.current = true;
+    gesturePlayLockRef.current = true;
+    phaseRef.current = "speaking";
+    setPhase("speaking");
+    killMic({ keepSpeech: true });
+    setVoiceDebug(
+      formatVoiceDiag({ unlocked: true, path: "phone-greet:device-tts" })
+    );
+
+    void playback
+      .then(() => {
+        setError(null);
+        resumeAfterSpeech("command");
+      })
+      .catch(() => {
+        // Greeting failed — still open the mic (don't leave listen broken).
+        phoneGreetDoneRef.current = false;
+        resumeAfterSpeech("command");
+      })
+      .finally(() => {
+        gesturePlayLockRef.current = false;
+      });
+
+    return true;
+  }, [killMic, resumeAfterSpeech, resumeAudioContextInGesture]);
+
+  useEffect(() => {
+    playPhoneGreetingInGestureRef.current = playPhoneGreetingInGesture;
+  }, [playPhoneGreetingInGesture]);
 
   /**
-   * Shortcut / ?listen=1 ready path (glasses-first):
-   * - Greeting is ONLY iOS Shortcut SpeakText — never web TTS here.
-   * - If ?q= is present, process that utterance immediately (DictateText).
-   * - Otherwise go straight to hard-muted-until-needed command listen.
-   * - Never soft-lock behind a full-screen tap wall.
+   * Shortcut / ?listen=1: SpeakText already said the greeting.
+   * Open → short delay → startMic. No in-page autoplay. No tap wall.
    */
   const runListenReadySequence = useCallback(
     async (fromGesture: boolean) => {
@@ -2082,6 +2130,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       setListeningOn(true);
       listenTapNeededRef.current = false;
       setListenTapNeeded(false);
+      // Shortcut already greeted — don't double-greet on orb tap unless ?greet=1.
+      if (!wantInPageGreetRef.current) {
+        phoneGreetDoneRef.current = true;
+      }
 
       const armCommandListen = () => {
         if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
@@ -2095,6 +2147,14 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
 
       try {
         if (fromGesture) {
+          // Optional ?greet=1: orb tap can still play in-page greeting.
+          if (
+            wantInPageGreetRef.current &&
+            !phoneGreetDoneRef.current &&
+            playPhoneGreetingInGesture()
+          ) {
+            return;
+          }
           unlockAudioInGesture();
           armCommandListen();
           return;
@@ -2102,9 +2162,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
 
         const initialQ = readQueryUtteranceFromLocation();
         if (initialQ) {
-          // Shortcut SpeakText already greeted; DictateText supplied the command.
-          // Do NOT arm mic first — capture would hold Bluetooth SCO and
-          // delay/block the assistant reply TTS (glasses duplex).
+          // DictateText supplied the command — process immediately (mic off).
           stripQueryParamFromUrl("q");
           phaseRef.current = "thinking";
           setPhase("thinking");
@@ -2124,14 +2182,26 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           return;
         }
 
-        // No in-page greeting — Shortcut SpeakText owns "whats up big dog".
+        // Best-effort unlock; never block mic on failed greeting autoplay.
         void unlockAudio();
+        // Brief settle after page open, then listen for commands.
+        await new Promise((r) => window.setTimeout(r, 280));
+        if (!listeningOnRef.current) return;
+        if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
+          return;
+        }
         armCommandListen();
       } finally {
         listenReadyInFlightRef.current = false;
       }
     },
-    [armSilenceEnd, killMic, unlockAudio, unlockAudioInGesture]
+    [
+      armSilenceEnd,
+      killMic,
+      playPhoneGreetingInGesture,
+      unlockAudio,
+      unlockAudioInGesture,
+    ]
   );
 
   useEffect(() => {
@@ -3133,6 +3203,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   useEffect(() => {
     listeningOnRef.current = true;
     setListeningOn(true);
+    wantInPageGreetRef.current = readGreetIntentFromLocation();
     const wantListen = autoListen || readListenIntentFromLocation();
     const initialQ = readQueryUtteranceFromLocation();
     if (wantListen || initialQ) {
@@ -3514,17 +3585,17 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         <h1 className="nova-brand font-display">NOVA</h1>
         <p className="nova-tagline">
           {shortcutListen ? (
-            phase === "speaking" && !lines.length ? (
-              <>
-                Systems online. <span>Greeting…</span>
-              </>
-            ) : phase === "thinking" ? (
+            phase === "thinking" ? (
               <>
                 Systems online. <span>Working…</span>
               </>
             ) : phase === "listening_command" ? (
               <>
                 Systems online. <span>Listening…</span> Speak your command.
+              </>
+            ) : phase === "speaking" ? (
+              <>
+                Systems online. <span>Speaking…</span>
               </>
             ) : (
               <>
@@ -3533,8 +3604,8 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             )
           ) : (
             <>
-              Systems online. Say <span>“Hey Nova”</span> for outreach, MRR,
-              clients.
+              Systems online. Tap the orb to hear{" "}
+              <span>“whats up big dog”</span>, or say <span>“Hey Nova”</span>.
             </>
           )}
         </p>
