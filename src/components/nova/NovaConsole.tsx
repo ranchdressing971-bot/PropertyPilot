@@ -1291,9 +1291,6 @@ function mediaStreamIsLive(stream: MediaStream | null): boolean {
   return stream.getAudioTracks().some((t) => t.readyState === "live");
 }
 
-/** One-shot greeting when ?listen=1 (or /nova/go / #listen) is ready. */
-const LISTEN_READY_GREETING = "whats up big dog";
-
 export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [lines, setLines] = useState<ChatLine[]>([]);
@@ -1383,27 +1380,11 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   >(async () => {});
   const autoListenRef = useRef(autoListen);
   const listenTapNeededRef = useRef(false);
-  /** Once per ?listen=1 session — not on every barge-in / mic restart. */
-  const listenGreetingDoneRef = useRef(false);
-  /** Prevents overlapping unlock→greet→listen boots. */
+  /** Prevents overlapping unlock→listen boots. */
   const listenReadyInFlightRef = useRef(false);
   const runListenReadySequenceRef = useRef<
     (fromGesture: boolean) => Promise<void>
   >(async () => {});
-  /**
-   * Prefetched listen-ready greeting (blob + dedicated object URL).
-   * Kept off objectUrlRef so normal speak() prefetch cannot revoke it.
-   */
-  const greetPrefetchRef = useRef<{
-    blob: Blob | null;
-    url?: string;
-    format?: string;
-    useBrowserTts: boolean;
-    ready: boolean;
-  } | null>(null);
-  const greetUrlRef = useRef<string | null>(null);
-  const greetPrefetchAbortRef = useRef<AbortController | null>(null);
-  const playListenGreetingInGestureRef = useRef<() => boolean>(() => false);
 
   /**
    * Unlock audio inside a user gesture without clobbering a prefetched voice URL.
@@ -1853,21 +1834,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         playPendingNowRef.current();
         return true;
       }
-      // Optional orb tap: if greeting never autoplayed, play() must stay in-gesture.
-      if (
-        autoListenRef.current &&
-        !listenGreetingDoneRef.current &&
-        (listenTapNeededRef.current || needsGestureForVoice())
-      ) {
-        if (playListenGreetingInGestureRef.current()) {
-          return true;
-        }
-      }
       unlockAudioInGesture();
-      // Already greeted (or desktop): ensure command listen after unlock.
+      // Shortcut / listen=1: ensure command listen after unlock (no web greeting).
       if (
         autoListenRef.current &&
-        listenGreetingDoneRef.current &&
         (listenTapNeededRef.current ||
           phaseRef.current === "idle" ||
           (phaseRef.current === "listening_wake" && !recognitionRef.current) ||
@@ -2095,265 +2065,12 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     }
   }, [armSilenceEnd, killMic]);
 
-  /** Prefetch "whats up big dog" TTS so the wake tap only calls play() in-gesture. */
-  const prefetchListenGreeting = useCallback(() => {
-    if (greetPrefetchRef.current?.ready) return;
-    if (greetPrefetchAbortRef.current) return;
-    const ac = new AbortController();
-    greetPrefetchAbortRef.current = ac;
-    void fetchVoiceAudio(LISTEN_READY_GREETING, ac.signal).then((result) => {
-      if (ac.signal.aborted) return;
-      greetPrefetchAbortRef.current = null;
-      if (result.blob && !result.useBrowserTts) {
-        if (greetUrlRef.current) {
-          URL.revokeObjectURL(greetUrlRef.current);
-          greetUrlRef.current = null;
-        }
-        const url = URL.createObjectURL(
-          normalizeAudioBlob(result.blob, result.format)
-        );
-        greetUrlRef.current = url;
-        const el = audioElRef.current;
-        if (el) {
-          primeAudioElement(el);
-          el.src = url;
-          el.load();
-        }
-        greetPrefetchRef.current = {
-          blob: result.blob,
-          url,
-          format: result.format,
-          useBrowserTts: false,
-          ready: true,
-        };
-        setVoiceDebug(
-          formatVoiceDiag({
-            path: "greet-prefetch:ok",
-            bytes: result.bytes,
-            format: result.format,
-          })
-        );
-        return;
-      }
-      greetPrefetchRef.current = {
-        blob: null,
-        useBrowserTts: true,
-        ready: true,
-      };
-      setVoiceDebug(
-        formatVoiceDiag({
-          path: "greet-prefetch:device-tts",
-          error: result.error,
-        })
-      );
-    });
-  }, []);
-
-  /**
-   * Wake-tap path: pause mic FIRST (duplex), then unlock + play greeting.
-   * Prefetched blob → playPreparedInGesture; else device TTS sync speak().
-   * Mic starts only after greeting ends (resumeAfterSpeech → startMic).
-   */
-  const playListenGreetingInGesture = useCallback((): boolean => {
-    if (gesturePlayLockRef.current) return true;
-    autoListenRef.current = true;
-    setShortcutListen(true);
-    listeningOnRef.current = true;
-    setListeningOn(true);
-
-    // Already greeted — unlock and arm command listen only.
-    if (listenGreetingDoneRef.current) {
-      unlockAudioInGesture();
-      listenTapNeededRef.current = false;
-      setListenTapNeeded(false);
-      if (phaseRef.current !== "speaking" && phaseRef.current !== "thinking") {
-        phaseRef.current = "listening_command";
-        setPhase("listening_command");
-        armSilenceEnd();
-        if (!recognitionRef.current) startMicRef.current("command");
-      }
-      return true;
-    }
-
-    const el = audioElRef.current;
-    const pref = greetPrefetchRef.current;
-    const synth =
-      typeof window !== "undefined" ? window.speechSynthesis : undefined;
-
-    // Hard mute before any play — recognition + MediaStream tracks off.
-    // Open capture (Bluetooth SCO) blocks TTS until the user mutes.
-    phaseRef.current = "speaking";
-    setPhase("speaking");
-    killMic({ keepSpeech: true });
-
-    // Resume AC before play — do NOT run silent-WAV unlock first (can steal gesture).
-    resumeAudioContextInGesture();
-
-    let playback: Promise<void> | null = null;
-    let path = "wake:none";
-
-    try {
-      if (pref?.blob && el) {
-        const urlReady =
-          Boolean(pref.url) &&
-          (el.src === pref.url || el.currentSrc === pref.url);
-        if (urlReady && pref.url) {
-          primeAudioElement(el);
-          el.muted = false;
-          el.volume = 1;
-          path = "wake:mpeg-prepared";
-          // Use greetUrlRef so end-revoke doesn't touch a stale objectUrlRef.
-          playback = playPreparedInGesture(el, greetUrlRef);
-        } else {
-          path = "wake:mpeg-blob";
-          playback = playBlobInGesture(el, pref.blob, greetUrlRef);
-        }
-      } else if (pref?.ready && pref.useBrowserTts && synth) {
-        path = "wake:device-tts";
-        playback = speakWithFreeVoiceSync(LISTEN_READY_GREETING);
-      } else if (pref?.ready && hasNativeTts()) {
-        path = "wake:native";
-        playback = speakWithNative(LISTEN_READY_GREETING);
-      } else if (!pref?.ready) {
-        // Prefetch still in flight — unlock now; play as soon as blob lands.
-        unlockAudioInGesture();
-        path = "wake:await-prefetch";
-        setPhase("speaking");
-        listenTapNeededRef.current = false;
-        setListenTapNeeded(false);
-        const waitPrefetch = async () => {
-          const deadline = Date.now() + 8000;
-          while (Date.now() < deadline) {
-            if (greetPrefetchRef.current?.ready) break;
-            await new Promise((r) => window.setTimeout(r, 50));
-          }
-          // Mic may have been restarted while waiting — hard-mute + settle before play.
-          await pauseMicForSpeech({ settleMs: micSettleMsForDevice() });
-          const ready = greetPrefetchRef.current;
-          if (ready?.blob && audioElRef.current) {
-            await playBlobOnElement(
-              audioElRef.current,
-              ready.blob,
-              greetUrlRef
-            );
-            return;
-          }
-          if (ready?.useBrowserTts && window.speechSynthesis) {
-            // May fail on iOS after await — re-show gate if so.
-            await speakWithFreeVoiceSync(LISTEN_READY_GREETING);
-            return;
-          }
-          throw new Error("Greeting audio not ready");
-        };
-        gesturePlayLockRef.current = true;
-        listenGreetingDoneRef.current = true;
-        setVoiceDebug(formatVoiceDiag({ unlocked: true, path }));
-        void waitPrefetch()
-          .then(() => {
-            setVoiceDebug(
-              formatVoiceDiag({ unlocked: true, path: `${path}:ok` })
-            );
-            resumeAfterSpeech("command");
-          })
-          .catch(() => {
-            listenGreetingDoneRef.current = false;
-            showWakeGate();
-            setVoiceDebug(
-              formatVoiceDiag({ path: `${path}:fail`, error: "prefetch miss" })
-            );
-          })
-          .finally(() => {
-            gesturePlayLockRef.current = false;
-          });
-        return true;
-      } else if (synth) {
-        path = "wake:device-tts-fallback";
-        playback = speakWithFreeVoiceSync(LISTEN_READY_GREETING);
-      } else if (hasNativeTts()) {
-        path = "wake:native-fallback";
-        playback = speakWithNative(LISTEN_READY_GREETING);
-      } else {
-        showWakeGate();
-        return false;
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "wake play failed";
-      setVoiceDebug(formatVoiceDiag({ path: "wake:throw", error: msg }));
-      showWakeGate();
-      return false;
-    }
-
-    if (!playback) {
-      showWakeGate();
-      return false;
-    }
-
-    gesturePlayLockRef.current = true;
-    listenGreetingDoneRef.current = true;
-    listenTapNeededRef.current = false;
-    setListenTapNeeded(false);
-    audioUnlockedRef.current = true;
-    setAudioUnlocked(true);
-    setNeedsGesture(false);
-    setPhase("speaking");
-    setVoiceDebug(formatVoiceDiag({ unlocked: true, path }));
-
-    void playback
-      .then(() => {
-        setVoiceDebug(formatVoiceDiag({ unlocked: true, path: `${path}:ok` }));
-        setError(null);
-        // Clear dedicated greet URL bookkeeping after successful play.
-        if (greetUrlRef.current) {
-          greetUrlRef.current = null;
-        }
-        greetPrefetchRef.current = null;
-        resumeAfterSpeech("command");
-      })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : "wake play blocked";
-        listenGreetingDoneRef.current = false;
-        // playPreparedInGesture may have revoked the URL — keep blob for retry.
-        if (greetPrefetchRef.current?.blob) {
-          greetPrefetchRef.current = {
-            ...greetPrefetchRef.current,
-            url: undefined,
-            ready: true,
-            useBrowserTts: false,
-          };
-        }
-        greetUrlRef.current = null;
-        setVoiceDebug(
-          formatVoiceDiag({ path: `${path}:fail`, error: msg })
-        );
-        showWakeGate();
-      })
-      .finally(() => {
-        gesturePlayLockRef.current = false;
-      });
-
-    return true;
-  }, [
-    armSilenceEnd,
-    killMic,
-    pauseMicForSpeech,
-    resumeAfterSpeech,
-    resumeAudioContextInGesture,
-    showWakeGate,
-    unlockAudioInGesture,
-  ]);
-
-  useEffect(() => {
-    playListenGreetingInGestureRef.current = playListenGreetingInGesture;
-  }, [playListenGreetingInGesture]);
-
   /**
    * Shortcut / ?listen=1 ready path (glasses-first):
+   * - Greeting is ONLY iOS Shortcut SpeakText — never web TTS here.
+   * - If ?q= is present, process that utterance immediately (DictateText).
+   * - Otherwise go straight to hard-muted-until-needed command listen.
    * - Never soft-lock behind a full-screen tap wall.
-   * - If ?q= is present, treat it as the user utterance immediately (Shortcut
-   *   Speak Text already greeted; DictateText supplied the command).
-   * - Otherwise try autoplay greeting; if blocked, still open command listen.
-   * - Aggressively start the mic when permission was previously granted.
-   * Optional orb tap can still unlock audio / replay greeting.
    */
   const runListenReadySequence = useCallback(
     async (fromGesture: boolean) => {
@@ -2378,24 +2095,17 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
 
       try {
         if (fromGesture) {
-          if (!listenGreetingDoneRef.current) {
-            playListenGreetingInGesture();
-            return;
-          }
           unlockAudioInGesture();
           armCommandListen();
           return;
         }
 
-        prefetchListenGreeting();
-
         const initialQ = readQueryUtteranceFromLocation();
         if (initialQ) {
-          // Shortcut already spoke the greeting; skip web greeting for this turn.
-          // Do NOT arm mic first — capture would hold the session until mute and
+          // Shortcut SpeakText already greeted; DictateText supplied the command.
+          // Do NOT arm mic first — capture would hold Bluetooth SCO and
           // delay/block the assistant reply TTS (glasses duplex).
           stripQueryParamFromUrl("q");
-          listenGreetingDoneRef.current = true;
           phaseRef.current = "thinking";
           setPhase("thinking");
           killMic();
@@ -2414,53 +2124,14 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           return;
         }
 
-        if (listenGreetingDoneRef.current) {
-          armCommandListen();
-          return;
-        }
-
-        // Speak greeting FIRST with mic HARD OFF; resumeAfterSpeech arms listen.
-        // Starting recognition before TTS is the classic duplex stall ("mute yourself").
-        phaseRef.current = "speaking";
-        setPhase("speaking");
-        killMic({ keepSpeech: true });
-        await new Promise((r) =>
-          window.setTimeout(r, micSettleMsForDevice())
-        );
-        const unlocked = await unlockAudio();
-        listenGreetingDoneRef.current = true;
-        if (!unlocked) {
-          armCommandListen();
-          return;
-        }
-
-        // Best-effort greeting; speak() hard-mutes again then resumeAfterSpeech
-        // opens the mic only after onended. skipTapRecovery: never soft-lock.
-        await speakRef.current(LISTEN_READY_GREETING, "command", undefined, {
-          skipTapRecovery: true,
-        });
-        pendingVoiceRef.current = null;
-        waitingForTapRef.current = false;
-        if (
-          listeningOnRef.current &&
-          !recognitionRef.current &&
-          phaseRef.current !== "speaking" &&
-          phaseRef.current !== "thinking"
-        ) {
-          armCommandListen();
-        }
+        // No in-page greeting — Shortcut SpeakText owns "whats up big dog".
+        void unlockAudio();
+        armCommandListen();
       } finally {
         listenReadyInFlightRef.current = false;
       }
     },
-    [
-      armSilenceEnd,
-      killMic,
-      playListenGreetingInGesture,
-      prefetchListenGreeting,
-      unlockAudio,
-      unlockAudioInGesture,
-    ]
+    [armSilenceEnd, killMic, unlockAudio, unlockAudioInGesture]
   );
 
   useEffect(() => {
@@ -3005,7 +2676,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             }
 
             // Could not autoplay this chunk — queue silent recovery for remainder.
-            // Listen-ready greeting: skip recovery so we still enter listening.
             if (!stillCurrent()) return;
             if (skipTapRecovery) {
               setError(null);
@@ -3474,13 +3144,6 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       listeningOnRef.current = false;
       killMic();
       clearSilenceEnd();
-      greetPrefetchAbortRef.current?.abort();
-      greetPrefetchAbortRef.current = null;
-      if (greetUrlRef.current) {
-        URL.revokeObjectURL(greetUrlRef.current);
-        greetUrlRef.current = null;
-      }
-      greetPrefetchRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once
   }, []);
