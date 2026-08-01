@@ -206,26 +206,12 @@
   color: rgba(255, 210, 140, 0.9);
 }
 
-.nova-enable-sound {
-  display: block;
-  margin: 0.65rem auto 0;
-  min-height: 2.5rem;
-  padding: 0.55rem 1.25rem;
-  border-radius: 9999px;
-  border: 1px solid rgba(120, 220, 255, 0.45);
-  background: rgba(12, 48, 64, 0.9);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
+.nova-sound-status {
+  margin-top: 0.35rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(190, 245, 255, 0.95);
-  cursor: pointer;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.nova-enable-sound:active {
-  transform: scale(0.98);
+  color: rgba(160, 220, 200, 0.55);
 }
 
 .nova-hint-mobile {
@@ -283,83 +269,6 @@
   opacity: 0.01;
   pointer-events: none;
   z-index: 1;
-}
-
-.nova-tap-hear {
-  position: relative;
-  z-index: 50;
-  display: block;
-  width: 100%;
-  margin-bottom: 0.75rem;
-  min-height: 2.75rem;
-  padding: 0.75rem 1.25rem;
-  border-radius: 9999px;
-  border: 1px solid rgba(120, 220, 255, 0.55);
-  background: rgba(20, 60, 80, 0.85);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: rgba(180, 240, 255, 0.95);
-  cursor: pointer;
-  pointer-events: auto;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-/* Fixed on document.body via portal — above all Nova layers and iOS chrome. */
-.nova-tap-hear-fixed {
-  position: fixed;
-  left: 50%;
-  bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
-  z-index: 2147483646;
-  transform: translateX(-50%);
-  display: block;
-  min-width: min(20rem, calc(100vw - 1.5rem));
-  min-height: 4rem;
-  padding: 1.1rem 1.75rem;
-  border-radius: 9999px;
-  border: 1px solid rgba(120, 220, 255, 0.65);
-  background: rgba(10, 40, 55, 0.98);
-  box-shadow:
-    0 0 24px rgba(86, 214, 255, 0.25),
-    0 8px 32px rgba(0, 0, 0, 0.55);
-  font-size: 0.95rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(200, 245, 255, 1);
-  cursor: pointer;
-  pointer-events: auto;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  -webkit-user-select: none;
-  user-select: none;
-  transition: background 0.15s ease, transform 0.1s ease;
-}
-
-@media (min-width: 640px) {
-  .nova-tap-hear-fixed {
-    bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
-  }
-}
-
-.nova-tap-hear-fixed:hover {
-  background: rgba(20, 70, 90, 0.98);
-}
-
-.nova-tap-hear-fixed:active {
-  transform: translateX(-50%) scale(0.97);
-}
-
-.nova-tap-hear:hover {
-  background: rgba(30, 90, 110, 0.7);
-  border-color: rgba(160, 240, 255, 0.65);
-}
-
-.nova-tap-hear:active {
-  transform: scale(0.98);
 }
 
 .nova-dock {
