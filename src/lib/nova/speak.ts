@@ -10,7 +10,8 @@
  * (e.g. a British voice name) and we resolve it. If unset, we prefer a voice
  * named Nova, then the first account voice.
  *
- * OpenAI fallback defaults: British voice `fable`, speed ~1.2.
+ * OpenAI fallback defaults: `gpt-4o-mini-tts` + feminine voice `coral`
+ * with light British-woman instructions, speed ~1.2.
  * ElevenLabs speaking rate defaults to ~1.15 (env: ELEVENLABS_SPEED).
  */
 
@@ -278,11 +279,27 @@ async function synthesizeOpenAI(
 
   const clipped = clipSpeechText(text);
   const wantWav = opts?.format === "wav";
-  const model = process.env.OPENAI_TTS_MODEL?.trim() || "tts-1";
-  // `fable` is OpenAI's classic British English voice (tts-1 / tts-1-hd).
-  const voice = process.env.OPENAI_TTS_VOICE?.trim() || "fable";
+  // gpt-4o-mini-tts supports style `instructions` (British young woman).
+  const model = process.env.OPENAI_TTS_MODEL?.trim() || "gpt-4o-mini-tts";
+  // Feminine voices: coral, nova, shimmer, sage. Avoid fable/onyx/echo (male/deep).
+  const voice = process.env.OPENAI_TTS_VOICE?.trim() || "coral";
   // Brisk but natural — OpenAI TTS speed range is 0.25–4.0.
   const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.2, 0.25, 4.0);
+  const instructions =
+    process.env.OPENAI_TTS_INSTRUCTIONS?.trim() ||
+    "Young British woman. Clear, warm, natural — not deep or masculine.";
+
+  const body: Record<string, unknown> = {
+    model,
+    voice,
+    input: clipped,
+    speed,
+    response_format: wantWav ? "wav" : "mp3",
+  };
+  // Style instructions are only honored by gpt-4o-mini-tts (and similar).
+  if (/gpt-4o.*tts/i.test(model)) {
+    body.instructions = instructions;
+  }
 
   const response = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
@@ -290,13 +307,7 @@ async function synthesizeOpenAI(
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model,
-      voice,
-      input: clipped,
-      speed,
-      response_format: wantWav ? "wav" : "mp3",
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
