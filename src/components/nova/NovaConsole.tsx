@@ -955,6 +955,9 @@ function playBlobOnElement(
     };
 
     const attemptPlay = (retriesLeft: number) => {
+      // Speakers / A2DP: never leave the element muted or at 0 after mic release.
+      el.muted = false;
+      el.volume = 1;
       void el.play().catch(async (err: unknown) => {
         if (retriesLeft > 0) {
           await new Promise((r) => window.setTimeout(r, 150));
@@ -1254,6 +1257,40 @@ async function probeMicrophoneAccess(): Promise<"granted" | "denied" | "unknown"
   return "unknown";
 }
 
+/** iOS Bluetooth SCO needs a beat after capture dies before TTS can use A2DP/speakers. */
+function micSettleMsForDevice(): number {
+  return isIOS() || isMobileTouchDevice() ? 220 : 120;
+}
+
+function disableMediaStreamTracks(stream: MediaStream | null): void {
+  if (!stream) return;
+  for (const track of stream.getAudioTracks()) {
+    try {
+      track.enabled = false;
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Full release — disables then stops tracks so iOS can leave headset-SCO routing. */
+function stopMediaStreamTracks(stream: MediaStream | null): void {
+  if (!stream) return;
+  for (const track of stream.getTracks()) {
+    try {
+      track.enabled = false;
+      track.stop();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function mediaStreamIsLive(stream: MediaStream | null): boolean {
+  if (!stream) return false;
+  return stream.getAudioTracks().some((t) => t.readyState === "live");
+}
+
 /** One-shot greeting when ?listen=1 (or /nova/go / #listen) is ready. */
 const LISTEN_READY_GREETING = "whats up big dog";
 
@@ -1299,6 +1336,11 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const phaseRef = useRef<Phase>("idle");
   const listeningOnRef = useRef(true);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  /**
+   * Owned getUserMedia stream — SpeechRecognition alone does not expose tracks.
+   * We mute/stop these before TTS so iOS can leave Bluetooth SCO and play aloud.
+   */
+  const captureStreamRef = useRef<MediaStream | null>(null);
   const restartingRef = useRef(false);
   const commandBufferRef = useRef("");
   const commandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1602,16 +1644,18 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const resumeAfterSpeech = useCallback((mode: ListenMode) => {
     const next: Phase =
       mode === "command" ? "listening_command" : "listening_wake";
-    // Sync ref immediately so startMic (350ms later) doesn't bail on stale "speaking".
+    // Sync ref immediately so startMic (after settle) doesn't bail on stale "speaking".
     phaseRef.current = next;
     setPhase(next);
+    // Brief gap after TTS ended so the audio session can flip back to capture.
+    const resumeDelay = isIOS() || isMobileTouchDevice() ? 400 : 350;
     window.setTimeout(() => {
       if (!listeningOnRef.current) return;
       if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
         return;
       }
       startMicRef.current(mode);
-    }, 350);
+    }, resumeDelay);
   }, []);
 
   useEffect(() => {
@@ -1706,7 +1750,12 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     });
   }, [status]);
 
-  /** Hard-kill mic. Chrome will not reliably restart a stopped instance. */
+  /**
+   * Hard-kill mic capture for duplex TTS.
+   * 1) Stop SpeechRecognition completely (abort + stop)
+   * 2) Disable then stop owned getUserMedia tracks (releases Bluetooth SCO)
+   * Chrome will not reliably restart a stopped recognition instance.
+   */
   const killMic = useCallback((opts?: { keepSpeech?: boolean }) => {
     restartingRef.current = true;
     if (commandTimerRef.current) {
@@ -1739,21 +1788,28 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         /* ignore */
       }
     }
+    // Hard-mute MediaStream tracks, then stop them so iOS can leave SCO.
+    const stream = captureStreamRef.current;
+    captureStreamRef.current = null;
+    disableMediaStreamTracks(stream);
+    stopMediaStreamTracks(stream);
     window.setTimeout(() => {
       restartingRef.current = false;
     }, 100);
   }, []);
 
   /**
-   * Duplex fix: recognition / capture must release the audio session BEFORE
-   * any TTS play(). Otherwise glasses/phone hold output until the user mutes.
-   * Synchronous kill first; async settle is for WebKit session teardown.
+   * Duplex fix: recognition + MediaStream tracks must release BEFORE any TTS
+   * play(). Abort alone was not enough on glasses/iPhone — open capture holds
+   * Bluetooth SCO and ducks/blocks speaker TTS until the user mutes.
+   * Sync kill first; longer settle lets WebKit tear down the audio session.
    */
   const pauseMicForSpeech = useCallback(
     (opts?: { settleMs?: number }): Promise<void> => {
       phaseRef.current = "speaking";
+      setPhase("speaking");
       killMic({ keepSpeech: true });
-      const settleMs = opts?.settleMs ?? 50;
+      const settleMs = opts?.settleMs ?? micSettleMsForDevice();
       if (settleMs <= 0) return Promise.resolve();
       return new Promise((resolve) => {
         window.setTimeout(resolve, settleMs);
@@ -1899,8 +1955,9 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     waitingForTapRef.current = false;
     audioUnlockedRef.current = true;
 
-    // 1) Release capture BEFORE play — open mic blocks/delays TTS on glasses.
+    // 1) Hard mute BEFORE play — open mic (SCO) blocks/delays TTS on glasses.
     phaseRef.current = "speaking";
+    setPhase("speaking");
     killMic({ keepSpeech: true });
 
     let playback: Promise<void>;
@@ -2123,8 +2180,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
     const synth =
       typeof window !== "undefined" ? window.speechSynthesis : undefined;
 
-    // Release capture before any play — open mic blocks TTS until user mutes.
+    // Hard mute before any play — recognition + MediaStream tracks off.
+    // Open capture (Bluetooth SCO) blocks TTS until the user mutes.
     phaseRef.current = "speaking";
+    setPhase("speaking");
     killMic({ keepSpeech: true });
 
     // Resume AC before play — do NOT run silent-WAV unlock first (can steal gesture).
@@ -2168,8 +2227,8 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             if (greetPrefetchRef.current?.ready) break;
             await new Promise((r) => window.setTimeout(r, 50));
           }
-          // Mic may have been restarted while waiting — release again before play.
-          await pauseMicForSpeech();
+          // Mic may have been restarted while waiting — hard-mute + settle before play.
+          await pauseMicForSpeech({ settleMs: micSettleMsForDevice() });
           const ready = greetPrefetchRef.current;
           if (ready?.blob && audioElRef.current) {
             await playBlobOnElement(
@@ -2360,8 +2419,14 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           return;
         }
 
-        // Speak greeting FIRST with mic off; resumeAfterSpeech arms command listen.
+        // Speak greeting FIRST with mic HARD OFF; resumeAfterSpeech arms listen.
         // Starting recognition before TTS is the classic duplex stall ("mute yourself").
+        phaseRef.current = "speaking";
+        setPhase("speaking");
+        killMic({ keepSpeech: true });
+        await new Promise((r) =>
+          window.setTimeout(r, micSettleMsForDevice())
+        );
         const unlocked = await unlockAudio();
         listenGreetingDoneRef.current = true;
         if (!unlocked) {
@@ -2369,8 +2434,8 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           return;
         }
 
-        // Best-effort greeting; speak() pauses mic then resumeAfterSpeech reopens it.
-        // skipTapRecovery: never soft-lock if play() is blocked.
+        // Best-effort greeting; speak() hard-mutes again then resumeAfterSpeech
+        // opens the mic only after onended. skipTapRecovery: never soft-lock.
         await speakRef.current(LISTEN_READY_GREETING, "command", undefined, {
           skipTapRecovery: true,
         });
@@ -2405,9 +2470,12 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const startMic = useCallback(
     (mode: ListenMode = "wake") => {
       if (!listeningOnRef.current) return;
-      // Speaking locks the mic (echo + duplex). Thinking also stays muted so
-      // capture cannot hold the audio session until TTS finishes.
-      if (phaseRef.current === "speaking") {
+      // NEVER open capture while thinking or speaking — holds Bluetooth SCO and
+      // stalls TTS until the user mutes. Mic returns only via resumeAfterSpeech.
+      if (
+        phaseRef.current === "speaking" ||
+        phaseRef.current === "thinking"
+      ) {
         return;
       }
 
@@ -2417,217 +2485,298 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         return;
       }
 
-      killMic();
-
-      const recognition = new Ctor();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
-      recognitionRef.current = recognition;
-
-      // Preserve "thinking" chrome while still capturing barge-in commands.
-      if (phaseRef.current !== "thinking") {
-        phaseRef.current =
-          mode === "command" ? "listening_command" : "listening_wake";
-        setPhase(phaseRef.current);
+      // Drop prior recognition only (keep stream until we replace it below).
+      restartingRef.current = true;
+      if (commandTimerRef.current) {
+        clearTimeout(commandTimerRef.current);
+        commandTimerRef.current = null;
       }
-      if (mode === "command" || phaseRef.current === "thinking") armSilenceEnd();
-      else clearSilenceEnd();
-
-      const commitUtterance = (raw: string) => {
-        const text = raw.trim();
-        if (!text) return;
-
-        if (isCloseIntent(text)) {
-          commandBufferRef.current = "";
-          if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
-          goDormantRef.current();
-          return;
+      const prev = recognitionRef.current;
+      recognitionRef.current = null;
+      if (prev) {
+        prev.onresult = null;
+        prev.onerror = null;
+        prev.onend = null;
+        try {
+          prev.abort();
+        } catch {
+          /* ignore */
         }
-
-        if (isWakeOnly(text)) {
-          openConversationRef.current();
-          return;
+        try {
+          prev.stop();
+        } catch {
+          /* ignore */
         }
+      }
+      window.setTimeout(() => {
+        restartingRef.current = false;
+      }, 100);
 
-        const rest = stripWake(text) || text;
-        if (!looksLikeCommand(rest)) return;
-
-        commandBufferRef.current = "";
-        if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
-        clearSilenceEnd();
-        void askNovaRef.current(rest);
-      };
-
-      recognition.onresult = (event) => {
-        // Mute recognition while she speaks (and while thinking — duplex).
+      const bootRecognition = () => {
+        if (!listeningOnRef.current) return;
         if (
           phaseRef.current === "speaking" ||
           phaseRef.current === "thinking"
         ) {
+          // Acquired stream during mute window — release it.
+          const leaked = captureStreamRef.current;
+          captureStreamRef.current = null;
+          disableMediaStreamTracks(leaked);
+          stopMediaStreamTracks(leaked);
           return;
         }
 
-        let chunk = "";
-        let isFinal = false;
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          chunk += event.results[i][0]?.transcript ?? "";
-          if (event.results[i].isFinal) isFinal = true;
-        }
-        const text = chunk.trim();
-        if (!text) return;
+        const recognition = new Ctor();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-US";
+        recognitionRef.current = recognition;
 
-        // Dormant / not in a chat: ignore ambient talk until "Hey Nova".
-        if (phaseRef.current === "listening_wake") {
-          if (!containsWake(text)) return;
+        phaseRef.current =
+          mode === "command" ? "listening_command" : "listening_wake";
+        setPhase(phaseRef.current);
+        if (mode === "command") armSilenceEnd();
+        else clearSilenceEnd();
 
-          if (isWakeOnly(text) || stripWake(text).length < 2) {
-            if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
-            commandBufferRef.current = "";
-            beep();
-            openConversationRef.current();
-            return;
-          }
-
-          // "Hey Nova, what's the status" — wake + ask in one breath.
-          const rest = stripWake(text);
-          if (!looksLikeCommand(rest)) {
-            beep();
-            openConversationRef.current();
-            return;
-          }
-
-          beep();
-          phaseRef.current = "listening_command";
-          setPhase("listening_command");
-          armSilenceEnd();
-          commandBufferRef.current = rest;
-          if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
-          if (rest.length > 6 && isFinal) {
-            commitUtterance(rest);
-            return;
-          }
-          commandTimerRef.current = setTimeout(() => {
-            commitUtterance(commandBufferRef.current);
-          }, 1400);
-          return;
-        }
-
-        // Open conversation OR mid-think barge-in — same command path.
-        if (
-          phaseRef.current === "listening_command" ||
-          phaseRef.current === "thinking"
-        ) {
-          armSilenceEnd();
-
-          if (isWakeOnly(text)) {
-            armSilenceEnd();
-            return;
-          }
+        const commitUtterance = (raw: string) => {
+          const text = raw.trim();
+          if (!text) return;
 
           if (isCloseIntent(text)) {
-            if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
             commandBufferRef.current = "";
+            if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
             goDormantRef.current();
+            return;
+          }
+
+          if (isWakeOnly(text)) {
+            openConversationRef.current();
             return;
           }
 
           const rest = stripWake(text) || text;
           if (!looksLikeCommand(rest)) return;
 
-          commandBufferRef.current = rest;
+          commandBufferRef.current = "";
           if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
-          commandTimerRef.current = setTimeout(() => {
-            commitUtterance(commandBufferRef.current);
-          }, isFinal ? 450 : 1200);
-        }
-      };
+          clearSilenceEnd();
+          void askNovaRef.current(rest);
+        };
 
-      recognition.onerror = (ev) => {
-        if (ev.error === "not-allowed") {
-          setError(
-            autoListenRef.current
-              ? "Microphone blocked. Enable it in Safari Settings for this site, then reopen via the Hey Nova Shortcut."
-              : "Allow the microphone. Nova needs it to always listen."
-          );
-          setNeedsGesture(true);
-          recognitionRef.current = null;
-          if (autoListenRef.current) {
-            // Do not raise a tap wall — glasses / Shortcut cannot satisfy it.
-            listenTapNeededRef.current = false;
-            setListenTapNeeded(false);
-            setPhase("idle");
-            phaseRef.current = "idle";
-          } else {
-            setListeningOn(false);
-            listeningOnRef.current = false;
-            setPhase("idle");
-          }
-        }
-      };
-
-      recognition.onend = () => {
-        if (restartingRef.current) return;
-        if (!listeningOnRef.current) return;
-        // Do not revive capture while thinking/speaking — that stalls TTS.
-        if (
-          phaseRef.current === "speaking" ||
-          phaseRef.current === "thinking"
-        ) {
-          return;
-        }
-        // Chrome drops continuous sessions — spawn a fresh one.
-        window.setTimeout(() => {
-          if (!listeningOnRef.current) return;
+        recognition.onresult = (event) => {
+          // Hard-ignore while muted for TTS / thinking (no barge-in).
           if (
             phaseRef.current === "speaking" ||
             phaseRef.current === "thinking"
           ) {
             return;
           }
-          if (recognitionRef.current !== recognition) return;
-          recognitionRef.current = null;
-          const mode: ListenMode =
-            phaseRef.current === "listening_command" ||
-            phaseRef.current === "thinking"
-              ? "command"
-              : "wake";
-          startMicRef.current(mode);
-        }, 250);
-      };
 
-      try {
-        recognition.start();
-        setNeedsGesture(false);
-        if (autoListenRef.current && mode === "command") {
-          listenTapNeededRef.current = false;
-          setListenTapNeeded(false);
-          setError(null);
-        }
-      } catch {
-        setNeedsGesture(true);
-        recognitionRef.current = null;
-        if (autoListenRef.current) {
-          // Retry shortly — prior mic grant often works after Safari settles.
-          listenTapNeededRef.current = false;
-          setListenTapNeeded(false);
-          setError(null);
+          let chunk = "";
+          let isFinal = false;
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            chunk += event.results[i][0]?.transcript ?? "";
+            if (event.results[i].isFinal) isFinal = true;
+          }
+          const text = chunk.trim();
+          if (!text) return;
+
+          // Dormant / not in a chat: ignore ambient talk until "Hey Nova".
+          if (phaseRef.current === "listening_wake") {
+            if (!containsWake(text)) return;
+
+            if (isWakeOnly(text) || stripWake(text).length < 2) {
+              if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+              commandBufferRef.current = "";
+              beep();
+              openConversationRef.current();
+              return;
+            }
+
+            // "Hey Nova, what's the status" — wake + ask in one breath.
+            const rest = stripWake(text);
+            if (!looksLikeCommand(rest)) {
+              beep();
+              openConversationRef.current();
+              return;
+            }
+
+            beep();
+            phaseRef.current = "listening_command";
+            setPhase("listening_command");
+            armSilenceEnd();
+            commandBufferRef.current = rest;
+            if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+            if (rest.length > 6 && isFinal) {
+              commitUtterance(rest);
+              return;
+            }
+            commandTimerRef.current = setTimeout(() => {
+              commitUtterance(commandBufferRef.current);
+            }, 1400);
+            return;
+          }
+
+          if (phaseRef.current === "listening_command") {
+            armSilenceEnd();
+
+            if (isWakeOnly(text)) {
+              armSilenceEnd();
+              return;
+            }
+
+            if (isCloseIntent(text)) {
+              if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+              commandBufferRef.current = "";
+              goDormantRef.current();
+              return;
+            }
+
+            const rest = stripWake(text) || text;
+            if (!looksLikeCommand(rest)) return;
+
+            commandBufferRef.current = rest;
+            if (commandTimerRef.current) clearTimeout(commandTimerRef.current);
+            commandTimerRef.current = setTimeout(() => {
+              commitUtterance(commandBufferRef.current);
+            }, isFinal ? 450 : 1200);
+          }
+        };
+
+        recognition.onerror = (ev) => {
+          if (ev.error === "not-allowed") {
+            setError(
+              autoListenRef.current
+                ? "Microphone blocked. Enable it in Safari Settings for this site, then reopen via the Hey Nova Shortcut."
+                : "Allow the microphone. Nova needs it to always listen."
+            );
+            setNeedsGesture(true);
+            recognitionRef.current = null;
+            const deniedStream = captureStreamRef.current;
+            captureStreamRef.current = null;
+            disableMediaStreamTracks(deniedStream);
+            stopMediaStreamTracks(deniedStream);
+            if (autoListenRef.current) {
+              // Do not raise a tap wall — glasses / Shortcut cannot satisfy it.
+              listenTapNeededRef.current = false;
+              setListenTapNeeded(false);
+              setPhase("idle");
+              phaseRef.current = "idle";
+            } else {
+              setListeningOn(false);
+              listeningOnRef.current = false;
+              setPhase("idle");
+            }
+          }
+        };
+
+        recognition.onend = () => {
+          if (restartingRef.current) return;
+          if (!listeningOnRef.current) return;
+          // Do not revive capture while thinking/speaking — that stalls TTS.
+          if (
+            phaseRef.current === "speaking" ||
+            phaseRef.current === "thinking"
+          ) {
+            return;
+          }
+          // Chrome drops continuous sessions — spawn a fresh one.
           window.setTimeout(() => {
-            if (!listeningOnRef.current || recognitionRef.current) return;
+            if (!listeningOnRef.current) return;
             if (
               phaseRef.current === "speaking" ||
               phaseRef.current === "thinking"
             ) {
               return;
             }
-            startMicRef.current(mode);
-          }, 400);
-        } else {
-          setError("Tap the orb once to enable always-on listening.");
+            if (recognitionRef.current !== recognition) return;
+            recognitionRef.current = null;
+            const nextMode: ListenMode =
+              phaseRef.current === "listening_command" ? "command" : "wake";
+            startMicRef.current(nextMode);
+          }, 250);
+        };
+
+        try {
+          recognition.start();
+          setNeedsGesture(false);
+          if (autoListenRef.current && mode === "command") {
+            listenTapNeededRef.current = false;
+            setListenTapNeeded(false);
+            setError(null);
+          }
+        } catch {
+          setNeedsGesture(true);
+          recognitionRef.current = null;
+          if (autoListenRef.current) {
+            // Retry shortly — prior mic grant often works after Safari settles.
+            listenTapNeededRef.current = false;
+            setListenTapNeeded(false);
+            setError(null);
+            window.setTimeout(() => {
+              if (!listeningOnRef.current || recognitionRef.current) return;
+              if (
+                phaseRef.current === "speaking" ||
+                phaseRef.current === "thinking"
+              ) {
+                return;
+              }
+              startMicRef.current(mode);
+            }, 400);
+          } else {
+            setError("Tap the orb once to enable always-on listening.");
+          }
         }
-      }
+      };
+
+      // Own a MediaStream so hard-mute can disable/stop tracks before TTS.
+      // Re-acquire after hard mute stopped tracks (Bluetooth SCO release).
+      const ensureCaptureThenBoot = async () => {
+        if (
+          !listeningOnRef.current ||
+          phaseRef.current === "speaking" ||
+          phaseRef.current === "thinking"
+        ) {
+          return;
+        }
+        try {
+          if (!mediaStreamIsLive(captureStreamRef.current)) {
+            stopMediaStreamTracks(captureStreamRef.current);
+            captureStreamRef.current = null;
+            if (navigator.mediaDevices?.getUserMedia) {
+              const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                  echoCancellation: true,
+                  noiseSuppression: true,
+                },
+                video: false,
+              });
+              // Hard mute may have started while permission UI / getUserMedia ran.
+              if (
+                !listeningOnRef.current ||
+                phaseRef.current === "speaking" ||
+                phaseRef.current === "thinking"
+              ) {
+                disableMediaStreamTracks(stream);
+                stopMediaStreamTracks(stream);
+                return;
+              }
+              captureStreamRef.current = stream;
+            }
+          } else {
+            for (const track of captureStreamRef.current!.getAudioTracks()) {
+              track.enabled = true;
+            }
+          }
+        } catch {
+          /* Recognition may still open its own capture. */
+        }
+        bootRecognition();
+      };
+
+      void ensureCaptureThenBoot();
     },
-    [armSilenceEnd, clearSilenceEnd, killMic]
+    [armSilenceEnd, clearSilenceEnd]
   );
 
   useEffect(() => {
@@ -2656,7 +2805,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
       resumeModeRef.current = after;
       phaseRef.current = "speaking";
       setPhase("speaking");
-      // Pause capture immediately — do not wait for user silence / mute.
+      // Hard mute immediately — do not wait for user silence / mute.
       killMic();
       waitingForTapRef.current = false;
       pendingVoiceRef.current = null;
@@ -2670,10 +2819,16 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
               ? "ElevenLabs"
               : null;
 
-      /** Re-assert mic off + brief settle right before each play() attempt. */
+      /** Re-assert hard mute + settle so iOS leaves SCO before each play(). */
       const beforePlay = async () => {
         if (!stillCurrent()) throw new DOMException("aborted", "AbortError");
-        await pauseMicForSpeech();
+        await pauseMicForSpeech({ settleMs: micSettleMsForDevice() });
+        const el = audioElRef.current;
+        if (el) {
+          primeAudioElement(el);
+          el.muted = false;
+          el.volume = 1;
+        }
         if (!stillCurrent()) throw new DOMException("aborted", "AbortError");
       };
 
@@ -3065,13 +3220,15 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
 
   const openConversation = useCallback(() => {
     handleUserGesture();
-    if (phaseRef.current === "speaking") {
+    // Do not reopen mic during thinking/speaking — duplex hard-mute.
+    if (
+      phaseRef.current === "speaking" ||
+      phaseRef.current === "thinking"
+    ) {
       return;
     }
-    if (phaseRef.current !== "thinking") {
-      phaseRef.current = "listening_command";
-      setPhase("listening_command");
-    }
+    phaseRef.current = "listening_command";
+    setPhase("listening_command");
     armSilenceEnd();
     if (!recognitionRef.current && listeningOnRef.current) {
       startMicRef.current("command");
@@ -3379,10 +3536,7 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const waveLive =
     listeningOn &&
     !listenTapNeeded &&
-    (phase === "listening_wake" ||
-      phase === "listening_command" ||
-      phase === "speaking" ||
-      phase === "thinking");
+    (phase === "listening_wake" || phase === "listening_command");
 
   const phaseLabel = listenTapNeeded
     ? "tap orb to unlock voice"
@@ -3399,9 +3553,9 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
               ? "Listening…"
               : "listening: no wake needed"
             : phase === "thinking"
-              ? "working · talk anytime"
+              ? "Thinking… · mic muted"
               : phase === "speaking"
-                ? "speaking"
+                ? "Speaking…"
                 : "";
 
   const pipelineBars = [
