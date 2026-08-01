@@ -339,6 +339,53 @@ export async function loadPropertiesFromDb(
   }));
 }
 
+/** Hard-delete a property from the roster (community list). Missing row is ok. */
+export async function deletePropertyFromDb(
+  userId: string,
+  propertyId: string
+): Promise<{ ok: true } | { ok: false; error: string; code: string }> {
+  const supabase = await createClient();
+  if (!supabase) {
+    return { ok: false, error: "Database not configured", code: "NO_DB" };
+  }
+
+  const { companyId } = await resolveScope(userId);
+
+  let query = supabase.from("properties").delete().eq("id", propertyId);
+  if (companyId) query = query.eq("company_id", companyId);
+  else query = query.eq("user_id", userId);
+
+  const { error, count } = await query;
+  if (error) {
+    console.error("deletePropertyFromDb:", error.message);
+    // Retry user-scoped if company column caused the failure
+    if (companyId) {
+      const { error: fallbackErr } = await supabase
+        .from("properties")
+        .delete()
+        .eq("id", propertyId)
+        .eq("user_id", userId);
+      if (fallbackErr) {
+        return {
+          ok: false,
+          error: "Could not delete property",
+          code: "DELETE_FAILED",
+        };
+      }
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      error: "Could not delete property",
+      code: "DELETE_FAILED",
+    };
+  }
+
+  // Treat missing row as success (already gone from roster)
+  void count;
+  return { ok: true };
+}
+
 export async function logAudit(
   userId: string,
   action: string,

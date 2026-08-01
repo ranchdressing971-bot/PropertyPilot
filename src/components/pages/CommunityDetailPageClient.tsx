@@ -27,6 +27,7 @@ import {
   ChevronDown,
   Home,
   Loader2,
+  Trash2,
   Upload,
 } from "lucide-react";
 
@@ -64,6 +65,7 @@ export function CommunityDetailPageClient({ id }: { id: string }) {
   const [list, setList] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +121,35 @@ export function CommunityDetailPageClient({ id }: { id: string }) {
       cancelled = true;
     };
   }, [id, isDemo]);
+
+  async function handleDelete(property: Property) {
+    const ok = confirm(
+      `Remove ${property.address} from this community? This cannot be undone.`
+    );
+    if (!ok) return;
+
+    setDeletingId(property.id);
+
+    if (isDemo) {
+      setList((prev) => prev.filter((p) => p.id !== property.id));
+      setDeletingId(null);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/properties/${encodeURIComponent(property.id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not delete property");
+      setList((prev) => prev.filter((p) => p.id !== property.id));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not delete property");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   if (loading) {
     return (
@@ -222,8 +253,26 @@ export function CommunityDetailPageClient({ id }: { id: string }) {
           >
             {list.map((property) => (
               <motion.div key={property.id} variants={staggerItem}>
-                <Link href={`/dashboard/properties/${property.id}`}>
-                  <Card hover className="h-full">
+                <Card hover className="relative h-full">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void handleDelete(property);
+                    }}
+                    disabled={deletingId === property.id}
+                    className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-lg bg-white/95 px-2 py-1.5 text-xs font-medium text-red-700 shadow-sm ring-1 ring-red-200 hover:bg-red-50 disabled:opacity-60"
+                    aria-label={`Remove ${property.address}`}
+                  >
+                    {deletingId === property.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                    Remove
+                  </button>
+                  <Link href={`/dashboard/properties/${property.id}`}>
                     <PropertyThumb
                       address={property.address}
                       image={property.image}
@@ -246,8 +295,8 @@ export function CommunityDetailPageClient({ id }: { id: string }) {
                         </span>
                       </div>
                     </div>
-                  </Card>
-                </Link>
+                  </Link>
+                </Card>
               </motion.div>
             ))}
           </motion.div>

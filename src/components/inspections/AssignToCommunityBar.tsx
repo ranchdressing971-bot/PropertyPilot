@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { useAppMode } from "@/components/providers/AppModeProvider";
-import { useCommunities } from "@/hooks/useCommunities";
+import {
+  CommunityPicker,
+  type SelectedCommunity,
+} from "@/components/communities/CommunityPicker";
 import { CheckSquare, Loader2, Square } from "lucide-react";
 import clsx from "clsx";
 
@@ -23,28 +26,22 @@ interface AssignToCommunityBarProps {
 
 export function AssignToCommunityBar({
   inspectionId,
-  neighborhood,
   properties,
   communityIdHint,
 }: AssignToCommunityBarProps) {
   const { isDemo } = useAppMode();
-  const { communities, loading } = useCommunities(true);
+  const [community, setCommunity] = useState<SelectedCommunity | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<"all" | "selected" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const community = useMemo(() => {
-    if (communityIdHint) {
-      const byId = communities.find((c) => c.id === communityIdHint);
-      if (byId) return byId;
-    }
-    const byName = communities.find(
-      (c) => c.name.trim().toLowerCase() === neighborhood.trim().toLowerCase()
-    );
-    return byName ?? communities[0] ?? null;
-  }, [communities, communityIdHint, neighborhood]);
+  const onCommunityChange = useCallback((c: SelectedCommunity) => {
+    setCommunity(c);
+    setMessage(null);
+    setError(null);
+  }, []);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -57,7 +54,7 @@ export function AssignToCommunityBar({
 
   async function assign(mode: "all" | "selected") {
     if (!community) {
-      setError("Create a community first, then assign these homes.");
+      setError("Pick or create a community first, then add these homes.");
       return;
     }
     setBusy(mode);
@@ -112,29 +109,26 @@ export function AssignToCommunityBar({
     }
   }
 
-  if (loading || properties.length === 0) return null;
+  if (properties.length === 0) return null;
 
   return (
     <div className="mb-5 rounded-xl border border-brand-200 bg-brand-50/50 px-4 py-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-ink-900">
-            Add homes to{" "}
-            {community ? (
-              <Link
-                href={`/dashboard/communities/${community.id}`}
-                className="underline"
-              >
-                {community.name}
-              </Link>
-            ) : (
-              "a community"
-            )}
-          </p>
-          <p className="mt-0.5 text-xs text-ink-500">
-            Save discovered addresses to this community&apos;s property list.
-          </p>
-        </div>
+      <CommunityPicker
+        value={community}
+        onChange={onCommunityChange}
+        preferredId={communityIdHint}
+        title="Add these homes to a community"
+        description="After your inspection, pick an existing community or create a new one (within your plan), then add the homes below."
+        embedded
+        autoSelect
+      />
+
+      <div className="mt-4 flex flex-col gap-3 border-t border-brand-200/80 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-ink-500">
+          {community
+            ? `Ready to save addresses to ${community.name}.`
+            : "Choose a community above to continue."}
+        </p>
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
@@ -177,7 +171,9 @@ export function AssignToCommunityBar({
                   onClick={() => toggle(p.id)}
                   className={clsx(
                     "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm",
-                    on ? "bg-ink-900 text-white" : "hover:bg-ink-50 text-ink-800"
+                    on
+                      ? "bg-ink-900 text-white"
+                      : "text-ink-800 hover:bg-ink-50"
                   )}
                 >
                   {on ? (
@@ -219,14 +215,6 @@ export function AssignToCommunityBar({
         </p>
       )}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      {!community && (
-        <p className="mt-3 text-sm text-amber-800">
-          <Link href="/dashboard/communities" className="underline">
-            Create a community
-          </Link>{" "}
-          first to organize these properties.
-        </p>
-      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { CardSkeleton } from "@/components/ui/Skeleton";
 import { InspectionResultCard } from "@/components/inspections/InspectionResultCard";
 import { CommunityVerificationPanel } from "@/components/inspections/CommunityVerificationPanel";
 import { AssignToCommunityBar } from "@/components/inspections/AssignToCommunityBar";
+import { useAppMode } from "@/components/providers/AppModeProvider";
 import type { InspectionDisplayData } from "@/lib/inspection-display";
 import {
   getCachedInspectionClient,
@@ -33,6 +34,7 @@ interface InspectionData extends InspectionDisplayData {
 }
 
 export function InspectionResultsView({ id }: { id: string }) {
+  const { isDemo } = useAppMode();
   const [data, setData] = useState<InspectionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +146,36 @@ export function InspectionResultsView({ id }: { id: string }) {
       ),
     });
 
+    setData((prev) => (prev ? apply(prev) : prev));
+    updateCachedInspectionDisplay(id, (prev) => apply(prev));
+  }
+
+  async function handleDeleteProperty(propertyId: string) {
+    const apply = (prev: InspectionData): InspectionData => ({
+      ...prev,
+      results: prev.results.filter((r) => r.propertyId !== propertyId),
+      addressReviews: (prev.addressReviews ?? []).filter(
+        (r) => r.propertyId !== propertyId
+      ),
+    });
+
+    if (isDemo) {
+      setData((prev) => (prev ? apply(prev) : prev));
+      updateCachedInspectionDisplay(id, (prev) => apply(prev));
+      return;
+    }
+
+    const res = await fetch(`/api/inspection/${id}/property`, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ propertyId }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(json.error ?? "Could not remove home");
+      return;
+    }
     setData((prev) => (prev ? apply(prev) : prev));
     updateCachedInspectionDisplay(id, (prev) => apply(prev));
   }
@@ -372,6 +404,7 @@ export function InspectionResultsView({ id }: { id: string }) {
                   violation={result.violation}
                   index={i}
                   onAddressConfirmed={handleAddressConfirmed}
+                  onDelete={handleDeleteProperty}
                 />
               );
             })}

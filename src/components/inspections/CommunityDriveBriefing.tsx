@@ -5,13 +5,13 @@ import { Button } from "@/components/ui/Button";
 import { MapPinned, Route } from "lucide-react";
 
 interface CommunityDriveBriefingProps {
-  communityName: string;
+  /** Optional hint (e.g. from ?community=). Community assign happens on results. */
+  communityName?: string;
   onContinue: () => void;
 }
 
 /**
- * Pre-upload instruction: stay inside the selected community and cover main streets.
- * Shown before the drop zone accepts a video (upload stands in for “before recording”).
+ * Pre-upload tip: one community per video. Community pick/assign is on results.
  */
 export function CommunityDriveBriefing({
   communityName,

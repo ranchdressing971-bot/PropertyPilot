@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/Card";
@@ -9,7 +10,14 @@ import { MediaImage } from "@/components/ui/MediaImage";
 import { AddressConfirmPanel } from "@/components/inspections/AddressConfirmPanel";
 import { EditableAddress } from "@/components/inspections/EditableAddress";
 import { Property, Violation } from "@/lib/mock-data";
-import { CheckCircle2, ArrowRight, FileText, MapPin } from "lucide-react";
+import {
+  CheckCircle2,
+  ArrowRight,
+  FileText,
+  MapPin,
+  Loader2,
+  Trash2,
+} from "lucide-react";
 import { staggerItem } from "@/lib/motion";
 
 interface InspectionResultCardProps {
@@ -18,6 +26,7 @@ interface InspectionResultCardProps {
   inspectionId: string;
   index: number;
   onAddressConfirmed?: (propertyId: string, address: string) => void;
+  onDelete?: (propertyId: string) => Promise<void> | void;
 }
 
 export function InspectionResultCard({
@@ -25,7 +34,24 @@ export function InspectionResultCard({
   violation,
   inspectionId,
   onAddressConfirmed,
+  onDelete,
 }: InspectionResultCardProps) {
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (!onDelete || deleting) return;
+    const ok = confirm(
+      `Remove ${property.address} from this inspection? This also removes it from the community list if it was added.`
+    );
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      await onDelete(property.id);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <motion.div
       variants={staggerItem}
@@ -36,6 +62,22 @@ export function InspectionResultCard({
       <Card hover className="overflow-hidden">
         <div className="relative h-32 w-full overflow-hidden rounded-xl sm:h-40">
           <MediaImage src={property.image} alt={property.address} fill className="object-cover" />
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => void handleDelete()}
+              disabled={deleting}
+              className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-lg bg-white/95 px-2 py-1.5 text-xs font-medium text-red-700 shadow-sm ring-1 ring-red-200 hover:bg-red-50 disabled:opacity-60"
+              aria-label={`Remove ${property.address}`}
+            >
+              {deleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+              Remove
+            </button>
+          )}
         </div>
 
         <div className="mt-4 space-y-3">

@@ -17,14 +17,25 @@ export interface SelectedCommunity {
 interface CommunityPickerProps {
   value: SelectedCommunity | null;
   onChange: (community: SelectedCommunity) => void;
-  /** Prefill from ?community= query when present */
+  /** Prefill from ?community= query or inspection hint when present */
   preferredId?: string | null;
+  /** Override heading for post-inspection / other contexts */
+  title?: string;
+  description?: string;
+  /** Skip outer Card when embedded in another panel */
+  embedded?: boolean;
+  /** When false, do not auto-select the first community */
+  autoSelect?: boolean;
 }
 
 export function CommunityPicker({
   value,
   onChange,
   preferredId,
+  title = "Which community is this inspection for?",
+  description,
+  embedded = false,
+  autoSelect = true,
 }: CommunityPickerProps) {
   const { communities, limit, loading, create } = useCommunities(true);
   const [creating, setCreating] = useState(false);
@@ -33,15 +44,15 @@ export function CommunityPicker({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (loading || communities.length === 0) return;
+    if (!autoSelect || loading || communities.length === 0) return;
     if (value) return;
 
     const preferred = preferredId
       ? communities.find((c) => c.id === preferredId)
       : null;
-    const pick = preferred ?? communities[0];
+    const pick = preferred ?? (preferredId ? null : communities[0]);
     if (pick) onChange({ id: pick.id, name: pick.name });
-  }, [loading, communities, value, preferredId, onChange]);
+  }, [loading, communities, value, preferredId, onChange, autoSelect]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -58,26 +69,35 @@ export function CommunityPicker({
     setShowNew(false);
   }
 
+  const defaultDescription =
+    communities.length <= 1
+      ? "Use your existing community, or create a new one if your plan allows."
+      : "Pick a community you already manage, or create another (within your plan).";
+
   if (loading) {
-    return (
-      <Card padding="lg">
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-ink-400" />
-        </div>
-      </Card>
+    const spinner = (
+      <div className="flex justify-center py-8">
+        <Loader2 className="h-5 w-5 animate-spin text-ink-400" />
+      </div>
     );
+    return embedded ? spinner : <Card padding="lg">{spinner}</Card>;
   }
 
-  return (
-    <Card padding="lg" className="space-y-4">
+  const body = (
+    <div className="space-y-4">
       <div>
-        <h3 className="font-display text-lg font-semibold text-ink-900">
-          Which community is this inspection for?
+        <h3
+          className={clsx(
+            "font-semibold text-ink-900",
+            embedded
+              ? "text-sm font-medium"
+              : "font-display text-lg"
+          )}
+        >
+          {title}
         </h3>
         <p className="mt-1 text-sm text-ink-500">
-          {communities.length <= 1
-            ? "Use your existing community, or create a new one if your plan allows."
-            : "Pick a community you already manage, or create another (within your plan)."}
+          {description ?? defaultDescription}
         </p>
       </div>
 
@@ -126,7 +146,10 @@ export function CommunityPicker({
       </div>
 
       {showNew ? (
-        <form onSubmit={handleCreate} className="space-y-3 border-t border-ink-100 pt-4">
+        <form
+          onSubmit={handleCreate}
+          className="space-y-3 border-t border-ink-100 pt-4"
+        >
           <div>
             <label
               htmlFor="new-community"
@@ -156,8 +179,16 @@ export function CommunityPicker({
             </p>
           )}
           <div className="flex gap-2">
-            <Button type="submit" size="sm" disabled={creating || !newName.trim()}>
-              {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create"}
+            <Button
+              type="submit"
+              size="sm"
+              disabled={creating || !newName.trim()}
+            >
+              {creating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Create"
+              )}
             </Button>
             <Button
               type="button"
@@ -194,6 +225,13 @@ export function CommunityPicker({
           )}
         </div>
       )}
+    </div>
+  );
+
+  if (embedded) return body;
+  return (
+    <Card padding="lg" className="space-y-4">
+      {body}
     </Card>
   );
 }

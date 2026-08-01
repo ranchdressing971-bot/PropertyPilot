@@ -7,9 +7,9 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Header } from "@/components/layout/Header";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { useAppMode } from "@/components/providers/AppModeProvider";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useCommunities } from "@/hooks/useCommunities";
 import { loadCcrRules } from "@/lib/ccr-rules";
 import { loadCollectionDays } from "@/lib/trash-collection";
 import {
@@ -22,10 +22,6 @@ import { captureUploadGeo } from "@/lib/geo/capture-geo";
 import { rosterFromStorage } from "@/lib/roster";
 import { CommunityDriveBriefing } from "@/components/inspections/CommunityDriveBriefing";
 import { CommunityVerificationPanel } from "@/components/inspections/CommunityVerificationPanel";
-import {
-  CommunityPicker,
-  type SelectedCommunity,
-} from "@/components/communities/CommunityPicker";
 import {
   Upload,
   Film,
@@ -76,9 +72,7 @@ function UploadPageInner() {
   const preferredCommunityId = searchParams.get("community");
   const { isDemo, ready } = useAppMode();
   const { profile } = useUserProfile();
-  const [selectedCommunity, setSelectedCommunity] =
-    useState<SelectedCommunity | null>(null);
-  const [communityPicked, setCommunityPicked] = useState(false);
+  const { communities } = useCommunities(true);
   const [briefingDone, setBriefingDone] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -95,16 +89,20 @@ function UploadPageInner() {
   );
 
   const steps = isDemo ? DEMO_STEPS : LIVE_STEPS;
+  const preferredCommunity = useMemo(
+    () =>
+      preferredCommunityId
+        ? communities.find((c) => c.id === preferredCommunityId) ?? null
+        : null,
+    [communities, preferredCommunityId]
+  );
   const communityName = useMemo(
     () =>
-      selectedCommunity?.name?.trim() ||
+      preferredCommunity?.name?.trim() ||
       profile?.hoaName?.trim() ||
-      "Your Community",
-    [selectedCommunity, profile?.hoaName]
+      "",
+    [preferredCommunity, profile?.hoaName]
   );
-  const onCommunityChange = useCallback((c: SelectedCommunity) => {
-    setSelectedCommunity(c);
-  }, []);
 
   const startProcessing = useCallback(
     async (file: File) => {
@@ -140,7 +138,6 @@ function UploadPageInner() {
 
         setCurrentStep(1);
         setStatusDetail("Capturing GPS and video frames...");
-        // Sample a short GPS track while frames extract for community route/boundary
         const [frames, geo] = await Promise.all([
           extractVideoFrames(file, {
             intervalSec: 1.2,
@@ -178,10 +175,10 @@ function UploadPageInner() {
               dataUrl: f.dataUrl,
               contentScore: f.contentScore,
             })),
-            // Backup if Supabase roster is empty (CSV only in localStorage)
             properties: localRoster.length > 0 ? localRoster : undefined,
-            neighborhood: communityName,
-            communityId: selectedCommunity?.id,
+            neighborhood: communityName || "Your Community",
+            // Optional hint from community detail; results screen is where you assign
+            communityId: preferredCommunity?.id,
             ccrRules,
             trashCollectionDays,
           }),
@@ -245,7 +242,6 @@ function UploadPageInner() {
 
         setIsComplete(true);
 
-        // Soft verification needs a decision — pause before redirect
         if (verification?.needsUserAction && verification.eventId) {
           setPendingVerification(verification);
           setPendingInspectionId(data.id as string);
@@ -262,7 +258,7 @@ function UploadPageInner() {
         setIsProcessing(false);
       }
     },
-    [router, isDemo, communityName, selectedCommunity?.id]
+    [router, isDemo, communityName, preferredCommunity?.id]
   );
 
   const handleDrop = useCallback(
@@ -284,11 +280,8 @@ function UploadPageInner() {
 
   if (!ready) return null;
 
-  const showCommunityPicker =
-    !communityPicked && !isProcessing && !pendingVerification;
   const showBriefing =
     !isDemo &&
-    communityPicked &&
     !briefingDone &&
     !isProcessing &&
     !pendingVerification;
@@ -305,13 +298,13 @@ function UploadPageInner() {
       />
       <PageContent className="flex min-h-[calc(100vh-12rem)] items-center">
         <div className="w-full max-w-2xl">
-          {!isDemo && communityPicked && !showBriefing && !showCommunityPicker && (
+          {!isDemo && !showBriefing && !pendingVerification && (
             <p className="mb-4 rounded-xl border border-brand-200 bg-brand-50/70 px-4 py-3 text-sm text-ink-700">
               Tip: Import your community CSV under{" "}
               <a
                 href={
-                  selectedCommunity
-                    ? `/dashboard/communities/${selectedCommunity.id}`
+                  preferredCommunity
+                    ? `/dashboard/communities/${preferredCommunity.id}`
                     : "/dashboard/communities"
                 }
                 className="font-medium text-brand-800 underline"
@@ -319,6 +312,7 @@ function UploadPageInner() {
                 Communities
               </a>{" "}
               first. Matching house numbers to a roster is much more accurate.
+              After analysis you&apos;ll choose which community to add homes to.
             </p>
           )}
           {error && (
@@ -332,29 +326,7 @@ function UploadPageInner() {
           )}
 
           <AnimatePresence mode="wait">
-            {showCommunityPicker ? (
-              <motion.div
-                key="community-pick"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                className="space-y-4"
-              >
-                <CommunityPicker
-                  value={selectedCommunity}
-                  onChange={onCommunityChange}
-                  preferredId={preferredCommunityId}
-                />
-                <Button
-                  className="w-full"
-                  size="lg"
-                  disabled={!selectedCommunity}
-                  onClick={() => setCommunityPicked(true)}
-                >
-                  Continue with {selectedCommunity?.name ?? "community"}
-                </Button>
-              </motion.div>
-            ) : showBriefing ? (
+            {showBriefing ? (
               <motion.div
                 key="briefing"
                 initial={{ opacity: 0, y: 8 }}
@@ -362,7 +334,7 @@ function UploadPageInner() {
                 exit={{ opacity: 0, y: -8 }}
               >
                 <CommunityDriveBriefing
-                  communityName={communityName}
+                  communityName={communityName || undefined}
                   onContinue={() => setBriefingDone(true)}
                 />
               </motion.div>
@@ -438,7 +410,9 @@ function UploadPageInner() {
                     </p>
                     {!isDemo && (
                       <p className="mt-2 max-w-sm text-center text-xs text-ink-400">
-                        Recording for {communityName}: stay on its main streets
+                        {communityName
+                          ? `Recording for ${communityName}: stay on its main streets`
+                          : "Stay inside one community for this video"}
                       </p>
                     )}
                     <div
