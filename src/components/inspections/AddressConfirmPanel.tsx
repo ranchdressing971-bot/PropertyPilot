@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { confirmInspectionAddress } from "@/lib/confirm-inspection-address";
 import { Check, Loader2, MapPin, Pencil, ShieldCheck } from "lucide-react";
 
 interface AddressConfirmPanelProps {
@@ -35,15 +36,12 @@ export function AddressConfirmPanel({
     setError(null);
     setVerifiedNote(null);
     try {
-      const res = await fetch(`/api/inspection/${inspectionId}/confirm-address`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ propertyId, address: trimmed }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not save address");
-      onConfirmed(data.address ?? trimmed);
+      const data = await confirmInspectionAddress(
+        inspectionId,
+        propertyId,
+        trimmed
+      );
+      onConfirmed(data.address);
       setVerifiedNote(
         data.source === "roster"
           ? "Matched your community roster"
@@ -78,7 +76,19 @@ export function AddressConfirmPanel({
           <input
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void submit(value);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setEditing(false);
+                setValue(address);
+                setError(null);
+              }
+            }}
             placeholder="e.g. 456 Oak Lane"
+            aria-label="Correct address"
             className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
             autoFocus
           />

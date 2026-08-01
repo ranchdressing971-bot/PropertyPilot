@@ -73,6 +73,18 @@ export function getCachedInspectionClient(id: string): InspectionDisplayData | n
   return stored;
 }
 
+/** Update a cached inspection display (e.g. after inline address edit). */
+export function updateCachedInspectionDisplay(
+  id: string,
+  updater: (prev: InspectionDisplayData) => InspectionDisplayData
+): void {
+  const prev = getCachedInspectionClient(id);
+  if (!prev) return;
+  const next = updater(prev);
+  memoryDisplay.set(id, next);
+  writeStorage(next);
+}
+
 export function listCachedInspectionIds(): string[] {
   if (typeof window === "undefined") return [];
   try {

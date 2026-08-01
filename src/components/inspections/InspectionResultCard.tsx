@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { MediaImage } from "@/components/ui/MediaImage";
 import { AddressConfirmPanel } from "@/components/inspections/AddressConfirmPanel";
+import { EditableAddress } from "@/components/inspections/EditableAddress";
 import { Property, Violation } from "@/lib/mock-data";
 import { CheckCircle2, ArrowRight, FileText, MapPin } from "lucide-react";
 import { staggerItem } from "@/lib/motion";
@@ -39,9 +40,20 @@ export function InspectionResultCard({
 
         <div className="mt-4 space-y-3">
           <div className="space-y-1.5">
-            <h3 className="text-sm font-semibold leading-snug text-ink-900 sm:text-base">
-              {property.address}
-            </h3>
+            {onAddressConfirmed ? (
+              <EditableAddress
+                address={property.address}
+                inspectionId={inspectionId}
+                propertyId={property.id}
+                onSaved={(newAddress) =>
+                  onAddressConfirmed(property.id, newAddress)
+                }
+              />
+            ) : (
+              <h3 className="text-sm font-semibold leading-snug text-ink-900 sm:text-base">
+                {property.address}
+              </h3>
+            )}
             <div className="flex flex-wrap items-center gap-1.5">
               <Badge status={property.status} />
               {property.previouslyInspected && (

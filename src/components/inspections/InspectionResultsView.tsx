@@ -12,7 +12,10 @@ import { CardSkeleton } from "@/components/ui/Skeleton";
 import { InspectionResultCard } from "@/components/inspections/InspectionResultCard";
 import { CommunityVerificationPanel } from "@/components/inspections/CommunityVerificationPanel";
 import type { InspectionDisplayData } from "@/lib/inspection-display";
-import { getCachedInspectionClient } from "@/lib/inspection-cache";
+import {
+  getCachedInspectionClient,
+  updateCachedInspectionDisplay,
+} from "@/lib/inspection-cache";
 import { CheckCircle2, AlertTriangle, MapPin, History, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import {
@@ -118,30 +121,30 @@ export function InspectionResultsView({ id }: { id: string }) {
   }, [data]);
 
   function handleAddressConfirmed(propertyId: string, address: string) {
-    setData((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        addressReviews: (prev.addressReviews ?? []).map((r) =>
-          r.propertyId === propertyId
-            ? { ...r, address, confidence: 100, needsReview: false }
-            : r
-        ),
-        results: prev.results.map((r) =>
-          r.propertyId === propertyId
-            ? {
-                ...r,
-                property: {
-                  ...r.property,
-                  address,
-                  needsAddressReview: false,
-                  addressConfidence: 100,
-                },
-              }
-            : r
-        ),
-      };
+    const apply = (prev: InspectionData): InspectionData => ({
+      ...prev,
+      addressReviews: (prev.addressReviews ?? []).map((r) =>
+        r.propertyId === propertyId
+          ? { ...r, address, confidence: 100, needsReview: false }
+          : r
+      ),
+      results: prev.results.map((r) =>
+        r.propertyId === propertyId
+          ? {
+              ...r,
+              property: {
+                ...r.property,
+                address,
+                needsAddressReview: false,
+                addressConfidence: 100,
+              },
+            }
+          : r
+      ),
     });
+
+    setData((prev) => (prev ? apply(prev) : prev));
+    updateCachedInspectionDisplay(id, (prev) => apply(prev));
   }
 
   const filtered = useMemo(() => {
