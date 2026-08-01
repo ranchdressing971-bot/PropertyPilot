@@ -713,7 +713,7 @@ function speakWithFreeVoiceSync(text: string): Promise<void> {
   // Build utterance BEFORE cancel/speak so speak() is the last sync call in-gesture.
   const utterance = new SpeechSynthesisUtterance(clipped);
   utterance.lang = "en-GB";
-  utterance.rate = isIOS() ? 1.1 : 1.15;
+  utterance.rate = 1.0;
   utterance.pitch = 1.05;
   utterance.volume = 1;
 

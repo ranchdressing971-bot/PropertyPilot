@@ -297,8 +297,8 @@ async function elevenLabsTtsRequest(
   const wantWav = opts?.format === "wav";
   // Smaller mp3 = faster download on cellular; pcm_22050 when WAV needed.
   const outputFormat = wantWav ? "pcm_22050" : "mp3_22050_32";
-  // Slightly brisker than default (1.0); ElevenLabs accepts ~0.7–1.2.
-  const speed = parseSpeechSpeed(process.env.ELEVENLABS_SPEED, 1.15, 0.7, 1.2);
+  // Natural pace (1.0); ElevenLabs accepts ~0.7–1.2. Override via ELEVENLABS_SPEED.
+  const speed = parseSpeechSpeed(process.env.ELEVENLABS_SPEED, 1.0, 0.7, 1.2);
   // Max optimize_streaming_latency (0–4) also speeds non-stream TTS TTFA.
   const latencyOpt = Math.min(
     4,
@@ -480,10 +480,10 @@ async function synthesizeGoogle(
   const wantWav = opts?.format === "wav";
   const voiceName =
     process.env.GOOGLE_TTS_VOICE?.trim() || DEFAULT_GOOGLE_TTS_VOICE;
-  // Google speakingRate 0.25–4.0; keep British woman ~1.15–1.2.
+  // Google speakingRate 0.25–4.0; natural pace default. Override via GOOGLE_TTS_SPEED.
   const speakingRate = parseSpeechSpeed(
     process.env.GOOGLE_TTS_SPEED,
-    1.18,
+    1.0,
     0.25,
     4.0
   );
@@ -573,7 +573,7 @@ async function synthesizeOpenAI(
   // Feminine: nova, shimmer, coral, sage. Avoid fable/onyx/echo (male/deep).
   const rawVoice = (process.env.OPENAI_TTS_VOICE?.trim() || "nova").toLowerCase();
   const voice = OPENAI_DEEP_VOICES.has(rawVoice) ? "nova" : rawVoice;
-  const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.16, 0.25, 4.0);
+  const speed = parseSpeechSpeed(process.env.OPENAI_TTS_SPEED, 1.0, 0.25, 4.0);
   // Honest natural female — no British-accent prompt theater.
   const instructions =
     process.env.OPENAI_TTS_INSTRUCTIONS?.trim() ||
