@@ -17,8 +17,12 @@ import { getOpenAIApiKey } from "@/lib/openai-env";
 export const DEFAULT_ELEVENLABS_VOICE_ID = "pFZP5JQG7iQjIQuC4Bku";
 const DEFAULT_ELEVENLABS_VOICE_NAMES = ["Lily", "Alice", "Nova"] as const;
 
-/** Google Neural2 British female — clear adult woman, not theatrical. */
-export const DEFAULT_GOOGLE_TTS_VOICE = "en-GB-Neural2-A";
+/**
+ * Google Neural2 British female default.
+ * Accent strength isn't continuous — pick a different voice via GOOGLE_TTS_VOICE.
+ * Neural2-C is a milder/warmer GB woman than cut-glass Neural2-A.
+ */
+export const DEFAULT_GOOGLE_TTS_VOICE = "en-GB-Neural2-C";
 
 /** OpenAI voices that sound male/deep — never use these for Nova fallback. */
 const OPENAI_DEEP_VOICES = new Set(["fable", "onyx", "echo"]);
@@ -444,7 +448,8 @@ async function synthesizeElevenLabs(
 /**
  * Google Cloud Text-to-Speech — genuine British female neural voice.
  * Uses REST + API key (no SDK). Enable Cloud Text-to-Speech API, then set
- * GOOGLE_TTS_API_KEY on Vercel. Default voice: en-GB-Neural2-A.
+ * GOOGLE_TTS_API_KEY on Vercel. Default voice: en-GB-Neural2-C (milder GB;
+ * override with GOOGLE_TTS_VOICE — there is no accent-intensity slider).
  */
 async function synthesizeGoogle(
   text: string,

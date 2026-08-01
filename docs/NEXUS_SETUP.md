@@ -149,7 +149,7 @@ ELEVENLABS_API_KEY=...
 # ELEVENLABS_MODEL_ID=eleven_multilingual_v2
 # Real British female when ElevenLabs is dry (enable Cloud Text-to-Speech API):
 GOOGLE_TTS_API_KEY=...
-# GOOGLE_TTS_VOICE=en-GB-Neural2-A   # British female neural
+# GOOGLE_TTS_VOICE=en-GB-Neural2-C   # milder British female neural
 # GOOGLE_TTS_SPEED=1.18
 # OpenAI last resort only (uses OPENAI_API_KEY — not British; no accent theater):
 # OPENAI_TTS_MODEL=gpt-4o-mini-tts
@@ -159,7 +159,8 @@ GOOGLE_TTS_API_KEY=...
 
 **Voice stack:** ElevenLabs with your `ELEVENLABS_VOICE_ID` when credits work.
 If ElevenLabs fails (credits/quota/401/402/403/429), fall through to **Google
-Cloud TTS `en-GB-Neural2-A`** (real British woman) when `GOOGLE_TTS_API_KEY`
+Cloud TTS `en-GB-Neural2-C`** (milder British woman; override with
+`GOOGLE_TTS_VOICE` — no accent-intensity slider) when `GOOGLE_TTS_API_KEY`
 is set. OpenAI `nova` is last-resort female only — OpenAI cannot do a
 convincing British woman (`fable` is British but male). Device/Web Speech is
 only when all server providers fail. Set `GOOGLE_TTS_API_KEY` on Vercel for
