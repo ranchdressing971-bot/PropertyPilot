@@ -102,12 +102,23 @@ Business co-pilot (use the business tool — don't guess):
 - Connect outreach to revenue. Flag past_due + dead paid + under-billed communities.
 - Never invent client names or dollars — pull tools.
 
+Lead market — finite TAM (calm operator, not panic):
+- Buyers are US HOA *management companies* (Places-reachable). That set is finite and much smaller than "every HOA."
+- At a sustainable daily send rate, net-new cold Places leads can thin in months — not endless years — if you only scrape obvious queries in big metros once.
+- That is not "RideBy dies." The motion evolves:
+  - Phase A (land-grab): metro grid, query variants, domain-level already-contacted, exhaust the reachable cold list.
+  - Phase B: when a region/query cluster is exhausted → mark done, move region; report runway honestly.
+  - Phase C: after cold thins → follow-ups, warm re-touches (where allowed), referrals, inbound, adjacent ICPs (PM firms with HOA divisions, association law, etc.). Do not pretend infinite new logos forever.
+- Finite TAM is an advantage: you can finish the market. Panic spray that burns the domain is the real failure mode.
+- When Isaac asks (or when runway is getting thin): report lead runway from status — leads left / regions thin / contacted — and suggest shifting strategy. Never gaslight that Places is infinite.
+- Keep anti-spam / send gates. No double-email of company rows. Prefer domain-level suppress after a send (company domains only; never gmail/yahoo-class).
+
 API cost awareness (protect the budget):
 - OpenAI (gpt-4o / drafts / review / chat / learn) = real $ per call. Don't spam work/find_leads/learn in loops.
-- Google Places (find_leads) = limited free Enterprise quota (~1k/mo class), then paid. One city at a time unless asked.
+- Google Places (find_leads) = limited free Enterprise quota (~1k/mo class), then paid. One city at a time unless asked. Quota cost ≠ infinite logos.
 - Resend / email transmit = cost + deliverability — only when live send is actually enabled (not yet).
 - ElevenLabs = voice only; irrelevant to outreach spend.
-- When recommending volume or new cities, mention cost tradeoffs briefly.
+- When recommending volume or new cities, mention cost tradeoffs and remaining cold runway briefly.
 
 Learning loop:
 1) Call learn often (after real sends, when planning, before disagreeing). Don't hammer every message.
@@ -123,10 +134,10 @@ RideBy data via tools:
 - business — fleet dossier; abuse — under-billed multi-community bot
 
 Tools (use them — don't guess):
-- status — pipeline + delivery + business snapshot + cost notes + blockers
-- business — full fleet intel + watchlists
+- status — pipeline + delivery + lead runway + business snapshot + cost notes + blockers
+- business — full fleet intel + watchlists (not Places lead runway)
 - abuse — sus under-billing (paid for 1, evidence of many)
-- find_leads — city; costs Places quota — use with intent
+- find_leads — city; costs Places quota; finite HOA-mgmt logos per region — use with intent, rotate when thin
 - work — process research/draft/review/send queue (OpenAI $)
 - send_today — optional override or resume; queues only until Resend+domain live
 - learn — convert dossier (OpenAI $)
@@ -137,6 +148,7 @@ Safety rails:
 - Never pretend you sent mail that didn't go out.
 - If delivery.canTransmitLive is false, say so in plain English.
 - Anti-spam / compliance stay non-negotiable: no cold spam blasts, CAN-SPAM-aware copy, refuse garbage batches, live send stays gated until Resend + domain + NEXUS_SEND_ENABLED.
+- No double-email company rows. Domain suppress after send is the guard for "already contacted."
 - Live send pacing uses operational jitter (~5-15 min) and a configured ET weekday window as safety rails. Describe those as current rails/settings, not your personal "perfect time." Prefer learn's best ET hours when data exists, and frame that as evidence, not dogma.
 
 Never invent metrics — call status, business, or learn.
@@ -289,6 +301,15 @@ export async function runNovaChat(
     content:
       "Live HOA email is OFF. Mailtrap is NOT verified and is NOT the go-live path. When Isaac gets the custom domain, transmit via Resend (domain verified + NEXUS_SEND_ENABLED + Resend outreach wired). Until then: prep leads/drafts/queue only — never claim real sends. Watch OpenAI + Google Places spend. Fleet intel via business; under-billing abuse via abuse tool (paid for 1 community but evidence of many). Fingerprints are off.",
     metadata: { updatedAt: new Date().toISOString(), provider: "resend" },
+  });
+
+  // Sticky fact: HOA management company cold list is finite; motion evolves.
+  await upsertNovaMemory({
+    kind: "fact",
+    key: "outreach.finite_hoa_mgmt_tam",
+    content:
+      "Buyers = US HOA management companies (Places-reachable) — finite, much smaller than every HOA. Net-new cold Places leads can thin in months at sustainable send rates if you only scrape obvious big-metro queries once. Not RideBy dying: Phase A land-grab (metro grid, query variants, domain already-contacted); Phase B exhaust region → mark done, move, report runway; Phase C follow-ups/warm/referrals/inbound/adjacent ICPs. Finite TAM = advantage (finish the market). Panic spray that burns the domain = real failure. Report lead runway honestly; never claim Places is infinite. No double-email company rows; domain suppress after send on company domains.",
+    metadata: { updatedAt: new Date().toISOString() },
   });
 
   const memories = await loadNovaMemories(25);

@@ -4,8 +4,14 @@ import { cityFromQuery, evaluateLead, maxReviewCount } from "../lead-filter";
 import type { HandResult, LeadSearchPayload, ResearchCompanyPayload } from "../types";
 
 /**
- * Lead Hand — finds companies via Google Places Text Search (New) and stores
- * them in Atlas.
+ * Lead Hand — finds HOA *management companies* via Google Places Text Search
+ * (New) and stores them in Atlas.
+ *
+ * Market note: the Places-reachable set of US HOA management firms is finite
+ * and much smaller than "every HOA." Re-running the same metro/query eventually
+ * returns mostly duplicates — that is exhaustion, not failure. Rotate region /
+ * query variants; after cold thins, motion shifts to follow-up / warm /
+ * referrals / adjacent ICPs. Dedupe on place_id; never resurrect disqualified rows.
  *
  * Billing note: Places bills by the most expensive SKU in the field mask.
  * `websiteUri` and `nationalPhoneNumber` are Enterprise-tier fields (1,000 free

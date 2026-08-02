@@ -23,6 +23,27 @@ import type { HandResult, OutreachSendPayload } from "../types";
  * the 10–3 window.
  */
 
+/** Consumer / free mail hosts — never domain-suppress these after a send. */
+const PUBLIC_MAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "yahoo.com",
+  "yahoo.co.uk",
+  "hotmail.com",
+  "outlook.com",
+  "live.com",
+  "msn.com",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "aol.com",
+  "proton.me",
+  "protonmail.com",
+  "mail.com",
+  "gmx.com",
+  "ymail.com",
+]);
+
 async function findSuppression(
   email: string,
   db: SupabaseClient
@@ -40,6 +61,37 @@ async function findSuppression(
   }
   const hit = data?.[0] as { reason?: string } | undefined;
   return hit?.reason ?? null;
+}
+
+/**
+ * After a real send, suppress the company mailbox domain so we do not
+ * double-email the same management firm via another contact. Skips public
+ * webmail hosts.
+ */
+async function suppressCompanyDomainAfterSend(
+  email: string,
+  db: SupabaseClient
+): Promise<string | null> {
+  const domain = email.toLowerCase().split("@")[1]?.trim() ?? "";
+  if (!domain || PUBLIC_MAIL_DOMAINS.has(domain)) return null;
+
+  const { data: existing } = await db
+    .from("nexus_suppressions")
+    .select("id")
+    .ilike("domain", domain)
+    .maybeSingle();
+  if (existing) return domain;
+
+  const { error } = await db.from("nexus_suppressions").insert({
+    domain,
+    reason: "already_contacted",
+    notes: "Auto domain suppress after outbound send — no double-email company",
+  });
+  if (error && error.code !== "23505") {
+    console.error("[nexus] domain suppress after send failed:", error.message);
+    return null;
+  }
+  return domain;
 }
 
 export async function countSentToday(db: SupabaseClient): Promise<number> {
@@ -234,6 +286,11 @@ export async function runOutreachSend(
     .update({ stage: "contacted", updated_at: now })
     .eq("id", draft.company_id);
 
+  const suppressedDomain = await suppressCompanyDomainAfterSend(
+    draft.to_email,
+    db
+  );
+
   await logAction(
     {
       action: "outreach.email_sent",
@@ -244,18 +301,22 @@ export async function runOutreachSend(
         subject: draft.subject,
         sandbox: result.sandbox,
         messageIds: result.messageIds,
+        domainSuppressed: suppressedDomain,
       },
     },
     db
   );
 
   return {
-    summary: `sent to ${draft.to_email}${result.sandbox ? " (sandbox)" : ""}`,
+    summary: `sent to ${draft.to_email}${result.sandbox ? " (sandbox)" : ""}${
+      suppressedDomain ? `; domain ${suppressedDomain} suppressed` : ""
+    }`,
     metadata: {
       draftId,
       to: draft.to_email,
       sandbox: result.sandbox,
       messageIds: result.messageIds,
+      domainSuppressed: suppressedDomain,
     },
   };
 }

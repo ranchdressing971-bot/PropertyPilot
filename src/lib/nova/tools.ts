@@ -45,7 +45,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "status",
       description:
-        "Pipeline + delivery (prep_only — waiting on domain/Resend) + business snapshot (MRR/clients) + API cost notes + blockers. Call before claiming you can email HOAs or before burning Places/OpenAI.",
+        "Pipeline + delivery (prep_only — waiting on domain/Resend) + lead runway (active / contacted / stages) + business snapshot (MRR/clients) + API cost notes + blockers. Call before claiming you can email HOAs, before burning Places/OpenAI, or when Isaac asks if leads are running out.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
@@ -54,7 +54,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "business",
       description:
-        "Full RideBy fleet intel: revenue (MRR/ARR/pipeline/multi-community), clients, activation, trial→paid, teams, product usage, abuse bot (under-billed communities), watchlists. Call for business/MRR/client/churn/activation — never invent numbers.",
+        "Full RideBy fleet intel: revenue (MRR/ARR/pipeline/multi-community), clients, activation, trial→paid, teams, product usage, abuse bot (under-billed communities), watchlists. Call for business/MRR/client/churn/activation — never invent numbers. Not the Places lead runway (use status for that).",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
@@ -84,7 +84,7 @@ export const NOVA_TOOL_DEFS = [
     function: {
       name: "find_leads",
       description:
-        "Queue an HOA lead search (Google Places; costs quota) and kick the background pipeline. Returns immediately so chat stays open. Pass a city like Austin. Prefer one intentional city; skip if approved drafts are already stocked.",
+        "Queue an HOA *management company* Places search (finite logos per region; costs quota) and kick the background pipeline. Returns immediately. Prefer one intentional city; skip if approved drafts are stocked. When a metro/query cluster is thin or mostly duplicates, mark it done in memory, rotate region/query, and report runway — do not pretend the cold list is endless.",
       parameters: {
         type: "object",
         properties: {
@@ -94,7 +94,8 @@ export const NOVA_TOOL_DEFS = [
           },
           query: {
             type: "string",
-            description: "Optional full Places query if you don't want the default",
+            description:
+              "Optional full Places query (variants OK: HOA management, community association management, etc.)",
           },
         },
       },
@@ -230,6 +231,38 @@ async function toolStatus() {
 
   const clock = getNovaClock();
 
+  // Exact runway counts (state.companies is a recent slice — do not trust its length).
+  let activeLeadCount = active.length;
+  let contactedCount = state.stageCounts.contacted ?? 0;
+  let companyTotal = state.companyCount;
+  let sentDraftCount = sent.length;
+  const db = getNexusDb();
+  if (db) {
+    const [activeRes, contactedRes, sentRes] = await Promise.all([
+      db
+        .from("nexus_companies")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "active"),
+      db
+        .from("nexus_companies")
+        .select("*", { count: "exact", head: true })
+        .eq("stage", "contacted"),
+      db
+        .from("nexus_drafts")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "sent"),
+    ]);
+    if (activeRes.count != null) activeLeadCount = activeRes.count;
+    if (contactedRes.count != null) contactedCount = contactedRes.count;
+    if (sentRes.count != null) sentDraftCount = sentRes.count;
+    if (state.companyCount > 0) companyTotal = state.companyCount;
+  }
+
+  const runwayDaysAtTarget =
+    plan.dailyTarget > 0
+      ? Math.round((activeLeadCount / plan.dailyTarget) * 10) / 10
+      : null;
+
   return {
     clock: {
       timeZone: clock.timeZone,
@@ -240,11 +273,11 @@ async function toolStatus() {
       utcISO: clock.isoUtc,
     },
     summary: {
-      leads: active.length,
+      leads: activeLeadCount,
       contacts: state.contactCount,
       draftsWaiting: state.pendingDraftCount,
       approvedReady: approved.length,
-      sent: sent.length,
+      sent: sentDraftCount,
       jobsQueued: state.queuedCount,
       todayTarget: plan.dailyTarget,
       novaArmed: plan.armed,
@@ -254,6 +287,16 @@ async function toolStatus() {
       subscriptionRate: conversions.subscriptionRate,
       sentInWindow: conversions.sentCount,
       recentSignups: conversions.recentSignupCount,
+    },
+    leadRunway: {
+      activeLeadsLeft: activeLeadCount,
+      contactedCompanies: contactedCount,
+      companiesKnown: companyTotal,
+      stageCountsSample: state.stageCounts,
+      roughDaysAtTodayTarget: runwayDaysAtTarget,
+      framing:
+        "HOA management companies via Places are a finite set. Active = still-reachable cold stock. Thinning active + rising contacted means rotate region/query (Phase B) or shift to follow-up/warm/adjacent ICP (Phase C) — not panic spray.",
+      tip: "Report runway honestly when Isaac asks. Never claim Places cold logos are infinite.",
     },
     business: {
       mrr: business.mrr,
@@ -305,7 +348,7 @@ async function toolStatus() {
       openai:
         "Chat, drafts, AI review, learn — real $ per call. Avoid thrashing work/learn/find_leads.",
       googlePlaces:
-        "find_leads burns Places quota (~1k free Enterprise/mo class, then paid). One city with intent.",
+        "find_leads burns Places quota (~1k free Enterprise/mo class, then paid). Finite HOA-mgmt logos per metro — one city with intent; rotate when thin.",
       resend: "Transmit cost + deliverability — only when live send is on (after domain).",
       tip: "If approved drafts are already stocked, skip find_leads to save Places + draft tokens.",
     },
@@ -320,7 +363,7 @@ async function toolStatus() {
       city: c.city,
       reviews: c.metadata?.userRatingCount ?? null,
     })),
-    tip: "Be honest about prep_only. Mention OpenAI/Places cost. Use business for MRR/clients. Treat todayTarget and send-window blockers as current settings/rails, not best-practice gospel.",
+    tip: "Be honest about prep_only and finite cold runway. Mention OpenAI/Places cost. Use business for MRR/clients. Treat todayTarget and send-window blockers as current settings/rails, not best-practice gospel.",
   };
 }
 
@@ -441,7 +484,7 @@ async function toolFindLeads(args: Record<string, unknown>) {
     plainEnglish: job
       ? "Lead search queued. Pipeline is running in the background; keep talking."
       : "That search was already queued. Pipeline kick sent; keep talking.",
-    tip: "Ask status later for progress; call work if the queue looks stuck.",
+    tip: "Ask status later for progress and lead runway. If this metro returns mostly duplicates, rotate city/query — cold Places logos are finite.",
   };
 }
 

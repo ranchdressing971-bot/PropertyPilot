@@ -275,6 +275,7 @@ async function safeCount(
 /**
  * Full RideBy fleet intelligence for Nova (revenue, activation, churn, teams, trust).
  * Service role only — Nexus/Nova admin paths.
+ * Outbound Places cold-lead runway (finite HOA management TAM) lives on status, not here.
  */
 export async function loadBusinessBrief(): Promise<BusinessBrief> {
   const admin = createAdminClient();
