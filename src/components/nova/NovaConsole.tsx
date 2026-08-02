@@ -1182,6 +1182,35 @@ function looksLikeCommand(text: string): boolean {
 const SILENCE_END_MS = 5500;
 /** Ignore duplicate / overlapping mic finals within this window (same turn). */
 const UTTERANCE_DEDUPE_MS = 2500;
+/**
+ * Shortcut SpeakText ("whats up…") often still plays from speakers when
+ * ?listen=1 opens the mic — wait so TTS finishes before recognition starts.
+ */
+const SHORTCUT_LISTEN_DELAY_MS = 3000;
+/** Drop Shortcut greeting echo for this long after listen-ready arms the mic. */
+const SHORTCUT_GREETING_IGNORE_MS = 6500;
+
+/**
+ * iOS Shortcut SpeakText echo — short greeting-only phrases, not real commands
+ * that merely mention "whats up" in a longer sentence.
+ */
+function isShortcutGreetingNoise(text: string): boolean {
+  const raw = (stripWake(text) || text).trim();
+  if (!raw || raw.length > 40) return false;
+  const t = normalizeUtterance(raw);
+  if (!t) return false;
+  const hasWhatsUp = /what'?s?\s*up/i.test(t);
+  const hasBigDog = /big\s*dog/i.test(t);
+  if (!hasWhatsUp && !hasBigDog) return false;
+  // Strip greeting pieces; anything left means a real ask.
+  const remainder = t
+    .replace(/what'?s?\s*up/gi, " ")
+    .replace(/big\s*dog/gi, " ")
+    .replace(/\b(hey|hi|hello|there|nova|yo)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return remainder.length === 0;
+}
 
 function beep() {
   try {
@@ -1390,6 +1419,8 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   const listenTapNeededRef = useRef(false);
   /** Prevents overlapping unlock→listen boots. */
   const listenReadyInFlightRef = useRef(false);
+  /** Until this timestamp, drop Shortcut SpeakText greeting echo. */
+  const shortcutGreetingIgnoreUntilRef = useRef(0);
   const runListenReadySequenceRef = useRef<
     (fromGesture: boolean) => Promise<void>
   >(async () => {});
@@ -2037,8 +2068,8 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
   }, [clearSilenceEnd]);
 
   /**
-   * Shortcut / ?listen=1: open → short delay → startMic.
-   * No greeting TTS. No tap wall. Optional ?q= runs immediately.
+   * Shortcut / ?listen=1: open → delay (SpeakText settle) → startMic.
+   * No in-app greeting TTS. No tap wall. Optional ?q= runs immediately.
    */
   const runListenReadySequence = useCallback(
     async (fromGesture: boolean) => {
@@ -2055,6 +2086,9 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
           return;
         }
+        // Ignore Shortcut SpeakText echo for a few seconds after mic arms.
+        shortcutGreetingIgnoreUntilRef.current =
+          Date.now() + SHORTCUT_GREETING_IGNORE_MS;
         phaseRef.current = "listening_command";
         setPhase("listening_command");
         armSilenceEnd();
@@ -2092,8 +2126,10 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
 
         // Best-effort unlock; never block mic on failed audio unlock.
         void unlockAudio();
-        // Brief settle after page open, then listen for commands.
-        await new Promise((r) => window.setTimeout(r, 280));
+        // Wait for Shortcut SpeakText to finish before opening recognition.
+        await new Promise((r) =>
+          window.setTimeout(r, SHORTCUT_LISTEN_DELAY_MS)
+        );
         if (!listeningOnRef.current) return;
         if (phaseRef.current === "speaking" || phaseRef.current === "thinking") {
           return;
@@ -2192,6 +2228,19 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
             phaseRef.current === "thinking" ||
             phaseRef.current === "speaking"
           ) {
+            return;
+          }
+
+          // Shortcut SpeakText echo ("whats up…") — ignore briefly after listen=1.
+          if (
+            Date.now() < shortcutGreetingIgnoreUntilRef.current &&
+            isShortcutGreetingNoise(text)
+          ) {
+            commandBufferRef.current = "";
+            if (commandTimerRef.current) {
+              clearTimeout(commandTimerRef.current);
+              commandTimerRef.current = null;
+            }
             return;
           }
 

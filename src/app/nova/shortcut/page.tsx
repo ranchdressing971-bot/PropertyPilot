@@ -86,6 +86,23 @@ export default async function NovaShortcutPage() {
             </p>
           </div>
 
+          <div className="rounded-2xl border border-amber-200/20 bg-amber-200/[0.04] px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100/55">
+              If you use SpeakText
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-white/55">
+              Put{" "}
+              <span className="text-white/75">Speak Text</span>{" "}
+              <span className="text-white/75">before</span> Open URLs. Nova
+              delays the mic ~3s and briefly ignores short &ldquo;what&apos;s
+              up&rdquo; echoes so speaker TTS isn&apos;t treated as a command.
+            </p>
+            <p className="mt-2 text-xs text-white/40">
+              Prefer removing SpeakText if you don&apos;t need a spoken greeting
+              — Nova no longer greets in-app on listen.
+            </p>
+          </div>
+
           <div className="space-y-2 text-xs leading-relaxed text-white/45">
             <p>
               First time: open Nova in Safari, grant Microphone, stay signed in
