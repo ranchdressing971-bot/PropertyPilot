@@ -501,6 +501,9 @@ async function synthesizeGoogle(
       audioEncoding: wantWav ? ("LINEAR16" as const) : ("MP3" as const),
       speakingRate,
       sampleRateHertz,
+      // Cloud TTS defaults quieter than device SpeakText; +5 dB is within
+      // Google's -96..16 range and stacks with client gain + soft limiter.
+      volumeGainDb: 5,
     },
   };
 

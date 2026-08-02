@@ -209,6 +209,55 @@ function getAudioContextClass(): typeof AudioContext | undefined {
   );
 }
 
+/**
+ * Cloud TTS reads quieter than iOS Shortcut SpeakText at the same media volume.
+ * Boost via Web Audio gain, then soft-limit so peaks don't hard-clip.
+ * ~1.8 ≈ +5.1 dB perceived; compressor keeps it from harsh distortion.
+ */
+const TTS_OUTPUT_GAIN = 1.8;
+const ttsOutputInputByCtx = new WeakMap<AudioContext, GainNode>();
+const mediaElRoutedThroughTts = new WeakSet<HTMLAudioElement>();
+
+/** Shared gain → compressor → destination for BufferSource + <audio> playback. */
+function getTtsOutputInput(ctx: AudioContext): GainNode {
+  const existing = ttsOutputInputByCtx.get(ctx);
+  if (existing) return existing;
+
+  const gain = ctx.createGain();
+  gain.gain.value = TTS_OUTPUT_GAIN;
+
+  const compressor = ctx.createDynamicsCompressor();
+  // Soft limiter: catch post-gain peaks without pumping.
+  compressor.threshold.value = -6;
+  compressor.knee.value = 8;
+  compressor.ratio.value = 8;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.12;
+
+  gain.connect(compressor);
+  compressor.connect(ctx.destination);
+  ttsOutputInputByCtx.set(ctx, gain);
+  return gain;
+}
+
+/**
+ * Route HTMLAudioElement through the loudness chain (volume maxes at 1 otherwise).
+ * createMediaElementSource may only be called once per element.
+ */
+function routeMediaElementThroughTtsBoost(
+  ctx: AudioContext,
+  el: HTMLAudioElement
+): void {
+  if (mediaElRoutedThroughTts.has(el)) return;
+  try {
+    const src = ctx.createMediaElementSource(el);
+    src.connect(getTtsOutputInput(ctx));
+    mediaElRoutedThroughTts.add(el);
+  } catch {
+    /* Already connected elsewhere, or Web Audio unavailable for this element. */
+  }
+}
+
 const SILENT_WAV =
   "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=";
 
@@ -853,11 +902,16 @@ function playBlobViaAudioContext(
       try {
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
-        source.connect(ctx.destination);
+        source.connect(getTtsOutputInput(ctx));
         opts?.onSource?.(source);
         const onAbort = () => {
           try {
             source.stop(0);
+          } catch {
+            /* ignore */
+          }
+          try {
+            source.disconnect();
           } catch {
             /* ignore */
           }
@@ -866,6 +920,11 @@ function playBlobViaAudioContext(
         opts?.signal?.addEventListener("abort", onAbort, { once: true });
         source.onended = () => {
           opts?.signal?.removeEventListener("abort", onAbort);
+          try {
+            source.disconnect();
+          } catch {
+            /* ignore */
+          }
           resolve();
         };
         source.start(0);
@@ -885,7 +944,8 @@ function playBlobViaAudioContext(
 function playBlobOnElement(
   el: HTMLAudioElement,
   blob: Blob,
-  objectUrlRef: { current: string | null }
+  objectUrlRef: { current: string | null },
+  ctx?: AudioContext | null
 ): Promise<void> {
   if (objectUrlRef.current) {
     URL.revokeObjectURL(objectUrlRef.current);
@@ -899,6 +959,7 @@ function playBlobOnElement(
   el.muted = false;
   el.volume = 1;
   primeAudioElement(el);
+  if (ctx) routeMediaElementThroughTtsBoost(ctx, el);
   el.src = url;
   el.load();
 
@@ -1005,10 +1066,12 @@ function primeAudioElement(el: HTMLAudioElement) {
  */
 function playPreparedInGesture(
   el: HTMLAudioElement,
-  objectUrlRef: { current: string | null }
+  objectUrlRef: { current: string | null },
+  ctx?: AudioContext | null
 ): Promise<void> {
   el.muted = false;
   el.volume = 1;
+  if (ctx) routeMediaElementThroughTtsBoost(ctx, el);
 
   return new Promise<void>((resolve, reject) => {
     let settled = false;
@@ -1076,7 +1139,8 @@ function playPreparedInGesture(
 function playBlobInGesture(
   el: HTMLAudioElement,
   blob: Blob,
-  objectUrlRef: { current: string | null }
+  objectUrlRef: { current: string | null },
+  ctx?: AudioContext | null
 ): Promise<void> {
   if (objectUrlRef.current) {
     URL.revokeObjectURL(objectUrlRef.current);
@@ -1090,7 +1154,7 @@ function playBlobInGesture(
   primeAudioElement(el);
   el.src = url;
 
-  return playPreparedInGesture(el, objectUrlRef);
+  return playPreparedInGesture(el, objectUrlRef, ctx);
 }
 
 interface SpeechRecognition extends EventTarget {
@@ -1462,6 +1526,9 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
         primeAudioElement(el);
         el.muted = false;
         el.volume = 1;
+        if (audioCtxRef.current) {
+          routeMediaElementThroughTtsBoost(audioCtxRef.current, el);
+        }
         const hasVoiceSrc =
           Boolean(objectUrlRef.current) &&
           (el.src === objectUrlRef.current ||
@@ -1981,10 +2048,15 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           el.muted = false;
           el.volume = 1;
           path = "tap:mpeg-prepared";
-          playback = playPreparedInGesture(el, objectUrlRef);
+          playback = playPreparedInGesture(el, objectUrlRef, audioCtxRef.current);
         } else {
           path = "tap:mpeg-rebind";
-          playback = playBlobInGesture(el, snapshot.blob, objectUrlRef);
+          playback = playBlobInGesture(
+            el,
+            snapshot.blob,
+            objectUrlRef,
+            audioCtxRef.current
+          );
           snapshot.url = objectUrlRef.current ?? snapshot.url;
         }
       } else if (isNovaApk() && hasNativeTts()) {
@@ -2588,6 +2660,9 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           primeAudioElement(el);
           el.muted = false;
           el.volume = 1;
+          if (audioCtxRef.current) {
+            routeMediaElementThroughTtsBoost(audioCtxRef.current, el);
+          }
         }
         if (!stillCurrent()) throw new DOMException("aborted", "AbortError");
       };
@@ -2636,7 +2711,12 @@ export function NovaConsole({ autoListen = false }: { autoListen?: boolean }) {
           if (!stillCurrent()) throw new DOMException("aborted", "AbortError");
           try {
             await beforePlay();
-            await playBlobOnElement(audioElRef.current, blob, objectUrlRef);
+            await playBlobOnElement(
+              audioElRef.current,
+              blob,
+              objectUrlRef,
+              ctx ?? audioCtxRef.current
+            );
             return "auto:audio";
           } catch (err) {
             lastErr = err;
