@@ -53,10 +53,10 @@ If you ever pasted API keys in chat or committed them, **rotate**:
 
 Pricing is computed in app code (not a single fixed Price ID):
 
-- **Initial:** **$299/mo** for **1-3** communities; more than 3: `max(299, round(99 × c^0.7))`
-- **Buy-more:** volume curve only `max(current_monthly, round(99 × c^0.7))` (not the $299 flat)
+- **$299/mo** for **1-3** communities; more than 3: `max(299, round(99 × c^0.7))`
+- **Buy-more:** same table, `max(current_monthly, priceForCommunities(c))` (prorated)
 - Trial: **1 free inspection** + **1 community** until subscribe
-- Add seats later: Settings → Billing (prorated) or Pricing
+- Add seats later: Settings → Billing or Pricing
 
 1. [stripe.com](https://stripe.com) → **Test mode**, then Live when ready
 2. **Products** → create **RideBy** (optional) → copy Product ID `prod_...` into `STRIPE_PRODUCT_ID`  

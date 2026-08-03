@@ -40,15 +40,15 @@ Use `.env.local` in the project root.
 
 Community billing is live in the app. Amounts are computed in code (not fixed Stripe Price IDs):
 
-**Initial checkout (Pricing):**
+**Pricing table:**
 - **$299/mo** for **1-3** communities (flat band)
-- **c > 3:** `max(299, round(99 × c^0.7))` (floor so P(4) never undercuts the flat band)
+- **c > 3:** `max(299, round(99 × c^0.7))` (floor so raw P(4) never undercuts the flat band)
 - Trial stays at **1 community** until subscribe
 
 **Buy more (after subscribe):**
-- Volume curve only: `max(current_monthly, round(99 × c^0.7))` (not the $299 flat)
+- Same table: `max(current_monthly, priceForCommunities(c))`
 - Settings → Billing (`POST /api/stripe/update-communities`) with Stripe proration
-- Checkout upgrades in place if already subscribed (same upsell pricing)
+- Checkout upgrades in place if already subscribed
 
 ### Setup (≈1–2 hours)
 

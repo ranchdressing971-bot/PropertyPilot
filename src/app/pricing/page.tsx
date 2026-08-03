@@ -32,7 +32,6 @@ export default function PricingPage() {
           {PRICING_BASE} × c<sup>{PRICING_EXPONENT}</sup>)). Each community keeps
           that HOA&apos;s inspections and properties organized under one org
           account. Add seats later in Settings.
-
         </p>
 
         <div className="mt-14">
