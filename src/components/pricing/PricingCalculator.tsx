@@ -38,7 +38,11 @@ export function PricingCalculator() {
     () => priceForCommunities(communities),
     [communities]
   );
-  const samples = useMemo(() => pricingSamples([1, 2, 3, 4, 5, 10]), []);
+  const samples = useMemo(
+    () =>
+      pricingSamples([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
+    []
+  );
   const inFlatBand = communities <= FLAT_TIER_MAX_COMMUNITIES;
 
   function setCount(next: number) {
