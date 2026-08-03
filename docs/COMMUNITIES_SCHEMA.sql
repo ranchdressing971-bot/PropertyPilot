@@ -11,6 +11,8 @@
 --
 -- Billing: profiles.community_count = how many communities the account may create.
 -- Trial / unpaid: at most 1 community. Paid: up to community_count.
+-- Initial price: $299/mo for 1-3; 4+ max(299, round(99*c^0.7)).
+-- Buy-more upgrades: volume curve only (no $299 flat).
 
 -- ── Communities table (no company FK at create time) ────────────────────────
 create table if not exists public.communities (

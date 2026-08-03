@@ -77,8 +77,12 @@ export function CommunitiesPageContent() {
       {limit && !limit.canCreate && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {limit.reason ?? "Community limit reached."}{" "}
+          <Link href="/dashboard/settings" className="font-medium underline">
+            Add communities in Billing
+          </Link>{" "}
+          or{" "}
           <Link href="/pricing" className="font-medium underline">
-            Adjust communities on Pricing
+            Pricing
           </Link>
         </div>
       )}

@@ -96,7 +96,7 @@ export async function getCommunityLimitStatus(
       subscribed: true,
       reason:
         currentCount >= limit
-          ? `Your plan includes ${limit} communit${limit === 1 ? "y" : "ies"}. Increase communities on Pricing to add another.`
+          ? `Your plan includes ${limit} communit${limit === 1 ? "y" : "ies"}. Add more under Settings → Billing (or Pricing).`
           : undefined,
       code: currentCount >= limit ? "COMMUNITY_LIMIT" : undefined,
     };

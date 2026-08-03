@@ -132,8 +132,15 @@ export async function POST(req: NextRequest) {
           event.type === "customer.subscription.deleted"
             ? "canceled"
             : mapStripeStatus(sub.status);
-        const communityCount = parseCommunityCount(sub.metadata?.community_count);
-        const priceMonthly = parsePriceMonthly(sub.metadata?.price_monthly);
+        // Prefer subscription metadata (set on checkout + add-communities upgrades).
+        // Fall back to price metadata from the latest subscription item.
+        const itemMeta = sub.items.data[0]?.price?.metadata;
+        const communityCount =
+          parseCommunityCount(sub.metadata?.community_count) ??
+          parseCommunityCount(itemMeta?.community_count);
+        const priceMonthly =
+          parsePriceMonthly(sub.metadata?.price_monthly) ??
+          parsePriceMonthly(itemMeta?.price_monthly);
 
         const fields: Record<string, string | number | null> = {
           subscription_status: status,
@@ -142,18 +149,31 @@ export async function POST(req: NextRequest) {
         if (communityCount != null) fields.community_count = communityCount;
         if (priceMonthly != null) fields.price_monthly = priceMonthly;
 
-        await updateByCustomer(customerId, fields);
+        // Also sync supabase_user_id when present (customer id may be missing on profile)
+        const userId = sub.metadata?.supabase_user_id;
+        if (userId) {
+          await updateByUserId(userId, {
+            ...fields,
+            stripe_customer_id: customerId,
+          });
+        } else {
+          await updateByCustomer(customerId, fields);
+        }
 
         if (status === "active" || status === "trialing") {
-          const { data: profileRow } = await admin
-            .from("profiles")
-            .select("id")
-            .eq("stripe_customer_id", customerId)
-            .maybeSingle();
-          if (profileRow?.id) {
+          const logUserId =
+            userId ||
+            (
+              await admin
+                .from("profiles")
+                .select("id")
+                .eq("stripe_customer_id", customerId)
+                .maybeSingle()
+            ).data?.id;
+          if (logUserId) {
             await logSubscriptionEvent(
               admin,
-              profileRow.id,
+              logUserId,
               status === "trialing"
                 ? "subscription.trialing"
                 : "subscription.activated",
@@ -163,6 +183,8 @@ export async function POST(req: NextRequest) {
                 stripeSubscriptionId: sub.id,
                 stripeEventId: event.id,
                 stripeEventAt: new Date(event.created * 1000).toISOString(),
+                communityCount,
+                priceMonthly,
               }
             );
           }

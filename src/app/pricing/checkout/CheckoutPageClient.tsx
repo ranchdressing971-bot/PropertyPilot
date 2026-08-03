@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadStripe } from "@stripe/stripe-js";
 import {
@@ -13,6 +13,11 @@ import {
   clampCommunities,
   formatPriceMonthly,
   priceForCommunities,
+  upsellPriceForCommunities,
+  FLAT_TIER_MAX_COMMUNITIES,
+  FLAT_TIER_PRICE,
+  PRICING_BASE,
+  PRICING_EXPONENT,
 } from "@/lib/stripe-client";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim();
@@ -32,36 +37,93 @@ export function CheckoutPageClient() {
       ),
     [searchParams]
   );
-  const priceMonthly = priceForCommunities(communities);
-  const priceLabel = formatPriceMonthly(priceMonthly);
   const [error, setError] = useState<string | null>(null);
-  const [redirecting, setRedirecting] = useState(!stripePromise);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [status, setStatus] = useState<"loading" | "checkout" | "done">(
+    "loading"
+  );
+  const [alreadySubscribed, setAlreadySubscribed] = useState(false);
+  const [currentPriceMonthly, setCurrentPriceMonthly] = useState<number | null>(
+    null
+  );
 
   useEffect(() => {
-    if (stripePromise) return;
-
     let cancelled = false;
+    fetch("/api/subscription/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        if (data.subscribed) {
+          setAlreadySubscribed(true);
+          if (data.priceMonthly != null) {
+            setCurrentPriceMonthly(Number(data.priceMonthly));
+          }
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const priceMonthly = useMemo(() => {
+    if (alreadySubscribed) {
+      return upsellPriceForCommunities(
+        communities,
+        currentPriceMonthly ?? priceForCommunities(1)
+      );
+    }
+    return priceForCommunities(communities);
+  }, [alreadySubscribed, communities, currentPriceMonthly]);
+  const priceLabel = formatPriceMonthly(priceMonthly);
+
+  useEffect(() => {
+    let cancelled = false;
+
     (async () => {
       try {
+        const embedded = Boolean(stripePromise);
         const res = await fetch("/api/stripe/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ communityCount: communities, embedded: false }),
+          body: JSON.stringify({ communityCount: communities, embedded }),
         });
         const data = await res.json();
+
+        if (cancelled) return;
+
         if (res.status === 401) {
-          router.push(`/signup?next=${encodeURIComponent(`/pricing/checkout?communities=${communities}`)}`);
+          router.push(
+            `/signup?next=${encodeURIComponent(`/pricing/checkout?communities=${communities}`)}`
+          );
           return;
         }
         if (!res.ok) throw new Error(data.error ?? "Checkout unavailable");
-        if (data.url && !cancelled) {
-          window.location.href = data.url;
+
+        if (data.updated) {
+          setStatus("done");
+          window.location.href =
+            (data.redirectUrl as string) ||
+            "/dashboard/settings?billing=success";
           return;
         }
-        throw new Error("Checkout URL missing");
+
+        if (data.clientSecret) {
+          setClientSecret(data.clientSecret as string);
+          setStatus("checkout");
+          return;
+        }
+
+        if (data.url) {
+          setStatus("done");
+          window.location.href = data.url as string;
+          return;
+        }
+
+        throw new Error("Checkout session could not be started.");
       } catch (err) {
         if (!cancelled) {
-          setRedirecting(false);
+          setStatus("checkout");
           setError(err instanceof Error ? err.message : "Checkout unavailable");
         }
       }
@@ -72,39 +134,17 @@ export function CheckoutPageClient() {
     };
   }, [communities, router]);
 
-  const fetchClientSecret = useCallback(async () => {
-    const res = await fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ communityCount: communities, embedded: true }),
-    });
-    const data = await res.json();
-
-    if (res.status === 401) {
-      router.push(
-        `/signup?next=${encodeURIComponent(`/pricing/checkout?communities=${communities}`)}`
-      );
-      throw new Error("Sign in required");
-    }
-    if (!res.ok) {
-      const message = data.error ?? "Checkout unavailable";
-      setError(message);
-      throw new Error(message);
-    }
-    if (!data.clientSecret) {
-      setError("Checkout session could not be started.");
-      throw new Error("Missing client secret");
-    }
-    return data.clientSecret as string;
-  }, [communities, router]);
-
-  if (!stripePromise) {
+  if (status === "loading" || status === "done") {
     return (
       <PublicLayout showNavActions={false}>
         <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 px-5">
           <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
           <p className="text-sm text-ink-500">
-            {redirecting ? "Redirecting to secure checkout…" : "Loading checkout…"}
+            {status === "done"
+              ? "Updating your plan…"
+              : stripePromise
+                ? "Preparing secure checkout…"
+                : "Redirecting to secure checkout…"}
           </p>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
         </div>
@@ -116,7 +156,9 @@ export function CheckoutPageClient() {
     <PublicLayout showNavActions={false}>
       <section className="mx-auto max-w-xl px-5 py-12 sm:py-16">
         <div className="mb-8 text-center">
-          <p className="text-sm font-medium text-brand-600">Subscribe</p>
+          <p className="text-sm font-medium text-brand-600">
+            {alreadySubscribed ? "Add communities" : "Subscribe"}
+          </p>
           <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-ink-900">
             {communities === 1
               ? "1 community"
@@ -127,14 +169,16 @@ export function CheckoutPageClient() {
           </p>
         </div>
 
-        {error ? (
-          <div className="surface p-6 text-center text-sm text-red-600">{error}</div>
+        {error || !clientSecret || !stripePromise ? (
+          <div className="surface p-6 text-center text-sm text-red-600">
+            {error ?? "Checkout unavailable"}
+          </div>
         ) : (
           <div className="surface overflow-hidden p-1 sm:p-2">
             <EmbeddedCheckoutProvider
               stripe={stripePromise}
               options={{
-                fetchClientSecret,
+                clientSecret,
                 onComplete: () => {
                   router.push("/dashboard/settings?billing=success");
                 },
@@ -146,7 +190,9 @@ export function CheckoutPageClient() {
         )}
 
         <p className="mt-6 text-center text-xs text-ink-400">
-          Secure payment by Stripe · P(c) = 99 × c<sup>0.7</sup>
+          Secure payment by Stripe · ${FLAT_TIER_PRICE}/mo for 1-
+          {FLAT_TIER_MAX_COMMUNITIES}; then max(${FLAT_TIER_PRICE}, round($
+          {PRICING_BASE} × c<sup>{PRICING_EXPONENT}</sup>))
         </p>
       </section>
     </PublicLayout>

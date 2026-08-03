@@ -156,7 +156,7 @@ function SignupForm() {
       <p className="mt-1 text-sm text-ink-500">
         {fromFreeOffer
           ? "Create your account, then upload one drive-through of your community, on us."
-          : "1 free inspection per account · from $99/mo"}
+          : "1 free inspection per account · from $299/mo"}
       </p>
 
       {!supabaseReady && (

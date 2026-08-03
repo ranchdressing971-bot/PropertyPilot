@@ -1,13 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { CreditCard, Loader2, ExternalLink } from "lucide-react";
+import { CreditCard, Loader2, ExternalLink, Minus, Plus } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/components/providers/ToastProvider";
-import { priceForCommunities, formatPriceMonthly } from "@/lib/stripe-client";
+import { useAppMode } from "@/components/providers/AppModeProvider";
+import {
+  clampCommunities,
+  formatPriceMonthly,
+  priceForCommunities,
+  upsellPriceForCommunities,
+  FLAT_TIER_MAX_COMMUNITIES,
+  FLAT_TIER_PRICE,
+  MAX_COMMUNITIES,
+  MIN_COMMUNITIES,
+  PRICING_BASE,
+  PRICING_EXPONENT,
+} from "@/lib/stripe-client";
 
 interface SubStatus {
   subscribed: boolean;
@@ -31,9 +43,13 @@ interface SubStatus {
 export function BillingCard() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const [loading, setLoading] = useState<"checkout" | "portal" | "init" | null>("init");
+  const { isDemo } = useAppMode();
+  const [loading, setLoading] = useState<
+    "checkout" | "portal" | "upgrade" | "init" | null
+  >("init");
   const [error, setError] = useState<string | null>(null);
   const [sub, setSub] = useState<SubStatus | null>(null);
+  const [addCount, setAddCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (searchParams.get("billing") === "success") {
@@ -41,17 +57,43 @@ export function BillingCard() {
     }
   }, [searchParams, toast]);
 
-  useEffect(() => {
-    fetch("/api/subscription/status")
+  function refreshStatus() {
+    return fetch("/api/subscription/status")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data) setSub(data);
+        if (data) {
+          setSub(data);
+          const current = Math.max(1, Number(data.communityCount) || 1);
+          setAddCount((prev) =>
+            prev == null || prev <= current
+              ? clampCommunities(current + 1)
+              : prev
+          );
+        }
         setLoading(null);
       })
       .catch(() => setLoading(null));
+  }
+
+  useEffect(() => {
+    void refreshStatus();
   }, []);
 
+  const currentCount = Math.max(1, Number(sub?.communityCount) || 1);
+  const targetCount = addCount ?? clampCommunities(currentCount + 1);
+  const currentPrice =
+    sub?.priceMonthly ?? priceForCommunities(currentCount);
+  const nextPrice = useMemo(
+    () => upsellPriceForCommunities(targetCount, currentPrice),
+    [targetCount, currentPrice]
+  );
+  const priceDelta = Math.max(0, nextPrice - currentPrice);
+
   async function openPortal() {
+    if (isDemo) {
+      toast("Demo mode: billing portal is disabled");
+      return;
+    }
     setLoading("portal");
     setError(null);
     try {
@@ -62,6 +104,37 @@ export function BillingCard() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Portal failed");
     } finally {
+      setLoading(null);
+    }
+  }
+
+  async function upgradeCommunities() {
+    if (isDemo) {
+      toast("Demo mode: community upgrades are disabled");
+      return;
+    }
+    if (targetCount <= currentCount) {
+      setError("Choose a higher community count to upgrade.");
+      return;
+    }
+    setLoading("upgrade");
+    setError(null);
+    try {
+      const res = await fetch("/api/stripe/update-communities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ communityCount: targetCount }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upgrade failed");
+      toast(
+        `Plan updated to ${data.communityCount} communit${
+          data.communityCount === 1 ? "y" : "ies"
+        } · ${data.priceLabel} (prorated)`
+      );
+      await refreshStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upgrade failed");
       setLoading(null);
     }
   }
@@ -91,6 +164,10 @@ export function BillingCard() {
                         sub.communityCount === 1 ? "y" : "ies"
                       }`
                     : ""
+                }${
+                  sub?.communitiesUsed != null
+                    ? ` · ${sub.communitiesUsed} in use`
+                    : ""
                 } · ${sub?.status}`
               : sub
                 ? `${sub.trialInspectionsRemaining} of ${sub.trialInspectionsLimit} free inspection${
@@ -119,11 +196,96 @@ export function BillingCard() {
           </p>
         )}
 
+      {subscribed && (
+        <div className="mt-4 rounded-xl border border-ink-100 bg-ink-50/60 px-4 py-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
+            Add communities
+          </p>
+          <p className="mt-1 text-sm text-ink-600">
+            Organizations keep each HOA in its own workspace. $
+            {FLAT_TIER_PRICE}/mo covers up to {FLAT_TIER_MAX_COMMUNITIES}; above
+            that max(${FLAT_TIER_PRICE}, round(${PRICING_BASE} × c
+            <sup>{PRICING_EXPONENT}</sup>)). Stripe prorates the difference for
+            the rest of this billing period.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Fewer communities"
+                onClick={() =>
+                  setAddCount(clampCommunities(targetCount - 1))
+                }
+                disabled={targetCount <= currentCount + 1 || !!loading}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-ink-200 bg-white text-ink-700 hover:bg-ink-50 disabled:opacity-40"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={currentCount + 1}
+                max={MAX_COMMUNITIES}
+                value={targetCount}
+                disabled={!!loading}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (!Number.isFinite(n)) return;
+                  setAddCount(
+                    clampCommunities(Math.max(currentCount + 1, n))
+                  );
+                }}
+                className="h-9 w-16 rounded-xl border border-ink-200 bg-white text-center text-sm font-semibold text-ink-900 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              />
+              <button
+                type="button"
+                aria-label="More communities"
+                onClick={() =>
+                  setAddCount(clampCommunities(targetCount + 1))
+                }
+                disabled={targetCount >= MAX_COMMUNITIES || !!loading}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-ink-200 bg-white text-ink-700 hover:bg-ink-50 disabled:opacity-40"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="text-right text-sm">
+              <p className="font-semibold text-ink-900">
+                {formatPriceMonthly(nextPrice)}
+              </p>
+              <p className="text-ink-500">
+                {priceDelta > 0
+                  ? `+$${priceDelta}/mo vs current`
+                  : "Same monthly rate (more seats)"}
+              </p>
+            </div>
+          </div>
+          <div className="mt-3">
+            <Button
+              size="sm"
+              onClick={upgradeCommunities}
+              disabled={!!loading || targetCount <= currentCount}
+            >
+              {loading === "upgrade" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : null}
+              Update to {targetCount} communit
+              {targetCount === 1 ? "y" : "ies"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
       <div className="mt-4 flex flex-wrap gap-2">
         {subscribed ? (
-          <Button variant="secondary" size="sm" onClick={openPortal} disabled={!!loading}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={openPortal}
+            disabled={!!loading}
+          >
             {loading === "portal" ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -137,6 +299,18 @@ export function BillingCard() {
           </Link>
         )}
       </div>
+      {!subscribed && (
+        <p className="mt-2 text-xs text-ink-400">
+          Trial stays at 1 community until you subscribe. Initial plans:{" "}
+          {fromPrice} for 1-{FLAT_TIER_MAX_COMMUNITIES} communities.
+        </p>
+      )}
+      {subscribed && (
+        <p className="mt-2 text-xs text-ink-400">
+          Card changes and cancel: Manage billing. Seat increases: use Add
+          communities above. Min {MIN_COMMUNITIES}.
+        </p>
+      )}
     </Card>
   );
 }

@@ -5,10 +5,17 @@ import {
   isStripeConfigured,
   buildCommunitySubscriptionLineItem,
   clampCommunities,
+  communitySubscriptionMetadata,
+  findActiveCommunitySubscription,
+  updateCommunitySubscription,
 } from "@/lib/stripe";
 import { buildCheckoutBranding } from "@/lib/stripe-branding";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  getUserSubscription,
+  hasActiveSubscription,
+} from "@/lib/subscription";
 import Stripe from "stripe";
 
 function stripeErrorMessage(err: unknown): string {
@@ -69,7 +76,7 @@ export async function POST(req: NextRequest) {
     if (admin) {
       const { data: profile } = await admin
         .from("profiles")
-        .select("stripe_customer_id, email")
+        .select("stripe_customer_id, email, subscription_status, community_count")
         .eq("id", user.id)
         .maybeSingle();
       customerId = profile?.stripe_customer_id ?? null;
@@ -86,16 +93,66 @@ export async function POST(req: NextRequest) {
           stripe_customer_id: customerId,
         });
       }
+
+      // Already subscribed: upgrade in place (prorated) instead of a second Checkout
+      const profileSub = await getUserSubscription(user.id);
+      if (
+        customerId &&
+        hasActiveSubscription(profileSub.status) &&
+        (await findActiveCommunitySubscription(customerId))
+      ) {
+        const currentCount = Math.max(1, profileSub.communityCount || 1);
+        if (communityCount <= currentCount) {
+          return NextResponse.json(
+            {
+              error: `You already subscribe for ${currentCount} communit${
+                currentCount === 1 ? "y" : "ies"
+              }. Choose a higher number, or manage billing in Settings.`,
+              code: "ALREADY_SUBSCRIBED",
+              communityCount: currentCount,
+              updated: false,
+            },
+            { status: 400 }
+          );
+        }
+
+        const result = await updateCommunitySubscription({
+          customerId,
+          userId: user.id,
+          communityCount,
+          requireIncreaseFrom: currentCount,
+          currentPriceMonthly: profileSub.priceMonthly,
+        });
+
+        await admin
+          .from("profiles")
+          .update({
+            community_count: result.communityCount,
+            price_monthly: result.priceMonthly,
+            subscription_status: "active",
+            plan: "community",
+          })
+          .eq("id", user.id);
+
+        return NextResponse.json({
+          updated: true,
+          communityCount: result.communityCount,
+          previousCommunityCount: result.previousCommunityCount,
+          priceMonthly: result.priceMonthly,
+          previousPriceMonthly: result.previousPriceMonthly,
+          priceLabel: result.priceLabel,
+          redirectUrl: `${getAppUrl()}/dashboard/settings?billing=success`,
+        });
+      }
     }
 
     const appUrl = getAppUrl();
     const branding = buildCheckoutBranding(appUrl, { embedded });
-    const meta = {
-      supabase_user_id: user.id,
-      plan: "community",
-      community_count: String(communityCount),
-      price_monthly: String(priceMonthly),
-    };
+    const meta = communitySubscriptionMetadata(
+      user.id,
+      communityCount,
+      priceMonthly
+    );
 
     const baseSession = {
       mode: "subscription" as const,
@@ -128,6 +185,7 @@ export async function POST(req: NextRequest) {
         communityCount,
         priceMonthly,
         priceLabel,
+        updated: false,
       });
     }
 
@@ -142,6 +200,7 @@ export async function POST(req: NextRequest) {
       communityCount,
       priceMonthly,
       priceLabel,
+      updated: false,
     });
   } catch (err) {
     console.error("Stripe checkout failed:", err);

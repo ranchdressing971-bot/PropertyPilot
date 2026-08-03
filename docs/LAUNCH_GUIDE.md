@@ -38,30 +38,43 @@ Use `.env.local` in the project root.
 
 ## 2. Stripe billing (subscriptions)
 
-The `/pricing` page is UI-only today. To charge customers:
+Community billing is live in the app. Amounts are computed in code (not fixed Stripe Price IDs):
 
-### Setup (≈2–4 hours)
+**Initial checkout (Pricing):**
+- **$299/mo** for **1-3** communities (flat band)
+- **c > 3:** `max(299, round(99 × c^0.7))` (floor so P(4) never undercuts the flat band)
+- Trial stays at **1 community** until subscribe
 
-1. Create [Stripe](https://stripe.com) account → enable **Test mode**
-2. Products → create:
-   - **Starter** — $49/mo — price ID `price_xxx`
-   - **Professional** — $129/mo — price ID `price_yyy`
-3. Install: `npm install stripe @stripe/stripe-js`
+**Buy more (after subscribe):**
+- Volume curve only: `max(current_monthly, round(99 × c^0.7))` (not the $299 flat)
+- Settings → Billing (`POST /api/stripe/update-communities`) with Stripe proration
+- Checkout upgrades in place if already subscribed (same upsell pricing)
+
+### Setup (≈1–2 hours)
+
+1. Create [Stripe](https://stripe.com) account → enable **Test mode** (then Live)
+2. Products → create **RideBy** (or your brand) → copy `prod_...` into `STRIPE_PRODUCT_ID` (optional but recommended; Prices are created dynamically)
+3. Webhooks → endpoint `/api/stripe/webhook` for:
+   - `checkout.session.completed`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
+   - `invoice.paid`
+   - `invoice.payment_failed`
 4. Add env vars:
    ```env
-   STRIPE_SECRET_KEY=sk_test_...
+   STRIPE_SECRET_KEY=sk_test_...   # must be sk_..., not rk_...
    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
    STRIPE_WEBHOOK_SECRET=whsec_...
-   STRIPE_PRICE_STARTER=price_xxx
-   STRIPE_PRICE_PRO=price_yyy
+   # STRIPE_PRODUCT_ID=prod_...
    ```
 
-### Routes to build
+### Routes
 
 | Route | Purpose |
 |-------|---------|
-| `POST /api/stripe/checkout` | Create Checkout Session, redirect user |
-| `POST /api/stripe/webhook` | Handle `checkout.session.completed`, `invoice.paid`, `customer.subscription.deleted` |
+| `POST /api/stripe/checkout` | New Checkout Session, or in-place upgrade if already subscribed |
+| `POST /api/stripe/update-communities` | Add communities on an existing subscription (prorated) |
+| `POST /api/stripe/webhook` | Sync `community_count` / `price_monthly` / status on profiles |
 | `GET /api/stripe/portal` | Customer billing portal link |
 
 ### Database additions

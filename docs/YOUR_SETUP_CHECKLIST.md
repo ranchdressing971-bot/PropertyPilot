@@ -49,23 +49,28 @@ If you ever pasted API keys in chat or committed them, **rotate**:
 
 ---
 
-## 4. Stripe (billing — $149/mo, 3 free scans)
+## 4. Stripe (community billing)
 
-1. [stripe.com](https://stripe.com) → **Test mode**
-2. **Products** → open your product (`prod_UnRLrryaB03Nan` or similar)
-3. Under **Pricing**, copy the **Price ID** — starts with `price_...`  
-   ⚠️ **Not** the Product ID (`prod_...`). Checkout needs `price_...`.
-4. Add to Vercel (and `.env.local`):
+Pricing is computed in app code (not a single fixed Price ID):
+
+- **Initial:** **$299/mo** for **1-3** communities; more than 3: `max(299, round(99 × c^0.7))`
+- **Buy-more:** volume curve only `max(current_monthly, round(99 × c^0.7))` (not the $299 flat)
+- Trial: **1 free inspection** + **1 community** until subscribe
+- Add seats later: Settings → Billing (prorated) or Pricing
+
+1. [stripe.com](https://stripe.com) → **Test mode**, then Live when ready
+2. **Products** → create **RideBy** (optional) → copy Product ID `prod_...` into `STRIPE_PRODUCT_ID`  
+   Checkout / upgrades create **Prices** dynamically on that product. Fixed `price_...` IDs are not required.
+3. Add to Vercel (and `.env.local`):
    ```
-   STRIPE_SECRET_KEY=sk_test_...
-   STRIPE_PRICE_ID=price_...
+   STRIPE_SECRET_KEY=sk_live_...   # must be sk_..., not a restricted rk_... key
+   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
    STRIPE_WEBHOOK_SECRET=whsec_...
+   STRIPE_PRODUCT_ID=prod_...      # recommended
    ```
-5. **Developers → Webhooks** → endpoint `https://YOUR-VERCEL-URL/api/stripe/webhook`  
-   Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`
-6. Redeploy. Test card: `4242 4242 4242 4242`
-
-New users get **3 free live scans** without a card. After that, they subscribe at **$149/month**.
+4. **Developers → Webhooks** → endpoint `https://YOUR-DOMAIN/api/stripe/webhook`  
+   Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`
+5. Redeploy. Test card: `4242 4242 4242 4242`
 
 ---
 

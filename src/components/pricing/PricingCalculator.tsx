@@ -11,6 +11,10 @@ import {
   pricingSamples,
   MAX_COMMUNITIES,
   MIN_COMMUNITIES,
+  FLAT_TIER_MAX_COMMUNITIES,
+  FLAT_TIER_PRICE,
+  PRICING_BASE,
+  PRICING_EXPONENT,
 } from "@/lib/stripe-client";
 import { Check, Minus, Plus } from "lucide-react";
 
@@ -19,8 +23,9 @@ const FEATURES = [
   "Mailbox address matching",
   "Evidence frames + human review",
   "Violation notices (you approve)",
-  "Organize inspections and properties by community",
+  "One workspace per HOA community",
   "Community roster import",
+  "Add communities later from Settings",
   "Cancel anytime",
 ];
 
@@ -33,7 +38,8 @@ export function PricingCalculator() {
     () => priceForCommunities(communities),
     [communities]
   );
-  const samples = useMemo(() => pricingSamples([1, 2, 3, 5, 10]), []);
+  const samples = useMemo(() => pricingSamples([1, 2, 3, 4, 5, 10]), []);
+  const inFlatBand = communities <= FLAT_TIER_MAX_COMMUNITIES;
 
   function setCount(next: number) {
     const clamped = clampCommunities(next);
@@ -60,10 +66,15 @@ export function PricingCalculator() {
           Pay for the communities you manage
         </h2>
         <p className="mt-2 text-sm text-ink-500">
-          Each community on your plan is one HOA workspace: inspections and
-          properties stay organized there. Price scales with volume (not a flat
-          jump every time you add an HOA). Formula: $99 × communities
-          <sup>0.7</sup>
+          Each community is one HOA workspace: inspections and properties stay
+          organized there. Organizations often run several HOAs under one
+          account.{" "}
+          <span className="font-medium text-ink-700">
+            ${FLAT_TIER_PRICE}/mo for 1-{FLAT_TIER_MAX_COMMUNITIES} communities
+          </span>
+          . Above that: max(${FLAT_TIER_PRICE}, round(${PRICING_BASE} × c
+          <sup>{PRICING_EXPONENT}</sup>)) so volume still discounts vs a flat
+          jump every time.
         </p>
 
         <div className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-ink-100 bg-ink-50/70 px-4 py-4">
@@ -139,6 +150,9 @@ export function PricingCalculator() {
               ? "1 community"
               : `${communities} communities`}{" "}
             · billed monthly · cancel anytime
+            {inFlatBand
+              ? ` · flat band (1-${FLAT_TIER_MAX_COMMUNITIES})`
+              : " · volume curve"}
           </p>
         </div>
 
@@ -168,6 +182,11 @@ export function PricingCalculator() {
         <div className="border-b border-ink-100 px-4 py-3 text-left">
           <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
             Example pricing
+          </p>
+          <p className="mt-1 text-xs text-ink-500">
+            ${FLAT_TIER_PRICE} flat through {FLAT_TIER_MAX_COMMUNITIES}{" "}
+            communities; then max(${FLAT_TIER_PRICE}, round(${PRICING_BASE} × c
+            <sup>{PRICING_EXPONENT}</sup>))
           </p>
         </div>
         <table className="w-full text-left text-sm">
