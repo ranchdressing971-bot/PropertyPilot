@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Manrope, Fraunces } from "next/font/google";
+import { Manrope, Outfit } from "next/font/google";
 import { AppModeProvider } from "@/components/providers/AppModeProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import { IosHomeScreenIcon } from "@/components/brand/IosHomeScreenIcon";
@@ -11,7 +11,7 @@ const manrope = Manrope({
   weight: ["400", "500", "600", "700"],
 });
 
-const fraunces = Fraunces({
+const outfit = Outfit({
   subsets: ["latin"],
   variable: "--font-display",
   weight: ["500", "600", "700"],
@@ -59,7 +59,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
-  themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f4f6f3" }],
+  themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f2f5f3" }],
   colorScheme: "light",
 };
 
@@ -69,7 +69,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${fraunces.variable}`}>
+    <html lang="en" className={`${manrope.variable} ${outfit.variable}`}>
       <head>
         <IosHomeScreenIcon />
       </head>

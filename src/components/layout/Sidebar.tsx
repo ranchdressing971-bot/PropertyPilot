@@ -56,14 +56,17 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
             href={item.href}
             onClick={onNavigate}
             className={clsx(
-              "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
               isActive
-                ? "bg-white/10 text-white"
-                : "text-ink-400 hover:bg-white/5 hover:text-ink-200"
+                ? "bg-brand-600/20 text-white"
+                : "text-ink-400 hover:bg-white/[0.04] hover:text-ink-100"
             )}
           >
             <Icon
-              className={clsx("h-4 w-4 shrink-0", isActive ? "text-brand-400" : "")}
+              className={clsx(
+                "h-4 w-4 shrink-0",
+                isActive ? "text-brand-300" : "text-ink-500"
+              )}
             />
             {item.label}
           </Link>
@@ -79,7 +82,7 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[252px] flex-col border-r border-ink-800/50 bg-ink-950 lg:flex">
+      <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[240px] flex-col border-r border-ink-800/60 bg-ink-950 lg:flex">
         <SidebarContent isDemo={isDemo} />
       </aside>
 
@@ -101,19 +104,19 @@ export function Sidebar() {
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "tween", duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
-              className="fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(92vw,22.5rem)] flex-col overflow-hidden bg-ink-950 shadow-2xl lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(92vw,21rem)] flex-col overflow-hidden bg-ink-950 shadow-2xl lg:hidden"
             >
-              <div className="flex items-center justify-between border-b border-ink-800/80 px-5 py-4">
+              <div className="flex items-center justify-between border-b border-ink-800/70 px-5 py-4">
                 <Logo size="lg" href="/dashboard" variant="light" inverted />
                 <button
                   onClick={close}
-                  className="rounded-xl p-2 text-ink-400 transition-colors hover:bg-white/5 hover:text-white"
+                  className="rounded-lg p-2 text-ink-400 transition-colors hover:bg-white/5 hover:text-white"
                   aria-label="Close menu"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+              <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
                 <NavLinks onNavigate={close} />
               </nav>
             </motion.aside>
@@ -130,28 +133,28 @@ function SidebarContent({ isDemo }: { isDemo: boolean }) {
 
   return (
     <>
-      <div className="flex h-16 items-center border-b border-ink-800/80 px-5">
+      <div className="flex h-14 items-center border-b border-ink-800/70 px-5">
         <Logo size="lg" href="/dashboard" variant="light" inverted />
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-5">
+      <nav className="flex-1 space-y-0.5 px-3 py-4">
         <NavLinks />
       </nav>
 
-      <div className="border-t border-ink-800/80 p-4">
-        <div className="rounded-xl border border-ink-800/80 bg-ink-900/50 px-3.5 py-3">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-ink-500">
+      <div className="border-t border-ink-800/70 p-3">
+        <div className="rounded-lg bg-white/[0.03] px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-500">
             {isDemo
               ? "Demo workspace"
               : isInspector
-                ? "Inspector · shared HOA"
-                : "Your HOA"}
+                ? "Inspector"
+                : "Workspace"}
           </p>
-          <p className="mt-1 truncate text-sm font-medium text-ink-200">
+          <p className="mt-1 truncate text-sm font-medium text-ink-100">
             {companyName || hoaName || displayHoaName(profile, isDemo)}
           </p>
           {role && !isDemo ? (
-            <p className="mt-1 text-[11px] capitalize text-ink-500">{role}</p>
+            <p className="mt-0.5 text-[11px] capitalize text-ink-500">{role}</p>
           ) : null}
         </div>
       </div>

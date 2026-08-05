@@ -69,7 +69,7 @@ export function TrashCollectionCard() {
         <div>
           <h3 className="font-semibold text-ink-900">Trash collection days</h3>
           <p className="text-sm text-ink-500">
-            Bin flags only on non-pickup days; bins are allowed out on these days
+            Bin flags only on non-pickup days
           </p>
         </div>
       </div>
@@ -91,7 +91,7 @@ export function TrashCollectionCard() {
               className={clsx(
                 "relative rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors",
                 on
-                  ? "bg-ink-900 text-white shadow-sm"
+                  ? "bg-brand-600 text-white shadow-cta"
                   : "bg-ink-50 text-ink-600 ring-1 ring-ink-200 hover:bg-ink-100",
                 isToday && "ring-2 ring-brand-400 ring-offset-2"
               )}

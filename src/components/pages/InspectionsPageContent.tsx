@@ -43,7 +43,7 @@ export function InspectionsPageContent() {
         <EmptyState
           icon={Video}
           title="No inspections on file"
-          description="Upload a drive-through video and AI will analyze every property along the route."
+          description="Upload a drive-through and we will flag homes that need review."
         />
       ) : (
         <motion.div

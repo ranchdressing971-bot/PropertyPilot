@@ -147,8 +147,7 @@ export function CcrRulesCard() {
         <div>
           <h3 className="font-semibold text-ink-900">CC&R Rules</h3>
           <p className="text-sm text-ink-500">
-            Toggle built-in detections or add custom community rules for the AI
-            to check from the street
+            Built-in detections plus custom rules for street-side checks
           </p>
         </div>
       </div>

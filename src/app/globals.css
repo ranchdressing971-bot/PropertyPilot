@@ -11,11 +11,17 @@
   body {
     @apply bg-canvas text-ink-900;
     overflow-x: hidden;
+    background-color: #f2f5f3;
     background-image:
-      radial-gradient(ellipse 90% 55% at 10% -10%, rgba(79, 127, 95, 0.12), transparent 55%),
-      radial-gradient(ellipse 70% 45% at 95% 5%, rgba(181, 122, 69, 0.08), transparent 50%),
-      linear-gradient(180deg, #f7f8f5 0%, #f4f6f3 40%, #eef1eb 100%);
+      radial-gradient(ellipse 85% 50% at 8% -8%, rgba(43, 111, 75, 0.1), transparent 52%),
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgba(58, 138, 95, 0.06), transparent 48%),
+      linear-gradient(180deg, #f6f9f7 0%, #f2f5f3 45%, #eef2ef 100%);
     background-attachment: fixed;
+  }
+
+  ::selection {
+    background: rgba(43, 111, 75, 0.18);
+    color: #1c2420;
   }
 
   input,
@@ -36,11 +42,11 @@
 
 @layer utilities {
   .surface {
-    @apply rounded-2xl border border-ink-200/70 bg-white/90 shadow-card backdrop-blur-sm;
+    @apply rounded-xl border border-ink-200/65 bg-white shadow-card;
   }
 
   .surface-muted {
-    @apply rounded-2xl border border-ink-100 bg-ink-50/90;
+    @apply rounded-xl border border-ink-100 bg-ink-50/80;
   }
 
   .text-balance {
@@ -48,7 +54,11 @@
   }
 
   .font-display {
-    font-family: var(--font-display), Georgia, serif;
+    font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  }
+
+  .page-eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-700;
   }
 }
 

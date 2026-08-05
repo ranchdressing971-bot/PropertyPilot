@@ -195,16 +195,13 @@ export function BillingCard() {
 
       {subscribed && (
         <div className="mt-4 rounded-xl border border-ink-100 bg-ink-50/60 px-4 py-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-400">
             Add communities
           </p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-sm text-ink-600">
-            <li>
-              ${FLAT_TIER_PRICE}/mo for 1-{FLAT_TIER_MAX_COMMUNITIES} communities
-            </li>
-            <li>Above that: volume pricing (see Pricing)</li>
-            <li>Prorated for the rest of this period</li>
-          </ul>
+          <p className="mt-1 text-sm text-ink-600">
+            ${FLAT_TIER_PRICE}/mo for 1-{FLAT_TIER_MAX_COMMUNITIES}, then volume
+            pricing. Prorated for this period.
+          </p>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <button

@@ -19,14 +19,12 @@ import {
 import { Check, Minus, Plus } from "lucide-react";
 
 const FEATURES = [
-  "AI drive-through inspections",
+  "Drive-through AI inspections",
   "Mailbox address matching",
   "Evidence frames + human review",
-  "Violation notices (you approve)",
-  "One workspace per HOA community",
-  "Community roster import",
-  "Add communities later from Settings",
-  "Cancel anytime",
+  "Notices you approve before send",
+  "Community workspaces + roster import",
+  "Add communities later · cancel anytime",
 ];
 
 export function PricingCalculator() {
@@ -59,8 +57,8 @@ export function PricingCalculator() {
 
   return (
     <div className="mx-auto max-w-xl">
-      <div className="surface p-8 text-left">
-        <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 ring-1 ring-brand-100">
+      <div className="surface p-6 text-left sm:p-8">
+        <span className="rounded-md bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 ring-1 ring-brand-100">
           {FREE_TRIAL_INSPECTIONS === 1
             ? "1 free inspection per account"
             : `${FREE_TRIAL_INSPECTIONS} free inspections per account`}
@@ -69,26 +67,21 @@ export function PricingCalculator() {
         <h2 className="mt-4 font-display text-2xl font-semibold text-ink-900">
           Pay for the communities you manage
         </h2>
-        <ul className="mt-2 list-disc space-y-0.5 pl-4 text-sm text-ink-500">
-          <li>
-            <span className="font-medium text-ink-700">
-              ${FLAT_TIER_PRICE}/mo for 1-{FLAT_TIER_MAX_COMMUNITIES} communities
-            </span>
-          </li>
-          <li>
-            Above that: max(${FLAT_TIER_PRICE}, round(${PRICING_BASE} × c
-            <sup>{PRICING_EXPONENT}</sup>))
-          </li>
-          <li>Add more later from Settings</li>
-        </ul>
+        <p className="mt-2 text-sm text-ink-500">
+          <span className="font-medium text-ink-700">
+            ${FLAT_TIER_PRICE}/mo for 1-{FLAT_TIER_MAX_COMMUNITIES}
+          </span>
+          , then volume pricing (max(${FLAT_TIER_PRICE}, round($
+          {PRICING_BASE} × c<sup>{PRICING_EXPONENT}</sup>))).
+        </p>
 
-        <div className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-ink-100 bg-ink-50/70 px-4 py-4">
+        <div className="mt-7 flex items-center justify-between gap-4 rounded-xl border border-ink-100 bg-ink-50/70 px-4 py-4">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-400">
               Communities
             </p>
             <p className="mt-1 text-sm text-ink-600">
-              How many HOA communities will you create on RideBy?
+              How many HOAs will you run here?
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -183,14 +176,13 @@ export function PricingCalculator() {
         </div>
       </div>
 
-      <div className="mt-8 overflow-hidden rounded-2xl border border-ink-100 bg-white">
+      <div className="mt-8 overflow-hidden rounded-xl border border-ink-200/65 bg-white shadow-card">
         <div className="border-b border-ink-100 px-4 py-3 text-left">
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-400">
             Example pricing
           </p>
           <p className="mt-1 text-xs text-ink-500">
-            ${FLAT_TIER_PRICE} through {FLAT_TIER_MAX_COMMUNITIES}; then volume
-            curve
+            Flat through {FLAT_TIER_MAX_COMMUNITIES}, then volume curve
           </p>
         </div>
         <table className="w-full text-left text-sm">

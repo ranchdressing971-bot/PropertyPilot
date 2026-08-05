@@ -51,14 +51,15 @@ export function DashboardContent() {
   if (isLive && !hasLiveData) {
     return (
       <PageContent>
-        <div className="surface mx-auto max-w-xl p-8 text-center sm:p-10">
-          <p className="font-display text-2xl font-semibold text-ink-900">
+        <div className="surface mx-auto max-w-lg p-7 text-center sm:p-9">
+          <p className="page-eyebrow">Get started</p>
+          <p className="mt-2 font-display text-2xl font-semibold text-ink-900">
             Your first inspection
           </p>
           <p className="mt-2 text-sm text-ink-500">
-            Three steps, then you&apos;re reviewing flags like a pro.
+            Upload, review flags, then send notices you approve.
           </p>
-          <ol className="mt-8 space-y-4 text-left">
+          <ol className="mt-7 space-y-2.5 text-left">
             {[
               {
                 icon: Upload,
@@ -68,19 +69,19 @@ export function DashboardContent() {
               {
                 icon: AlertTriangle,
                 title: "Review AI flags",
-                desc: "Confirm addresses, approve or dismiss violations.",
+                desc: "Confirm addresses, approve or dismiss.",
               },
               {
                 icon: FileText,
                 title: "Send notices",
-                desc: "Export or email only after human review.",
+                desc: "Export or email only after you review.",
               },
             ].map((step, i) => (
               <li
                 key={step.title}
-                className="flex gap-3 rounded-xl border border-ink-100 bg-ink-50/80 p-3.5"
+                className="flex gap-3 rounded-lg border border-ink-100 bg-ink-50/60 p-3"
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-800">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 ring-1 ring-brand-100">
                   <step.icon className="h-4 w-4" />
                 </div>
                 <div>
@@ -92,13 +93,13 @@ export function DashboardContent() {
               </li>
             ))}
           </ol>
-          <Link href="/dashboard/inspections/upload" className="mt-8 inline-block">
+          <Link href="/dashboard/inspections/upload" className="mt-7 inline-block">
             <Button size="lg">
               <Upload className="h-4 w-4" />
               Upload video
             </Button>
           </Link>
-          <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-ink-500">
+          <p className="mt-3.5 flex items-center justify-center gap-1.5 text-xs text-ink-500">
             <CheckCircle2 className="h-3.5 w-3.5 text-brand-600" />
             1 free live inspection to start
           </p>

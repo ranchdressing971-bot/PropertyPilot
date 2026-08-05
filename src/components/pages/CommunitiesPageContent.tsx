@@ -106,7 +106,7 @@ export function CommunitiesPageContent() {
                 autoFocus
               />
               <p className="mt-1.5 text-xs text-ink-400">
-                Inspections and properties for this HOA stay organized here.
+                Inspections and properties stay under this community.
               </p>
             </div>
             {createError && (
@@ -151,16 +151,15 @@ export function CommunitiesPageContent() {
       )}
 
       {communities.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-ink-200 bg-white px-8 py-16 text-center shadow-card">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 ring-1 ring-brand-100">
-            <Building2 className="h-6 w-6 text-brand-600" strokeWidth={1.75} />
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-ink-200 bg-white px-8 py-14 text-center shadow-card">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 ring-1 ring-brand-100">
+            <Building2 className="h-5 w-5 text-brand-600" strokeWidth={1.75} />
           </div>
-          <h3 className="mt-5 text-lg font-semibold text-ink-900">
+          <h3 className="mt-4 font-display text-lg font-semibold text-ink-900">
             No communities yet
           </h3>
-          <p className="mt-2 max-w-sm text-sm leading-relaxed text-ink-500">
-            Create a community for each HOA you manage. Then upload
-            drive-throughs and keep properties organized by community.
+          <p className="mt-1.5 max-w-sm text-sm text-ink-500">
+            Create one community per HOA, then upload drive-throughs there.
           </p>
           <Button
             className="mt-6"

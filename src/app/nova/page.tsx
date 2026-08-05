@@ -48,15 +48,17 @@ export default async function NovaPage({ searchParams }: PageProps) {
     const next = qs ? `/nova?${qs}` : "/nova";
     return (
       <main className="flex min-h-[100dvh] items-center justify-center bg-canvas px-5">
-        <Card className="max-w-md text-center">
-          <Logo size="md" href={undefined} className="justify-center" />
+        <Card className="max-w-md text-center" padding="lg">
+          <div className="flex justify-center">
+            <Logo size="md" href={undefined} />
+          </div>
           <h1 className="mt-5 font-display text-xl font-semibold text-ink-900">
             {copy.title}
           </h1>
-          <p className="mt-2 text-sm leading-relaxed text-ink-600">{copy.body}</p>
+          <p className="mt-2 text-sm text-ink-500">{copy.body}</p>
           <Link
             href={`/login?next=${encodeURIComponent(next)}`}
-            className="mt-5 inline-flex text-sm font-medium text-brand-700 hover:text-brand-800"
+            className="mt-5 inline-flex text-sm font-semibold text-brand-700 hover:text-brand-800"
           >
             Sign in
           </Link>

@@ -44,7 +44,7 @@ export function NotificationsCard() {
         <div className="flex-1">
           <h3 className="font-semibold text-ink-900">Notifications</h3>
           <p className="text-sm text-ink-500">
-            Email alerts when new violations are flagged
+            Email when new violations are flagged
           </p>
         </div>
         <label className="flex items-center gap-2 text-sm">

@@ -33,7 +33,7 @@ export function RideByWordmark({
       role="img"
       aria-label="RideBy"
       className={clsx(
-        "inline-flex items-center font-display font-semibold tracking-tight",
+        "inline-flex items-center font-display font-semibold tracking-[-0.02em]",
         textColor,
         className
       )}

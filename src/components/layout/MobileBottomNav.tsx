@@ -108,7 +108,7 @@ export function MobileBottomNav() {
                   href={tab.href}
                   className="relative -mt-5 flex flex-1 flex-col items-center"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-900 text-white shadow-card-hover">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-600 text-white shadow-cta">
                     <Icon className="h-5 w-5" strokeWidth={2.25} />
                   </div>
                   <span className="mt-1 text-[10px] font-medium text-ink-600">

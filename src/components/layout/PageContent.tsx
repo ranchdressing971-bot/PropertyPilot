@@ -10,7 +10,7 @@ export function PageContent({ children, className }: PageContentProps) {
   return (
     <div
       className={clsx(
-        "mx-auto w-full max-w-6xl space-y-5 px-5 py-6 sm:space-y-6 sm:px-8 sm:py-8",
+        "mx-auto w-full max-w-6xl space-y-4 px-5 py-5 sm:space-y-5 sm:px-8 sm:py-7",
         className
       )}
     >

@@ -14,9 +14,9 @@ import { SettingsRoleGate } from "@/components/settings/SettingsRoleGate";
 export default function SettingsPage() {
   return (
     <DashboardLayout>
-      <Header title="Settings" subtitle="Profile, billing, and preferences" />
+      <Header title="Settings" subtitle="Profile, billing, preferences" />
       <PageContent className="max-w-2xl">
-        <div className="space-y-5">
+        <div className="space-y-4">
           <ProfileCard />
           <TeamCard />
           <SettingsRoleGate adminOnly>
