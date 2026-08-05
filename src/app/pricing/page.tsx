@@ -19,20 +19,25 @@ export default function PricingPage() {
         <h1 className="font-display text-4xl font-semibold tracking-tight text-ink-900">
           Pricing for every HOA you run
         </h1>
-        <p className="mx-auto mt-4 max-w-xl text-ink-500">
-          Live AI starts with{" "}
-          {FREE_TRIAL_INSPECTIONS === 1
-            ? "1 free inspection per account"
-            : `${FREE_TRIAL_INSPECTIONS} free inspections per account`}{" "}
-          and 1 community on trial. Subscribe from{" "}
-          <span className="font-medium text-ink-700">
-            ${FLAT_TIER_PRICE}/mo for 1-{FLAT_TIER_MAX_COMMUNITIES} communities
-          </span>
-          . Need more? Price follows max(${FLAT_TIER_PRICE}, round($
-          {PRICING_BASE} × c<sup>{PRICING_EXPONENT}</sup>)). Each community keeps
-          that HOA&apos;s inspections and properties organized under one org
-          account. Add seats later in Settings.
-        </p>
+        <ul className="mx-auto mt-4 max-w-md list-disc space-y-1 pl-5 text-left text-ink-500">
+          <li>
+            {FREE_TRIAL_INSPECTIONS === 1
+              ? "1 free inspection"
+              : `${FREE_TRIAL_INSPECTIONS} free inspections`}{" "}
+            + 1 community on trial
+          </li>
+          <li>
+            From{" "}
+            <span className="font-medium text-ink-700">
+              ${FLAT_TIER_PRICE}/mo for 1-{FLAT_TIER_MAX_COMMUNITIES} communities
+            </span>
+          </li>
+          <li>
+            Above that: max(${FLAT_TIER_PRICE}, round(${PRICING_BASE} × c
+            <sup>{PRICING_EXPONENT}</sup>))
+          </li>
+          <li>Add communities later in Settings</li>
+        </ul>
 
         <div className="mt-14">
           <PricingCalculator />

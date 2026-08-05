@@ -69,17 +69,18 @@ export function PricingCalculator() {
         <h2 className="mt-4 font-display text-2xl font-semibold text-ink-900">
           Pay for the communities you manage
         </h2>
-        <p className="mt-2 text-sm text-ink-500">
-          Each community is one HOA workspace: inspections and properties stay
-          organized there. Organizations often run several HOAs under one
-          account.{" "}
-          <span className="font-medium text-ink-700">
-            ${FLAT_TIER_PRICE}/mo for 1-{FLAT_TIER_MAX_COMMUNITIES} communities
-          </span>
-          . Above that: max(${FLAT_TIER_PRICE}, round(${PRICING_BASE} × c
-          <sup>{PRICING_EXPONENT}</sup>)) so volume still discounts vs a flat
-          jump every time.
-        </p>
+        <ul className="mt-2 list-disc space-y-0.5 pl-4 text-sm text-ink-500">
+          <li>
+            <span className="font-medium text-ink-700">
+              ${FLAT_TIER_PRICE}/mo for 1-{FLAT_TIER_MAX_COMMUNITIES} communities
+            </span>
+          </li>
+          <li>
+            Above that: max(${FLAT_TIER_PRICE}, round(${PRICING_BASE} × c
+            <sup>{PRICING_EXPONENT}</sup>))
+          </li>
+          <li>Add more later from Settings</li>
+        </ul>
 
         <div className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-ink-100 bg-ink-50/70 px-4 py-4">
           <div>
@@ -188,9 +189,8 @@ export function PricingCalculator() {
             Example pricing
           </p>
           <p className="mt-1 text-xs text-ink-500">
-            ${FLAT_TIER_PRICE} flat through {FLAT_TIER_MAX_COMMUNITIES}{" "}
-            communities; then max(${FLAT_TIER_PRICE}, round(${PRICING_BASE} × c
-            <sup>{PRICING_EXPONENT}</sup>))
+            ${FLAT_TIER_PRICE} through {FLAT_TIER_MAX_COMMUNITIES}; then volume
+            curve
           </p>
         </div>
         <table className="w-full text-left text-sm">

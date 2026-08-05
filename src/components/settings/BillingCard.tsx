@@ -16,9 +16,6 @@ import {
   FLAT_TIER_MAX_COMMUNITIES,
   FLAT_TIER_PRICE,
   MAX_COMMUNITIES,
-  MIN_COMMUNITIES,
-  PRICING_BASE,
-  PRICING_EXPONENT,
 } from "@/lib/stripe-client";
 
 interface SubStatus {
@@ -201,13 +198,13 @@ export function BillingCard() {
           <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
             Add communities
           </p>
-          <p className="mt-1 text-sm text-ink-600">
-            Organizations keep each HOA in its own workspace. $
-            {FLAT_TIER_PRICE}/mo covers up to {FLAT_TIER_MAX_COMMUNITIES}; above
-            that max(${FLAT_TIER_PRICE}, round(${PRICING_BASE} × c
-            <sup>{PRICING_EXPONENT}</sup>)). Stripe prorates the difference for
-            the rest of this billing period.
-          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-sm text-ink-600">
+            <li>
+              ${FLAT_TIER_PRICE}/mo for 1-{FLAT_TIER_MAX_COMMUNITIES} communities
+            </li>
+            <li>Above that: volume pricing (see Pricing)</li>
+            <li>Prorated for the rest of this period</li>
+          </ul>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <button
@@ -301,14 +298,7 @@ export function BillingCard() {
       </div>
       {!subscribed && (
         <p className="mt-2 text-xs text-ink-400">
-          Trial stays at 1 community until you subscribe. Initial plans:{" "}
-          {fromPrice} for 1-{FLAT_TIER_MAX_COMMUNITIES} communities.
-        </p>
-      )}
-      {subscribed && (
-        <p className="mt-2 text-xs text-ink-400">
-          Card changes and cancel: Manage billing. Seat increases: use Add
-          communities above. Min {MIN_COMMUNITIES}.
+          From {fromPrice} for 1-{FLAT_TIER_MAX_COMMUNITIES} communities
         </p>
       )}
     </Card>
