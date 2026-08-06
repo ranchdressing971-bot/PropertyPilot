@@ -94,30 +94,35 @@ export function TradeFlowProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DemoState>(() => loadDemoState());
 
   useEffect(() => {
-    const cookie = document.cookie
-      .split("; ")
-      .find((c) => c.startsWith(`${DEMO_MODE_COOKIE}=`))
-      ?.split("=")[1] as Mode | undefined;
-    setMode(cookie === "live" ? "live" : "demo");
+    try {
+      const cookie = document.cookie
+        .split("; ")
+        .find((c) => c.startsWith(`${DEMO_MODE_COOKIE}=`))
+        ?.split("=")[1] as Mode | undefined;
+      setMode(cookie === "live" ? "live" : "demo");
 
-    // Sync overdue invoice statuses from due dates so the shop board stays honest.
-    const loaded = loadDemoState();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    let changed = false;
-    const invoices = loaded.invoices.map((inv) => {
-      if (["paid", "cancelled", "draft"].includes(inv.status)) return inv;
-      const due = new Date(`${inv.due_date}T12:00:00`);
-      if (due < today && inv.status !== "overdue") {
-        changed = true;
-        return { ...inv, status: "overdue" as const, updated_at: new Date().toISOString() };
-      }
-      return inv;
-    });
-    const next = changed ? { ...loaded, invoices } : loaded;
-    if (changed) saveDemoState(next);
-    setState(next);
-    setReady(true);
+      const loaded = loadDemoState();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      let changed = false;
+      const invoices = (loaded.invoices ?? []).map((inv) => {
+        if (["paid", "cancelled", "draft"].includes(inv.status)) return inv;
+        const due = new Date(`${inv.due_date}T12:00:00`);
+        if (!Number.isNaN(due.getTime()) && due < today && inv.status !== "overdue") {
+          changed = true;
+          return { ...inv, status: "overdue" as const, updated_at: new Date().toISOString() };
+        }
+        return inv;
+      });
+      const next = changed ? { ...loaded, invoices } : loaded;
+      if (changed) saveDemoState(next);
+      setState(next);
+    } catch (err) {
+      console.error("TradeFlow init failed", err);
+      setState(loadDemoState());
+    } finally {
+      setReady(true);
+    }
 
     const onUpdate = () => setState(loadDemoState());
     window.addEventListener("tradeflow-demo-updated", onUpdate);

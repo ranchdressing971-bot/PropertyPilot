@@ -24,142 +24,137 @@ export default function DashboardPage() {
     return (
       <div className="space-y-4">
         <Skeleton className="h-10 w-72" />
-        <Skeleton className="h-40 w-full" />
+        <div className="grid grid-cols-2 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-2xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   const currency = business.currency;
+  const metrics = [
+    { label: "Revenue this month", value: formatMoney(stats.revenueThisMonth, currency), span: true },
+    { label: "Est. profit", value: formatMoney(stats.estimatedProfitThisMonth, currency) },
+    { label: "Outstanding", value: formatMoney(stats.outstandingTotal, currency) },
+    { label: "Jobs completed", value: String(stats.jobsCompletedThisMonth) },
+    { label: "Jobs today", value: String(stats.jobsScheduledToday) },
+    { label: "Overdue invoices", value: String(stats.overdueInvoices) },
+  ];
 
   return (
-    <div className="animate-fade-in space-y-8">
-      <header className="border-b border-ink-200 pb-6">
-        <p className="section-label">Today</p>
-        <h1 className="page-title mt-2 max-w-xl text-balance">
+    <div className="animate-fade-in space-y-6">
+      <header>
+        <p className="section-label">Dashboard</p>
+        <h1 className="page-title mt-1.5 max-w-lg text-balance">
           Know what got done, who owes you, and what each job made.
         </h1>
       </header>
 
-      {/* Money first — not a grid of icon widgets */}
-      <section className="grid gap-8 border-b border-ink-200 pb-8 md:grid-cols-[1.2fr_1fr]">
-        <div>
-          <p className="section-label">Revenue this month</p>
-          <p className="stat-value mt-2 text-4xl sm:text-5xl">
-            {formatMoney(stats.revenueThisMonth, currency)}
-          </p>
-          <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4">
-            <div>
-              <p className="section-label">Est. profit</p>
-              <p className="mt-1 font-mono text-xl font-medium text-ink-950">
-                {formatMoney(stats.estimatedProfitThisMonth, currency)}
-              </p>
-            </div>
-            <div>
-              <p className="section-label">Outstanding</p>
-              <p className="mt-1 font-mono text-xl font-medium text-ink-950">
-                {formatMoney(stats.outstandingTotal, currency)}
-              </p>
-            </div>
-            <div>
-              <p className="section-label">Jobs done</p>
-              <p className="mt-1 font-mono text-xl font-medium text-ink-950">
-                {stats.jobsCompletedThisMonth}
-              </p>
-            </div>
-            <div>
-              <p className="section-label">On the board today</p>
-              <p className="mt-1 font-mono text-xl font-medium text-ink-950">
-                {stats.jobsScheduledToday}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <div className="flex items-baseline justify-between gap-3">
-            <p className="section-label">Needs attention</p>
-            {stats.overdueInvoices > 0 ? (
-              <span className="font-mono text-sm text-red-700">
-                {stats.overdueInvoices} overdue
-              </span>
-            ) : null}
-          </div>
-          {!stats.attention.length ? (
-            <p className="mt-4 text-sm text-ink-500">You&apos;re all caught up.</p>
-          ) : (
-            <ul className="mt-2 divide-y divide-ink-100 border-y border-ink-100">
-              {stats.attention.map((item) => (
-                <li key={item.id}>
-                  <Link
-                    href={item.href}
-                    className="flex items-start justify-between gap-3 py-3.5 transition hover:bg-ink-50/70"
-                  >
-                    <div>
-                      <Badge status={item.tone} />
-                      <p className="mt-1.5 text-sm font-semibold text-ink-950">{item.title}</p>
-                      <p className="mt-0.5 text-xs text-ink-500">{item.description}</p>
-                    </div>
-                    <span className="mt-1 text-ink-300">→</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      <section className="grid grid-cols-2 gap-3">
+        {metrics.map((m) => (
+          <Card
+            key={m.label}
+            className={m.span ? "col-span-2" : undefined}
+            padding="sm"
+          >
+            <p className="text-xs font-medium text-ink-500">{m.label}</p>
+            <p
+              className={`mt-2 font-display font-semibold tracking-tight text-ink-950 ${
+                m.span ? "text-3xl sm:text-4xl" : "text-2xl"
+              }`}
+            >
+              {m.value}
+            </p>
+          </Card>
+        ))}
       </section>
 
-      <section className="grid gap-8 lg:grid-cols-5">
-        <Card className="lg:col-span-3" padding="md">
-          <p className="section-label">Revenue vs expenses</p>
-          <p className="mt-1 text-sm text-ink-500">Last 6 months</p>
+      <Card>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="font-display text-base font-semibold text-ink-950">Needs attention</h2>
+          {!stats.attention.length ? (
+            <span className="text-xs font-medium text-brand-700">All clear</span>
+          ) : null}
+        </div>
+        {!stats.attention.length ? (
+          <p className="text-sm text-ink-500">You&apos;re all caught up.</p>
+        ) : (
+          <ul className="space-y-2">
+            {stats.attention.map((item) => (
+              <li key={item.id}>
+                <Link
+                  href={item.href}
+                  className="flex items-start justify-between gap-3 rounded-xl border border-ink-100 bg-ink-50/50 px-3.5 py-3 transition hover:border-brand-200 hover:bg-brand-50/40"
+                >
+                  <div>
+                    <Badge status={item.tone} />
+                    <p className="mt-1.5 text-sm font-semibold text-ink-950">{item.title}</p>
+                    <p className="mt-0.5 text-xs text-ink-500">{item.description}</p>
+                  </div>
+                  <span className="mt-1 text-sm text-ink-300">→</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-5">
+        <Card className="lg:col-span-3">
+          <h2 className="font-display text-base font-semibold text-ink-950">
+            Revenue vs expenses
+          </h2>
+          <p className="mt-0.5 text-sm text-ink-500">Last 6 months</p>
           <div className="mt-4 h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.monthlySeries} barGap={2}>
-                <CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#d5dbd6" />
+              <BarChart data={stats.monthlySeries} barGap={3}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e6eae6" />
                 <XAxis
                   dataKey="month"
-                  tick={{ fill: "#5c685f", fontSize: 11 }}
+                  tick={{ fill: "#5c685f", fontSize: 12 }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={{ fill: "#5c685f", fontSize: 11 }}
+                  tick={{ fill: "#5c685f", fontSize: 12 }}
                   axisLine={false}
                   tickLine={false}
-                  width={40}
+                  width={42}
                   tickFormatter={(v) => `$${Number(v) / 1000}k`}
                 />
                 <Tooltip
                   formatter={(value) => formatMoney(Number(value), currency)}
                   contentStyle={{
-                    borderRadius: 8,
-                    borderColor: "#cfd6d0",
+                    borderRadius: 12,
+                    borderColor: "#d5dbd6",
                     fontSize: 12,
                   }}
                 />
-                <Bar dataKey="revenue" name="Revenue" fill="#1f5b51" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="expenses" name="Expenses" fill="#a8b3aa" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="revenue" name="Revenue" fill="#247264" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="expenses" name="Expenses" fill="#cfd6d0" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </Card>
 
-        <div className="lg:col-span-2">
-          <div className="mb-2 flex items-baseline justify-between">
-            <p className="section-label">Upcoming jobs</p>
+        <Card className="lg:col-span-2">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-display text-base font-semibold">Upcoming jobs</h2>
             <Link href="/dashboard/jobs" className="text-xs font-semibold text-brand-700">
-              All jobs
+              View all
             </Link>
           </div>
           {!stats.upcomingJobs.length ? (
             <p className="text-sm text-ink-500">No upcoming jobs.</p>
           ) : (
-            <ul className="divide-y divide-ink-100 border-y border-ink-100">
+            <ul className="space-y-2">
               {stats.upcomingJobs.map((job) => (
                 <li key={job.id}>
                   <Link
                     href={`/dashboard/jobs/${job.id}`}
-                    className="block py-3.5 transition hover:bg-ink-50/70"
+                    className="block rounded-xl border border-ink-100 px-3 py-2.5 transition hover:border-brand-200"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -170,10 +165,10 @@ export default function DashboardPage() {
                       </div>
                       <Badge status={job.status} />
                     </div>
-                    <p className="mt-1.5 font-mono text-[11px] text-ink-600">
+                    <p className="mt-1.5 text-xs text-ink-600">
                       {formatDateTime(job.scheduled_date, job.start_time)}
                     </p>
-                    <p className="mt-0.5 truncate text-[11px] text-ink-400">
+                    <p className="mt-0.5 truncate text-xs text-ink-400">
                       {job.assigned_technician_name ?? "Unassigned"} ·{" "}
                       {formatAddress({
                         line1: job.service_address_line1,
@@ -186,16 +181,16 @@ export default function DashboardPage() {
               ))}
             </ul>
           )}
-        </div>
-      </section>
+        </Card>
+      </div>
 
-      <section>
-        <p className="section-label">Recent activity</p>
-        <ul className="mt-2 divide-y divide-ink-100 border-y border-ink-100">
+      <Card>
+        <h2 className="font-display text-base font-semibold">Recent activity</h2>
+        <ul className="mt-3 divide-y divide-ink-100">
           {stats.recentActivity.map((item) => (
             <li
               key={item.id}
-              className="flex items-start justify-between gap-3 py-3"
+              className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0"
             >
               <div>
                 <p className="text-sm font-medium text-ink-950">{item.title}</p>
@@ -203,13 +198,13 @@ export default function DashboardPage() {
                   <p className="text-xs text-ink-500">{item.description}</p>
                 ) : null}
               </div>
-              <p className="shrink-0 font-mono text-[11px] text-ink-400">
+              <p className="shrink-0 text-xs text-ink-400">
                 {new Date(item.created_at).toLocaleDateString()}
               </p>
             </li>
           ))}
         </ul>
-      </section>
+      </Card>
     </div>
   );
 }

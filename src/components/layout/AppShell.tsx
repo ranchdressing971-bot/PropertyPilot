@@ -51,7 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-dvh lg:flex">
-      <aside className="hidden w-[15.5rem] shrink-0 flex-col border-r border-ink-200 bg-[#f6f7f5] px-3 py-5 lg:flex">
+      <aside className="hidden w-[15.5rem] shrink-0 flex-col border-r border-ink-200 bg-white px-3 py-5 lg:flex">
         <Link href="/dashboard" className="mb-8 px-2">
           <div className="font-display text-base font-semibold tracking-tight text-ink-950">
             TradeFlow
@@ -68,10 +68,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={clsx(
-                  "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition",
+                  "flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium transition",
                   active
-                    ? "bg-ink-950 text-white"
-                    : "text-ink-600 hover:bg-ink-100 hover:text-ink-950"
+                    ? "bg-brand-50 text-brand-800"
+                    : "text-ink-600 hover:bg-ink-50 hover:text-ink-950"
                 )}
               >
                 <Icon className="h-4 w-4 opacity-80" />
@@ -98,7 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 border-b border-ink-200 bg-[#f6f7f5]/90 px-4 py-3 backdrop-blur-sm sm:px-6">
+        <header className="sticky top-0 z-40 border-b border-ink-200/80 bg-white/90 px-4 py-3 backdrop-blur-sm sm:px-6">
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1 lg:hidden">
               <div className="font-display text-sm font-semibold text-ink-950">TradeFlow</div>
@@ -193,7 +193,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-ink-200 bg-[#f6f7f5]/95 shadow-nav backdrop-blur-sm lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-ink-200 bg-white/95 shadow-nav backdrop-blur-sm lg:hidden">
         <div className="flex items-stretch justify-around px-1 pb-[env(safe-area-inset-bottom)] pt-1">
           {primaryMobile.map((item) => {
             const Icon = item.icon;
@@ -204,7 +204,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 href={item.href}
                 className={clsx(
                   "flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[11px] font-semibold",
-                  active ? "text-ink-950" : "text-ink-400"
+                  active ? "text-brand-800" : "text-ink-400"
                 )}
               >
                 <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} />
@@ -226,11 +226,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <button
         type="button"
         onClick={() => router.push("/dashboard/jobs/new")}
-        className="fixed z-40 flex h-12 w-12 items-center justify-center rounded-lg bg-ink-950 text-white lg:hidden"
-        style={{ bottom: "calc(4.75rem + env(safe-area-inset-bottom))", right: "1rem" }}
+        className="fixed z-40 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-700 text-white shadow-sm lg:hidden"
+        style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))", right: "1rem" }}
         aria-label="New job"
       >
-        <Plus className="h-5 w-5" />
+        <Plus className="h-6 w-6" />
       </button>
 
       {mobileMore ? (
