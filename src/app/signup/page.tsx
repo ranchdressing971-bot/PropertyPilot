@@ -25,7 +25,7 @@ function SignupForm() {
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [hoaName, setHoaName] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,8 +58,8 @@ function SignupForm() {
       setError("Please agree to the Terms and Privacy Policy.");
       return;
     }
-    if (!joiningViaInvite && !hoaName.trim()) {
-      setError("Enter your HOA / community name.");
+    if (!joiningViaInvite && !companyName.trim()) {
+      setError("Enter your company name.");
       return;
     }
     if (!supabaseReady) {
@@ -72,7 +72,7 @@ function SignupForm() {
 
     try {
       const supabase = createClient();
-      const trimmedHoa = hoaName.trim();
+      const trimmedCompany = companyName.trim();
       const afterAuth = joiningViaInvite
         ? nextPath!
         : "/dashboard/profile/setup";
@@ -83,7 +83,7 @@ function SignupForm() {
           emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(afterAuth)}`,
           data: {
             terms_accepted_at: new Date().toISOString(),
-            ...(trimmedHoa ? { hoa_name: trimmedHoa } : {}),
+            ...(trimmedCompany ? { hoa_name: trimmedCompany } : {}),
             ...(fromFreeOffer ? { offer: "free-run" } : {}),
           },
         },
@@ -92,9 +92,9 @@ function SignupForm() {
       if (authError) throw authError;
 
       // Ensure metadata is set even if signUp options were ignored
-      if (authData.session && trimmedHoa) {
+      if (authData.session && trimmedCompany) {
         await supabase.auth.updateUser({
-          data: { hoa_name: trimmedHoa },
+          data: { hoa_name: trimmedCompany },
         });
       }
 
@@ -102,25 +102,18 @@ function SignupForm() {
         await supabase.from("profiles").upsert({
           id: authData.user.id,
           email: authData.user.email,
-          ...(trimmedHoa ? { hoa_name: trimmedHoa } : {}),
+          ...(trimmedCompany ? { hoa_name: trimmedCompany } : {}),
           terms_accepted_at: new Date().toISOString(),
         });
       }
 
-      if (authData.session && trimmedHoa && !joiningViaInvite) {
-        const claimRes = await fetch("/api/community/claim-trial", {
+      if (authData.session && trimmedCompany && !joiningViaInvite) {
+        await fetch("/api/company", {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ hoaName: trimmedHoa }),
+          body: JSON.stringify({ companyName: trimmedCompany }),
         });
-        if (claimRes.status === 409) {
-          const data = await claimRes.json();
-          setError(
-            data.error ??
-              "This community already used its free trial. You can still create an account and subscribe."
-          );
-        }
       }
 
       try {
@@ -193,22 +186,23 @@ function SignupForm() {
           </div>
           {joiningViaInvite ? (
             <p className="rounded-xl border border-ink-100 bg-ink-50/80 px-3 py-2 text-xs text-ink-600">
-              You’re joining a shared HOA via invite; community name comes from the company.
+              You&apos;re joining a shared company via invite. Add communities
+              later from the Communities page.
             </p>
           ) : (
             <div>
               <label className="text-sm font-medium text-ink-700">
-                HOA / community name
+                Company name
               </label>
               <Input
                 type="text"
                 required
-                value={hoaName}
-                onChange={(e) => setHoaName(e.target.value)}
-                placeholder="Oak Ridge Village HOA"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Summit Community Management"
               />
               <p className="mt-1 text-xs text-ink-400">
-                One free inspection per account. Use your real HOA name.
+                Your management company or organization. Add communities later.
               </p>
             </div>
           )}

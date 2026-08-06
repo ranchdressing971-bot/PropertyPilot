@@ -8,7 +8,7 @@ export interface UserProfile {
 
 const DEMO_PROFILE: UserProfile = {
   fullName: "Sarah Mitchell",
-  hoaName: "Willow Creek Estates HOA",
+  hoaName: "Willow Creek Management",
   email: "manager@hoa.com",
 };
 
@@ -32,10 +32,11 @@ export function getDemoProfile(): UserProfile {
   return { ...DEMO_PROFILE };
 }
 
+/** Display label for company / org (profiles.hoa_name stores company name). */
 export function displayHoaName(profile: UserProfile | null, isDemo: boolean): string {
   if (isDemo) return "Willow Creek Estates";
   if (profile?.hoaName) return profile.hoaName.replace(/\s*HOA\s*$/i, "").trim();
-  return "Your community";
+  return "Your company";
 }
 
 export function displayManagerName(profile: UserProfile | null, isDemo: boolean): string {

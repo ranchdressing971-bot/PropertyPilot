@@ -11,7 +11,7 @@ import { Building2, User, Loader2, Pencil } from "lucide-react";
 export function ProfileCard() {
   const { isDemo } = useAppMode();
   const [fullName, setFullName] = useState("");
-  const [hoaName, setHoaName] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -21,7 +21,7 @@ export function ProfileCard() {
     if (isDemo) {
       const demo = getDemoProfile();
       setFullName(demo.fullName);
-      setHoaName(demo.hoaName);
+      setCompanyName(demo.hoaName);
       setLoading(false);
       return;
     }
@@ -35,7 +35,7 @@ export function ProfileCard() {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       const profile = profileFromUser(user);
       let name = profile?.fullName ?? "";
-      let hoa = profile?.hoaName ?? "";
+      let company = profile?.hoaName ?? "";
 
       if (user) {
         const { data: row } = await supabase
@@ -43,12 +43,12 @@ export function ProfileCard() {
           .select("hoa_name, full_name")
           .eq("id", user.id)
           .maybeSingle();
-        if (row?.hoa_name?.trim()) hoa = row.hoa_name.trim();
+        if (row?.hoa_name?.trim()) company = row.hoa_name.trim();
         if (row?.full_name?.trim()) name = row.full_name.trim();
       }
 
       setFullName(name);
-      setHoaName(hoa);
+      setCompanyName(company);
       setLoading(false);
     });
   }, [isDemo]);
@@ -68,13 +68,13 @@ export function ProfileCard() {
       if (userError || !user) throw new Error("Not signed in");
 
       const trimmedName = fullName.trim();
-      const trimmedHoa = hoaName.trim();
-      if (!trimmedName || !trimmedHoa) {
+      const trimmedCompany = companyName.trim();
+      if (!trimmedName || !trimmedCompany) {
         throw new Error("Both fields are required");
       }
 
       const { error: updateError } = await supabase.auth.updateUser({
-        data: { full_name: trimmedName, hoa_name: trimmedHoa },
+        data: { full_name: trimmedName, hoa_name: trimmedCompany },
       });
       if (updateError) throw updateError;
 
@@ -82,28 +82,26 @@ export function ProfileCard() {
         id: user.id,
         email: user.email,
         full_name: trimmedName,
-        hoa_name: trimmedHoa,
+        hoa_name: trimmedCompany,
       });
       if (profileError) {
         console.warn("profiles upsert (client):", profileError.message);
       }
 
-      // Server claim writes hoa_name via service role — this is what unlocks scans
-      const claimRes = await fetch("/api/community/claim-trial", {
+      const companyRes = await fetch("/api/company", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hoaName: trimmedHoa }),
+        body: JSON.stringify({ companyName: trimmedCompany }),
       });
-      if (!claimRes.ok) {
-        const claimData = await claimRes.json().catch(() => ({}));
+      if (!companyRes.ok) {
+        const data = await companyRes.json().catch(() => ({}));
         throw new Error(
-          claimData.error ??
-            "Could not save community name for inspections. Try again."
+          data.error ?? "Could not save company name. Try again."
         );
       }
 
-      setHoaName(trimmedHoa);
+      setCompanyName(trimmedCompany);
       setFullName(trimmedName);
       setEditing(false);
     } catch (err) {
@@ -127,16 +125,17 @@ export function ProfileCard() {
         <div className="flex items-center gap-3">
           <Building2 className="h-5 w-5 text-ink-400" />
           <div className="flex-1">
-            <h3 className="font-semibold text-ink-900">Organization</h3>
+            <h3 className="font-semibold text-ink-900">Company name</h3>
             {editing && !isDemo ? (
               <input
-                value={hoaName}
-                onChange={(e) => setHoaName(e.target.value)}
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
                 className="mt-1.5 h-10 w-full rounded-lg border border-ink-200 px-3 text-sm"
+                placeholder="Summit Community Management"
               />
             ) : (
               <p className="text-sm text-ink-500">
-                {hoaName || "Not set: complete your profile"}
+                {companyName || "Not set: complete your profile"}
               </p>
             )}
           </div>

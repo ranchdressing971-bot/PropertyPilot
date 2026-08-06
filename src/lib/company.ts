@@ -1,11 +1,6 @@
 import { randomBytes } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import {
-  isValidCommunityName,
-  normalizeCommunityKey,
-} from "@/lib/community-key";
-
 export type CompanyRole = "owner" | "admin" | "inspector";
 
 export interface CompanyContext {
@@ -39,8 +34,8 @@ function newInviteToken(): string {
 
 /**
  * Resolve the signed-in user's active company + role.
- * Returns null if unauthenticated. Creates a company when the user has an
- * HOA name but no workspace yet (idempotent).
+ * Returns null if unauthenticated. Creates a company when the user has a
+ * company name (profiles.hoa_name) but no workspace yet (idempotent).
  */
 export async function getActiveCompanyContext(): Promise<CompanyContext | null> {
   const supabase = await createClient();
@@ -81,11 +76,11 @@ export async function getActiveCompanyContext(): Promise<CompanyContext | null> 
   }
 
   if (!companyId) {
-    const hoa =
+    const companyName =
       (profile?.hoa_name as string | undefined)?.trim() ||
       String(user.user_metadata?.hoa_name ?? "").trim();
-    if (hoa) {
-      const ensured = await ensureCompanyForUser(user.id, hoa);
+    if (companyName) {
+      const ensured = await ensureCompanyForUser(user.id, companyName);
       if (ensured) companyId = ensured.companyId;
     }
   }
@@ -118,21 +113,18 @@ export async function getActiveCompanyContext(): Promise<CompanyContext | null> 
 
 /**
  * Create a company + owner membership for a user (or attach to existing).
- * Used on profile setup / trial claim / backfill fallback.
+ * Used on signup / profile setup / backfill. Does not create a community row;
+ * communities are added later from the Communities page (or inspection assign).
  */
 export async function ensureCompanyForUser(
   userId: string,
-  hoaName: string
+  companyName: string
 ): Promise<{ companyId: string; created: boolean } | null> {
   const admin = createAdminClient();
   if (!admin) return null;
 
-  const trimmed = hoaName.trim();
+  const trimmed = companyName.trim();
   if (!trimmed) return null;
-
-  const communityKey = isValidCommunityName(trimmed)
-    ? normalizeCommunityKey(trimmed)
-    : null;
 
   const { data: existingMember } = await admin
     .from("company_members")
@@ -146,13 +138,16 @@ export async function ensureCompanyForUser(
   if (existingMember?.company_id) {
     await admin
       .from("profiles")
-      .upsert({ id: userId, active_company_id: existingMember.company_id });
+      .upsert({
+        id: userId,
+        active_company_id: existingMember.company_id,
+        hoa_name: trimmed,
+      });
     await admin
       .from("companies")
       .update({
         name: trimmed,
         hoa_name: trimmed,
-        ...(communityKey ? { community_key: communityKey } : {}),
       })
       .eq("id", existingMember.company_id);
     return { companyId: existingMember.company_id, created: false };
@@ -173,7 +168,6 @@ export async function ensureCompanyForUser(
     .insert({
       name: trimmed,
       hoa_name: trimmed,
-      community_key: communityKey,
       created_by: userId,
       stripe_customer_id: profile?.stripe_customer_id ?? null,
       subscription_status: profile?.subscription_status ?? "none",
@@ -202,7 +196,6 @@ export async function ensureCompanyForUser(
     id: userId,
     active_company_id: company.id,
     hoa_name: trimmed,
-    ...(communityKey ? { community_key: communityKey } : {}),
   });
 
   // Attach any orphaned personal rows

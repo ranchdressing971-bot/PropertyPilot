@@ -8,7 +8,6 @@ import { Header } from "@/components/layout/Header";
 import { PageContent } from "@/components/layout/PageContent";
 import { Card } from "@/components/ui/Card";
 import { useAppMode } from "@/components/providers/AppModeProvider";
-import { useUserProfile } from "@/hooks/useUserProfile";
 import { useCommunities } from "@/hooks/useCommunities";
 import { loadCcrRules } from "@/lib/ccr-rules";
 import { loadCollectionDays } from "@/lib/trash-collection";
@@ -71,7 +70,6 @@ function UploadPageInner() {
   const searchParams = useSearchParams();
   const preferredCommunityId = searchParams.get("community");
   const { isDemo, ready } = useAppMode();
-  const { profile } = useUserProfile();
   const { communities } = useCommunities(true);
   const [briefingDone, setBriefingDone] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -97,11 +95,8 @@ function UploadPageInner() {
     [communities, preferredCommunityId]
   );
   const communityName = useMemo(
-    () =>
-      preferredCommunity?.name?.trim() ||
-      profile?.hoaName?.trim() ||
-      "",
-    [preferredCommunity, profile?.hoaName]
+    () => preferredCommunity?.name?.trim() || "",
+    [preferredCommunity]
   );
 
   const startProcessing = useCallback(
@@ -194,9 +189,12 @@ function UploadPageInner() {
               `${data.error} Visit Pricing to continue.`
             );
           }
-          if (data.code === "COMMUNITY_REQUIRED") {
+          if (
+            data.code === "COMMUNITY_REQUIRED" ||
+            data.code === "COMPANY_REQUIRED"
+          ) {
             throw new Error(
-              `${data.error ?? "Add a community name in Settings first."} Open Settings → Profile and enter something like “Test HOA”.`
+              `${data.error ?? "Add your company name in Settings first."} Open Settings → Profile and enter your company name.`
             );
           }
           const detail =

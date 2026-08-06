@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
   createCommunity,
-  ensureDefaultCommunity,
   getCommunityLimitStatus,
   listCommunitiesForUser,
 } from "@/lib/communities";
@@ -21,7 +20,6 @@ export async function GET() {
     return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   }
 
-  await ensureDefaultCommunity(user.id);
   const [communities, limit] = await Promise.all([
     listCommunitiesForUser(user.id),
     getCommunityLimitStatus(user.id),

@@ -283,34 +283,15 @@ export async function claimCommunityTrial(
 
   const key = normalizeCommunityKey(trimmed);
 
-  // Sync profile first (retry without community_key if column isn't migrated)
+  // Sync community_key only — profiles.hoa_name stores company name, not community.
   {
     const { error: upsertError } = await admin.from("profiles").upsert({
       id: userId,
-      hoa_name: trimmed,
       community_key: key,
     });
     if (upsertError) {
       console.error("claimCommunityTrial profile upsert:", upsertError.message);
-      const { error: retryError } = await admin.from("profiles").upsert({
-        id: userId,
-        hoa_name: trimmed,
-      });
-      if (retryError) {
-        console.error(
-          "claimCommunityTrial profile hoa_name upsert failed:",
-          retryError.message
-        );
-      }
     }
-  }
-
-  // Company workspace for shared roster / inspectors
-  try {
-    const { ensureCompanyForUser } = await import("@/lib/company");
-    await ensureCompanyForUser(userId, trimmed);
-  } catch (err) {
-    console.error("claimCommunityTrial ensureCompany:", err);
   }
 
   // Dev/demo community names skip the global first-account lock
@@ -449,50 +430,14 @@ export async function canRunLiveInspection(userId: string | null): Promise<{
     return { allowed: true };
   }
 
-  // Must have a community name before free scans (testing names like "Test HOA" are OK)
+  // Company name is required for free scans; communities are added separately.
   if (!sub.hoaName?.trim()) {
     return {
       allowed: false,
-      code: "COMMUNITY_REQUIRED",
+      code: "COMPANY_REQUIRED",
       reason:
-        "Add a community name in Settings → Profile first (e.g. “Test HOA” while you’re trying it out).",
+        "Add your company name in Settings → Profile first.",
     };
-  }
-
-  const community = await getCommunityTrialStatus(userId, sub.hoaName);
-  if (community.status === "claimed_by_other") {
-    return {
-      allowed: false,
-      code: "COMMUNITY_TRIAL_USED",
-      reason: `Free trial for “${community.hoaName}” was already used by another account. Subscribe to continue for this community.`,
-    };
-  }
-  if (community.status === "unavailable") {
-    return {
-      allowed: false,
-      code: "INVALID_COMMUNITY",
-      reason: community.reason,
-    };
-  }
-  if (community.status === "no_community") {
-    return {
-      allowed: false,
-      code: "COMMUNITY_REQUIRED",
-      reason:
-        "Add a community name in Settings → Profile first (e.g. “Test HOA” while you’re trying it out).",
-    };
-  }
-
-  // Claim trial if needed (also writes community_key when missing)
-  if (community.status === "available" || !sub.communityKey) {
-    const claim = await claimCommunityTrial(userId, sub.hoaName);
-    if (!claim.ok) {
-      return {
-        allowed: false,
-        code: claim.code,
-        reason: claim.error,
-      };
-    }
   }
 
   // Account-level quota: completed live inspections count toward the free limit

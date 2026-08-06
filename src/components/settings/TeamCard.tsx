@@ -140,7 +140,7 @@ export function TeamCard() {
           <h3 className="font-semibold text-ink-900">Team</h3>
           <p className="mt-1 text-sm text-ink-500">
             Invite inspectors to upload and run inspections on{" "}
-            {companyName ?? "your HOA"} without billing access.
+            {companyName ?? "your company"} without billing access.
           </p>
         </div>
         <UserPlus className="h-5 w-5 shrink-0 text-ink-400" />

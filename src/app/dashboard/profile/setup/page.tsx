@@ -12,8 +12,8 @@ import { Loader2 } from "lucide-react";
 export default function ProfileSetupPage() {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
-  const [hoaName, setHoaName] = useState("");
-  const [hoaLocked, setHoaLocked] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [companyLocked, setCompanyLocked] = useState(false);
   const [loadingUser, setLoadingUser] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export default function ProfileSetupPage() {
       }
 
       const fromMeta = profileFromUser(user);
-      let hoa = fromMeta?.hoaName?.trim() ?? "";
+      let company = fromMeta?.hoaName?.trim() ?? "";
       let name = fromMeta?.fullName?.trim() ?? "";
 
       // Prefer profiles table if metadata is empty
@@ -48,17 +48,17 @@ export default function ProfileSetupPage() {
         .eq("id", user.id)
         .maybeSingle();
 
-      if (row?.hoa_name?.trim()) hoa = row.hoa_name.trim();
+      if (row?.hoa_name?.trim()) company = row.hoa_name.trim();
       if (row?.full_name?.trim()) name = row.full_name.trim();
 
       if (!cancelled) {
-        setHoaName(hoa);
+        setCompanyName(company);
         setFullName(name);
-        setHoaLocked(hoa.length > 0);
+        setCompanyLocked(company.length > 0);
         setLoadingUser(false);
 
         // Already complete — don't make them fill the form again
-        if (name && hoa) {
+        if (name && company) {
           router.replace("/dashboard/onboarding");
         }
       }
@@ -88,18 +88,18 @@ export default function ProfileSetupPage() {
       if (userError || !user) throw new Error("Not signed in");
 
       const trimmedName = fullName.trim();
-      const trimmedHoa = hoaName.trim();
+      const trimmedCompany = companyName.trim();
       if (!trimmedName) {
         throw new Error("Please enter your name");
       }
-      if (!trimmedHoa) {
-        throw new Error("Please enter your HOA / community name");
+      if (!trimmedCompany) {
+        throw new Error("Please enter your company name");
       }
 
       const { error: updateError } = await supabase.auth.updateUser({
         data: {
           full_name: trimmedName,
-          hoa_name: trimmedHoa,
+          hoa_name: trimmedCompany,
         },
       });
       if (updateError) throw updateError;
@@ -108,24 +108,18 @@ export default function ProfileSetupPage() {
         id: user.id,
         email: user.email,
         full_name: trimmedName,
-        hoa_name: trimmedHoa,
+        hoa_name: trimmedCompany,
       });
 
-      const claimRes = await fetch("/api/community/claim-trial", {
+      const companyRes = await fetch("/api/company", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hoaName: trimmedHoa }),
+        body: JSON.stringify({ companyName: trimmedCompany }),
       });
-      const claimData = await claimRes.json();
-      if (!claimRes.ok && claimRes.status === 409) {
-        setError(
-          claimData.error ??
-            "This community already used its free trial. You can still continue and subscribe."
-        );
-        await new Promise((r) => setTimeout(r, 1800));
-      } else if (!claimRes.ok && claimData.code === "INVALID_COMMUNITY") {
-        throw new Error(claimData.error ?? "Invalid community name");
+      if (!companyRes.ok) {
+        const data = await companyRes.json().catch(() => ({}));
+        throw new Error(data.error ?? "Could not save company name");
       }
 
       router.push("/dashboard/onboarding");
@@ -144,12 +138,12 @@ export default function ProfileSetupPage() {
       <div className="mx-auto flex min-h-[70vh] max-w-lg items-center px-5 py-12">
         <Card className="w-full" padding="lg">
           <h1 className="font-display text-2xl font-semibold text-ink-900">
-            {hoaLocked ? "Almost done" : "Set up your profile"}
+            {companyLocked ? "Almost done" : "Set up your profile"}
           </h1>
           <p className="mt-2 text-sm text-ink-500">
-            {hoaLocked
-              ? `You’ll inspect as ${hoaName}. Just add your name for notices.`
-              : "Add your community name to unlock your one free live inspection (per account)."}
+            {companyLocked
+              ? `You'll work as ${companyName}. Just add your name for notices.`
+              : "Add your company name to unlock your one free live inspection (per account). You can add communities later."}
           </p>
 
           {loadingUser ? (
@@ -173,26 +167,26 @@ export default function ProfileSetupPage() {
                 />
               </div>
 
-              {hoaLocked ? (
+              {companyLocked ? (
                 <div className="rounded-xl border border-ink-100 bg-ink-50/80 px-4 py-3">
                   <p className="text-[11px] font-medium uppercase tracking-wide text-ink-400">
-                    Community
+                    Company
                   </p>
                   <p className="mt-0.5 text-sm font-medium text-ink-900">
-                    {hoaName}
+                    {companyName}
                   </p>
                 </div>
               ) : (
                 <div>
                   <label className="text-sm font-medium text-ink-700">
-                    HOA / community name
+                    Company name
                   </label>
                   <input
                     type="text"
                     required
-                    value={hoaName}
-                    onChange={(e) => setHoaName(e.target.value)}
-                    placeholder="Oak Ridge Village HOA"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="Summit Community Management"
                     className="mt-1.5 h-11 w-full rounded-xl border border-ink-200 px-4 text-base focus:border-accent-300 focus:outline-none focus:ring-2 focus:ring-accent-500/20"
                   />
                 </div>

@@ -30,7 +30,7 @@ export default function PrivacyPage() {
         <h2>2. What we collect</h2>
         <ul>
           <li>
-            <strong>Account data</strong>: email, name, HOA / community name,
+            <strong>Account data</strong>: email, name, company name,
             and profile settings you provide
           </li>
           <li>

@@ -559,9 +559,8 @@ export async function POST(request: NextRequest) {
         const company = await getActiveCompanyContext();
         const sub = subscription ?? (await getUserSubscription(userId));
         const communityName =
-          sub.hoaName?.trim() ||
-          company?.hoaName?.trim() ||
-          neighborhood ||
+          neighborhood?.trim() ||
+          company?.companyName?.trim() ||
           "Your Community";
         const communityKey =
           sub.communityKey ||

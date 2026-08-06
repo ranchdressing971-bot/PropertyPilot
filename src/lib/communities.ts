@@ -153,18 +153,18 @@ export async function countCommunitiesForUser(userId: string): Promise<number> {
 }
 
 /**
- * Ensure the user has at least their profile HOA as a community row.
- * Idempotent; does not exceed plan limits when creating.
+ * Ensure a community exists for an explicit neighborhood / community name.
+ * Does not fall back to the company name on the profile (communities are
+ * created later by the user, not from company onboarding).
  */
 export async function ensureDefaultCommunity(
   userId: string,
-  hoaName?: string | null
+  communityName?: string | null
 ): Promise<Community | null> {
   const existing = await listCommunitiesForUser(userId);
   if (existing.length > 0) return existing[0];
 
-  const sub = await getUserSubscription(userId);
-  const name = (hoaName ?? sub.hoaName ?? "").trim();
+  const name = (communityName ?? "").trim();
   if (!name || !isValidCommunityName(name)) return null;
 
   const created = await createCommunity(userId, name, { skipLimitCheck: true });
@@ -281,8 +281,8 @@ export async function createCommunity(
     return { ok: false, error: "Database not configured", code: "NO_DB" };
   }
 
-  // Prefer existing company workspace. Only create/rename company when none exists
-  // (ensureCompanyForUser updates company hoa_name — wrong for community #2+).
+  // Prefer existing company workspace. Only create a company when none exists;
+  // never rename the company from a community name.
   let companyId: string | null = null;
   try {
     const ctx = await getActiveCompanyContext();
@@ -357,12 +357,12 @@ export async function createCommunity(
     };
   }
 
-  // Keep profile HOA in sync for trial / legacy paths (first community only)
+  // Keep community_key for trial / legacy paths; do not overwrite company name
+  // stored in profiles.hoa_name.
   const priorCount = existing.length;
   if (priorCount === 0) {
     await client.from("profiles").upsert({
       id: userId,
-      hoa_name: trimmed,
       community_key: key,
       ...(companyId ? { active_company_id: companyId } : {}),
     });

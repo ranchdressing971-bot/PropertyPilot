@@ -11,7 +11,6 @@ import { RosterImport } from "@/components/properties/RosterImport";
 import { useLiveDashboard } from "@/hooks/useLiveDashboard";
 import { useRoster } from "@/hooks/useRoster";
 import { useAppMode } from "@/components/providers/AppModeProvider";
-import { useUserProfile } from "@/hooks/useUserProfile";
 import { properties as demoProperties } from "@/lib/mock-data";
 import { staggerContainer, staggerItem } from "@/lib/motion";
 import { ArrowRight, Calendar, ChevronDown, Home, Loader2 } from "lucide-react";
@@ -43,7 +42,6 @@ function PropertyThumb({ address, image }: { address: string; image: string }) {
 
 export function PropertiesPageContent() {
   const { isDemo, isLive } = useAppMode();
-  const { profile } = useUserProfile();
   const { data: live, loading: liveLoading } = useLiveDashboard(isLive);
   const { importCsv, properties: roster } = useRoster();
   const [showRoster, setShowRoster] = useState(true);
@@ -83,9 +81,9 @@ export function PropertiesPageContent() {
           {showRoster && (
             <div className="mt-3">
               <RosterImport
-                neighborhood={profile?.hoaName || "Your Community"}
+                neighborhood="Your Community"
                 onImport={async (csv) => {
-                  return importCsv(csv, profile?.hoaName || "Your Community");
+                  return importCsv(csv, "Your Community");
                 }}
               />
             </div>

@@ -9,7 +9,7 @@ import Link from "next/link";
 
 export default function OnboardingPage() {
   const { profile } = useUserProfile();
-  const hoaName = profile?.hoaName || "Your Community";
+  const companyLabel = profile?.hoaName?.trim() || "your company";
 
   return (
     <DashboardLayout>
@@ -22,9 +22,10 @@ export default function OnboardingPage() {
             Your free run starts here
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-ink-500">
-            Upload one drive-through of {hoaName}. We&apos;ll match house
+            Upload one drive-through for {companyLabel}. We&apos;ll match house
             numbers, pull evidence frames, and hand you a review list.
-            You approve before anything is sent.
+            You approve before anything is sent. Add communities anytime from
+            Communities.
           </p>
           <ul className="mt-4 space-y-2 text-sm text-ink-600">
             <li className="flex items-start gap-2">
