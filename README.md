@@ -13,17 +13,17 @@ Mobile-first SaaS for small HVAC companies. Manage customers, jobs, invoices, pa
 - React Hook Form + Zod
 - Recharts, Lucide, Resend, jsPDF
 
-## Quick start
+## Quick start (functional demo)
 
 ```bash
 npm install
-cp .env.example .env.local
-npm run dev
+cp .env.example .env.local   # optional for demo
+npm run dev -- -p 3001
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and click **Try the demo**.
+Open [http://localhost:3001](http://localhost:3001) → **Open demo shop**.
 
-Demo company: **Coastal Air & Heating** with realistic customers, jobs, invoices, and dashboard totals.
+Demo company: **Coastal Air & Heating**. All CRUD works in-browser (localStorage). See [docs/SETUP.md](docs/SETUP.md) for live Supabase + Stripe.
 
 ## Environment
 

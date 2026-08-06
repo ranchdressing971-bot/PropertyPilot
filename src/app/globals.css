@@ -4,24 +4,30 @@
 
 @layer base {
   html {
-    @apply scroll-smooth antialiased;
+    @apply antialiased;
     -webkit-tap-highlight-color: transparent;
   }
 
   body {
     @apply bg-canvas text-ink-900;
     overflow-x: hidden;
-    background-color: #f4f6f9;
+    background-color: #ecefeb;
+    /* Quiet shop-floor texture — not glow blobs */
     background-image:
-      radial-gradient(ellipse 80% 45% at 10% -10%, rgba(31, 84, 232, 0.08), transparent 55%),
-      radial-gradient(ellipse 50% 35% at 100% 0%, rgba(51, 113, 245, 0.05), transparent 50%),
-      linear-gradient(180deg, #f7f9fc 0%, #f4f6f9 50%, #eef2f7 100%);
+      linear-gradient(180deg, #f2f4f1 0%, #ecefeb 40%, #e6e9e4 100%),
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 23px,
+        rgba(26, 32, 28, 0.015) 23px,
+        rgba(26, 32, 28, 0.015) 24px
+      );
     background-attachment: fixed;
   }
 
   ::selection {
-    background: rgba(31, 84, 232, 0.16);
-    color: #1e2633;
+    background: rgba(36, 114, 100, 0.18);
+    color: #0e1210;
   }
 
   input,
@@ -42,43 +48,52 @@
 
 @layer components {
   .surface {
-    @apply rounded-2xl border border-ink-200/70 bg-white shadow-card;
+    @apply rounded-xl border border-ink-200/90 bg-white;
+    box-shadow: 0 1px 0 rgba(14, 18, 16, 0.03);
   }
 
   .surface-muted {
-    @apply rounded-2xl border border-ink-100 bg-ink-50/80;
+    @apply rounded-xl border border-ink-200/70 bg-ink-50/90;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-cta transition hover:bg-brand-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-800 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-ink-200 bg-white px-4 py-2.5 text-sm font-semibold text-ink-800 transition hover:border-ink-300 hover:bg-ink-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-ink-300 bg-white px-4 py-2.5 text-sm font-semibold text-ink-800 transition hover:bg-ink-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-ink-700 transition hover:bg-ink-100 active:scale-[0.98];
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-ink-700 transition hover:bg-ink-100/80 active:translate-y-px;
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 active:scale-[0.98] disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-800 active:translate-y-px disabled:opacity-50;
   }
 
   .input-field {
-    @apply w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20;
+    @apply w-full rounded-lg border border-ink-300 bg-white px-3 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-400 focus:border-brand-600 focus:ring-1 focus:ring-brand-600/30;
   }
 
   .label-field {
-    @apply mb-1.5 block text-sm font-medium text-ink-700;
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-[0.06em] text-ink-500;
   }
 
   .page-title {
-    @apply font-display text-2xl font-semibold tracking-tight text-ink-900 sm:text-3xl;
+    @apply font-display text-[1.75rem] font-semibold tracking-[-0.03em] text-ink-950 sm:text-[2rem];
   }
 
   .stat-value {
-    @apply font-display text-3xl font-semibold tracking-tight text-ink-900 sm:text-4xl;
+    @apply font-mono text-[1.75rem] font-medium tracking-tight text-ink-950 sm:text-[2.125rem];
+  }
+
+  .section-label {
+    @apply text-xs font-semibold uppercase tracking-[0.08em] text-ink-500;
+  }
+
+  .row-link {
+    @apply block border-b border-ink-100 px-0 py-3.5 transition last:border-0 hover:bg-ink-50/60;
   }
 }
 
@@ -88,11 +103,15 @@
   }
 
   .font-display {
-    font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+    font-family: var(--font-display), var(--font-sans), sans-serif;
+  }
+
+  .font-mono {
+    font-family: var(--font-mono), ui-monospace, monospace;
   }
 
   .safe-pb {
-    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+    padding-bottom: calc(5.25rem + env(safe-area-inset-bottom));
   }
 
   @media (min-width: 1024px) {

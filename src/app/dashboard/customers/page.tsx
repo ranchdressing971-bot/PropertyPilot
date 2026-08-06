@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Plus, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { useTradeFlow } from "@/components/providers/TradeFlowProvider";
@@ -50,11 +49,11 @@ export default function CustomersPage() {
   }, [customers, filter, invoices, jobs, query]);
 
   return (
-    <div className="animate-fade-in space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="animate-fade-in space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-ink-200 pb-5">
         <div>
           <h1 className="page-title">Customers</h1>
-          <p className="mt-1 text-sm text-ink-500">{customers.length} in your book</p>
+          <p className="mt-1 text-sm text-ink-500">{customers.length} in the book</p>
         </div>
         <Link href="/dashboard/customers/new">
           <Button>
@@ -64,17 +63,17 @@ export default function CustomersPage() {
         </Link>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <Input
           placeholder="Search customers…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <div className="flex gap-2">
+        <div className="flex gap-1">
           {(
             [
               ["all", "All"],
-              ["outstanding", "Outstanding"],
+              ["outstanding", "Owes money"],
               ["recent", "Recent"],
             ] as const
           ).map(([value, label]) => (
@@ -82,10 +81,10 @@ export default function CustomersPage() {
               key={value}
               type="button"
               onClick={() => setFilter(value)}
-              className={`rounded-xl px-3 py-2 text-sm font-semibold ${
+              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
                 filter === value
-                  ? "bg-brand-600 text-white"
-                  : "bg-white text-ink-600 ring-1 ring-ink-200"
+                  ? "bg-ink-950 text-white"
+                  : "text-ink-600 hover:bg-ink-100"
               }`}
             >
               {label}
@@ -109,26 +108,29 @@ export default function CustomersPage() {
           }}
         />
       ) : (
-        <div className="space-y-2">
+        <ul className="divide-y divide-ink-100 border-y border-ink-100">
           {rows.map(({ customer, outstanding }) => (
-            <Link key={customer.id} href={`/dashboard/customers/${customer.id}`}>
-              <Card hover className="mb-2 flex items-center justify-between gap-3">
+            <li key={customer.id}>
+              <Link
+                href={`/dashboard/customers/${customer.id}`}
+                className="flex items-center justify-between gap-3 py-3.5 transition hover:bg-ink-50/70"
+              >
                 <div className="min-w-0">
-                  <p className="truncate font-semibold text-ink-900">{customer.full_name}</p>
+                  <p className="truncate font-semibold text-ink-950">{customer.full_name}</p>
                   <p className="truncate text-sm text-ink-500">
-                    {customer.company_name || customer.phone || customer.email || "No contact info"}
+                    {customer.company_name || customer.phone || customer.email || "No contact"}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-ink-400">Outstanding</p>
-                  <p className="font-display text-base font-semibold text-ink-900">
+                  <p className="section-label">Outstanding</p>
+                  <p className="font-mono text-sm font-medium text-ink-950">
                     {formatMoney(outstanding, business.currency)}
                   </p>
                 </div>
-              </Card>
-            </Link>
+              </Link>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

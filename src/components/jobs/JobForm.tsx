@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/Button";
@@ -28,6 +29,8 @@ export function JobForm({
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<JobInput>({
     resolver: zodResolver(jobSchema),
@@ -55,6 +58,19 @@ export function JobForm({
       assigned_technician_name: initial?.assigned_technician_name ?? "",
     },
   });
+
+  const customerId = watch("customer_id");
+
+  useEffect(() => {
+    if (!customerId || initial) return;
+    const customer = customers.find((c) => c.id === customerId);
+    if (!customer) return;
+    setValue("service_address_line1", customer.service_address_line1 ?? "");
+    setValue("service_address_line2", customer.service_address_line2 ?? "");
+    setValue("service_city", customer.service_city ?? "");
+    setValue("service_state", customer.service_state ?? "");
+    setValue("service_postal_code", customer.service_postal_code ?? "");
+  }, [customerId, customers, initial, setValue]);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

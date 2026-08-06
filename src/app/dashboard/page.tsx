@@ -2,19 +2,9 @@
 
 import Link from "next/link";
 import {
-  AlertTriangle,
-  ArrowRight,
-  CalendarDays,
-  CheckCircle2,
-  Clock3,
-  DollarSign,
-  TrendingUp,
-} from "lucide-react";
-import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -33,169 +23,157 @@ export default function DashboardPage() {
   if (!ready) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 rounded-2xl" />
-          ))}
-        </div>
+        <Skeleton className="h-10 w-72" />
+        <Skeleton className="h-40 w-full" />
       </div>
     );
   }
 
   const currency = business.currency;
-  const statsCards = [
-    {
-      label: "Revenue this month",
-      value: formatMoney(stats.revenueThisMonth, currency),
-      icon: DollarSign,
-    },
-    {
-      label: "Estimated profit",
-      value: formatMoney(stats.estimatedProfitThisMonth, currency),
-      icon: TrendingUp,
-    },
-    {
-      label: "Outstanding",
-      value: formatMoney(stats.outstandingTotal, currency),
-      icon: Clock3,
-    },
-    {
-      label: "Jobs completed",
-      value: String(stats.jobsCompletedThisMonth),
-      icon: CheckCircle2,
-    },
-    {
-      label: "Jobs today",
-      value: String(stats.jobsScheduledToday),
-      icon: CalendarDays,
-    },
-    {
-      label: "Overdue invoices",
-      value: String(stats.overdueInvoices),
-      icon: AlertTriangle,
-    },
-  ];
 
   return (
-    <div className="animate-fade-in space-y-6">
-      <div>
-        <p className="text-sm font-medium text-brand-700">Dashboard</p>
-        <h1 className="page-title mt-1 text-balance">
+    <div className="animate-fade-in space-y-8">
+      <header className="border-b border-ink-200 pb-6">
+        <p className="section-label">Today</p>
+        <h1 className="page-title mt-2 max-w-xl text-balance">
           Know what got done, who owes you, and what each job made.
         </h1>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        {statsCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Card key={card.label} className="relative overflow-hidden">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-xs font-medium text-ink-500 sm:text-sm">{card.label}</p>
-                <Icon className="h-4 w-4 text-brand-600" />
-              </div>
-              <p className="stat-value mt-3 text-2xl sm:text-3xl">{card.value}</p>
-            </Card>
-          );
-        })}
-      </div>
-
-      <Card>
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="font-display text-lg font-semibold text-ink-900">Needs attention</h2>
-          {!stats.attention.length ? (
-            <Badge status="success">All clear</Badge>
-          ) : null}
+      {/* Money first — not a grid of icon widgets */}
+      <section className="grid gap-8 border-b border-ink-200 pb-8 md:grid-cols-[1.2fr_1fr]">
+        <div>
+          <p className="section-label">Revenue this month</p>
+          <p className="stat-value mt-2 text-4xl sm:text-5xl">
+            {formatMoney(stats.revenueThisMonth, currency)}
+          </p>
+          <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4">
+            <div>
+              <p className="section-label">Est. profit</p>
+              <p className="mt-1 font-mono text-xl font-medium text-ink-950">
+                {formatMoney(stats.estimatedProfitThisMonth, currency)}
+              </p>
+            </div>
+            <div>
+              <p className="section-label">Outstanding</p>
+              <p className="mt-1 font-mono text-xl font-medium text-ink-950">
+                {formatMoney(stats.outstandingTotal, currency)}
+              </p>
+            </div>
+            <div>
+              <p className="section-label">Jobs done</p>
+              <p className="mt-1 font-mono text-xl font-medium text-ink-950">
+                {stats.jobsCompletedThisMonth}
+              </p>
+            </div>
+            <div>
+              <p className="section-label">On the board today</p>
+              <p className="mt-1 font-mono text-xl font-medium text-ink-950">
+                {stats.jobsScheduledToday}
+              </p>
+            </div>
+          </div>
         </div>
-        {!stats.attention.length ? (
-          <p className="text-sm text-ink-500">You&apos;re all caught up.</p>
-        ) : (
-          <ul className="space-y-2">
-            {stats.attention.map((item) => (
-              <li key={item.id}>
-                <Link
-                  href={item.href}
-                  className="flex items-start justify-between gap-3 rounded-xl border border-ink-100 bg-ink-50/70 px-3.5 py-3 transition hover:border-brand-200 hover:bg-brand-50/40"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Badge status={item.tone}>{item.tone}</Badge>
-                      <p className="text-sm font-semibold text-ink-900">{item.title}</p>
-                    </div>
-                    <p className="mt-1 text-xs text-ink-500">{item.description}</p>
-                  </div>
-                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-ink-400" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
 
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <h2 className="font-display text-lg font-semibold text-ink-900">
-            Revenue vs expenses
-          </h2>
+        <div>
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="section-label">Needs attention</p>
+            {stats.overdueInvoices > 0 ? (
+              <span className="font-mono text-sm text-red-700">
+                {stats.overdueInvoices} overdue
+              </span>
+            ) : null}
+          </div>
+          {!stats.attention.length ? (
+            <p className="mt-4 text-sm text-ink-500">You&apos;re all caught up.</p>
+          ) : (
+            <ul className="mt-2 divide-y divide-ink-100 border-y border-ink-100">
+              {stats.attention.map((item) => (
+                <li key={item.id}>
+                  <Link
+                    href={item.href}
+                    className="flex items-start justify-between gap-3 py-3.5 transition hover:bg-ink-50/70"
+                  >
+                    <div>
+                      <Badge status={item.tone} />
+                      <p className="mt-1.5 text-sm font-semibold text-ink-950">{item.title}</p>
+                      <p className="mt-0.5 text-xs text-ink-500">{item.description}</p>
+                    </div>
+                    <span className="mt-1 text-ink-300">→</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+
+      <section className="grid gap-8 lg:grid-cols-5">
+        <Card className="lg:col-span-3" padding="md">
+          <p className="section-label">Revenue vs expenses</p>
           <p className="mt-1 text-sm text-ink-500">Last 6 months</p>
-          <div className="mt-4 h-64 w-full">
+          <div className="mt-4 h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.monthlySeries}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef1f5" />
-                <XAxis dataKey="month" tick={{ fill: "#667991", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis
-                  tick={{ fill: "#667991", fontSize: 12 }}
+              <BarChart data={stats.monthlySeries} barGap={2}>
+                <CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#d5dbd6" />
+                <XAxis
+                  dataKey="month"
+                  tick={{ fill: "#5c685f", fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
+                />
+                <YAxis
+                  tick={{ fill: "#5c685f", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={40}
                   tickFormatter={(v) => `$${Number(v) / 1000}k`}
                 />
                 <Tooltip
                   formatter={(value) => formatMoney(Number(value), currency)}
                   contentStyle={{
-                    borderRadius: 12,
-                    borderColor: "#d9e0ea",
-                    boxShadow: "0 8px 24px rgba(17,23,34,0.08)",
+                    borderRadius: 8,
+                    borderColor: "#cfd6d0",
+                    fontSize: 12,
                   }}
                 />
-                <Legend />
-                <Bar dataKey="revenue" name="Revenue" fill="#1f54e8" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="expenses" name="Expenses" fill="#b7c3d4" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="revenue" name="Revenue" fill="#1f5b51" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="expenses" name="Expenses" fill="#a8b3aa" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </Card>
 
-        <Card className="lg:col-span-2">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-display text-lg font-semibold">Upcoming jobs</h2>
-            <Link href="/dashboard/jobs" className="text-sm font-semibold text-brand-700">
-              View all
+        <div className="lg:col-span-2">
+          <div className="mb-2 flex items-baseline justify-between">
+            <p className="section-label">Upcoming jobs</p>
+            <Link href="/dashboard/jobs" className="text-xs font-semibold text-brand-700">
+              All jobs
             </Link>
           </div>
           {!stats.upcomingJobs.length ? (
             <p className="text-sm text-ink-500">No upcoming jobs.</p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="divide-y divide-ink-100 border-y border-ink-100">
               {stats.upcomingJobs.map((job) => (
                 <li key={job.id}>
                   <Link
                     href={`/dashboard/jobs/${job.id}`}
-                    className="block rounded-xl border border-ink-100 px-3 py-2.5 transition hover:border-brand-200"
+                    className="block py-3.5 transition hover:bg-ink-50/70"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold text-ink-900">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink-950">
                           {job.customer?.full_name ?? "Customer"}
                         </p>
-                        <p className="text-xs text-ink-500">{job.service_type}</p>
+                        <p className="truncate text-xs text-ink-500">{job.service_type}</p>
                       </div>
                       <Badge status={job.status} />
                     </div>
-                    <p className="mt-1.5 text-xs text-ink-600">
+                    <p className="mt-1.5 font-mono text-[11px] text-ink-600">
                       {formatDateTime(job.scheduled_date, job.start_time)}
                     </p>
-                    <p className="mt-0.5 truncate text-xs text-ink-400">
+                    <p className="mt-0.5 truncate text-[11px] text-ink-400">
                       {job.assigned_technician_name ?? "Unassigned"} ·{" "}
                       {formatAddress({
                         line1: job.service_address_line1,
@@ -208,27 +186,30 @@ export default function DashboardPage() {
               ))}
             </ul>
           )}
-        </Card>
-      </div>
+        </div>
+      </section>
 
-      <Card>
-        <h2 className="font-display text-lg font-semibold">Recent activity</h2>
-        <ul className="mt-4 divide-y divide-ink-100">
+      <section>
+        <p className="section-label">Recent activity</p>
+        <ul className="mt-2 divide-y divide-ink-100 border-y border-ink-100">
           {stats.recentActivity.map((item) => (
-            <li key={item.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+            <li
+              key={item.id}
+              className="flex items-start justify-between gap-3 py-3"
+            >
               <div>
-                <p className="text-sm font-medium text-ink-900">{item.title}</p>
+                <p className="text-sm font-medium text-ink-950">{item.title}</p>
                 {item.description ? (
                   <p className="text-xs text-ink-500">{item.description}</p>
                 ) : null}
               </div>
-              <p className="shrink-0 text-xs text-ink-400">
+              <p className="shrink-0 font-mono text-[11px] text-ink-400">
                 {new Date(item.created_at).toLocaleDateString()}
               </p>
             </li>
           ))}
         </ul>
-      </Card>
+      </section>
     </div>
   );
 }

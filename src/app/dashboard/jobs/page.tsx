@@ -6,7 +6,6 @@ import { useSearchParams } from "next/navigation";
 import { Briefcase, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -18,7 +17,7 @@ import { JOB_STATUSES } from "@/lib/types";
 
 export default function JobsPage() {
   return (
-    <Suspense fallback={<Skeleton className="h-64 w-full rounded-2xl" />}>
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
       <JobsPageInner />
     </Suspense>
   );
@@ -53,8 +52,8 @@ function JobsPageInner() {
   }, [customerMap, jobs, query, searchParams, status]);
 
   return (
-    <div className="animate-fade-in space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="animate-fade-in space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-ink-200 pb-5">
         <div>
           <h1 className="page-title">Jobs</h1>
           <p className="mt-1 text-sm text-ink-500">{filtered.length} shown</p>
@@ -94,34 +93,35 @@ function JobsPageInner() {
           }}
         />
       ) : (
-        <div className="space-y-2">
+        <ul className="divide-y divide-ink-100 border-y border-ink-100">
           {filtered.map((job) => {
             const customer = customerMap.get(job.customer_id);
             return (
-              <Link key={job.id} href={`/dashboard/jobs/${job.id}`}>
-                <Card hover className="mb-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-ink-900">{job.title}</p>
-                      <p className="text-sm text-ink-500">
-                        {customer?.full_name ?? "Customer"} · {job.service_type}
-                      </p>
-                      <p className="mt-1 text-xs text-ink-400">
-                        {formatDateTime(job.scheduled_date, job.start_time)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <Badge status={job.status} />
-                      <p className="mt-2 font-display text-base font-semibold">
-                        {formatMoney(job.amount_charged, business.currency)}
-                      </p>
-                    </div>
+              <li key={job.id}>
+                <Link
+                  href={`/dashboard/jobs/${job.id}`}
+                  className="flex items-start justify-between gap-3 py-3.5 transition hover:bg-ink-50/70"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-ink-950">{job.title}</p>
+                    <p className="text-sm text-ink-500">
+                      {customer?.full_name ?? "Customer"} · {job.service_type}
+                    </p>
+                    <p className="mt-1 font-mono text-[11px] text-ink-400">
+                      {formatDateTime(job.scheduled_date, job.start_time)}
+                    </p>
                   </div>
-                </Card>
-              </Link>
+                  <div className="text-right">
+                    <Badge status={job.status} />
+                    <p className="mt-2 font-mono text-sm font-medium text-ink-950">
+                      {formatMoney(job.amount_charged, business.currency)}
+                    </p>
+                  </div>
+                </Link>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
     </div>
   );

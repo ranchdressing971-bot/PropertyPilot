@@ -8,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, XCircle, X } from "lucide-react";
 
 type ToastTone = "success" | "error" | "info";
@@ -42,32 +41,27 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div className="pointer-events-none fixed bottom-24 left-1/2 z-[100] flex w-[min(92vw,380px)] -translate-x-1/2 flex-col gap-2 sm:bottom-8">
-        <AnimatePresence>
-          {items.map((item) => (
-            <motion.div
-              key={item.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              className="pointer-events-auto flex items-start gap-2 rounded-xl border border-ink-200 bg-white px-3.5 py-3 shadow-card"
+        {items.map((item) => (
+          <div
+            key={item.id}
+            className="pointer-events-auto flex animate-slide-up items-start gap-2 border border-ink-200 bg-white px-3.5 py-3"
+          >
+            {item.tone === "error" ? (
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+            ) : (
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" />
+            )}
+            <p className="flex-1 text-sm text-ink-800">{item.message}</p>
+            <button
+              type="button"
+              className="rounded p-0.5 text-ink-400 hover:text-ink-700"
+              onClick={() => setItems((prev) => prev.filter((t) => t.id !== item.id))}
+              aria-label="Dismiss"
             >
-              {item.tone === "error" ? (
-                <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-              ) : (
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-              )}
-              <p className="flex-1 text-sm text-ink-800">{item.message}</p>
-              <button
-                type="button"
-                className="rounded p-0.5 text-ink-400 hover:text-ink-700"
-                onClick={() => setItems((prev) => prev.filter((t) => t.id !== item.id))}
-                aria-label="Dismiss"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
       </div>
     </ToastContext.Provider>
   );
