@@ -1,5 +1,5 @@
 {
-  "name": "rideby",
+  "name": "tradeflow",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,14 +7,16 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "generate:icons": "node scripts/generate-ios-icons.mjs"
+    "seed": "echo Use supabase/seed.sql after creating an auth user"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.7.1",
     "@stripe/react-stripe-js": "^6.7.0",
     "@stripe/stripe-js": "^9.9.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
     "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
     "framer-motion": "^11.15.0",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.469.0",
@@ -22,8 +24,11 @@
     "openai": "^4.104.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-hook-form": "^7.84.0",
+    "recharts": "^3.10.1",
     "resend": "^6.16.0",
-    "stripe": "^22.3.0"
+    "stripe": "^22.3.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

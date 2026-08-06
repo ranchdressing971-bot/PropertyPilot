@@ -1,273 +1,116 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { AuthLayout } from "@/components/layout/AuthLayout";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Wind } from "lucide-react";
+import { z } from "zod";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { useToast } from "@/components/providers/ToastProvider";
+import { DEMO_MODE_COOKIE } from "@/lib/demo/data";
 import { createClient, isSupabaseClientConfigured } from "@/lib/supabase/client";
 import { formatSupabaseAuthError } from "@/lib/supabase/config";
-import { postAuthPath } from "@/lib/auth-redirect";
-import { useAppMode } from "@/components/providers/AppModeProvider";
-import { Loader2 } from "lucide-react";
+import { signUpSchema } from "@/lib/validations";
 
-function SignupForm() {
+type FormValues = z.infer<typeof signUpSchema>;
+
+export default function SignupPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const { setMode } = useAppMode();
-  const nextPath = searchParams.get("next");
-  const joiningViaInvite = Boolean(nextPath?.startsWith("/invite/"));
-
-  const [fromFreeOffer, setFromFreeOffer] = useState(
-    searchParams.get("offer") === "free-run"
-  );
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [agreed, setAgreed] = useState(false);
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<FormValues>({ resolver: zodResolver(signUpSchema) });
 
-  const supabaseReady = isSupabaseClientConfigured();
-
-  useEffect(() => {
-    if (searchParams.get("offer") === "free-run") {
-      setFromFreeOffer(true);
-      try {
-        localStorage.setItem("pp-offer", "free-run");
-      } catch {
-        /* ignore */
-      }
-      return;
-    }
-    try {
-      if (localStorage.getItem("pp-offer") === "free-run") {
-        setFromFreeOffer(true);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, [searchParams]);
-
-  async function handleSignup(e: React.FormEvent) {
-    e.preventDefault();
-    if (!agreed) {
-      setError("Please agree to the Terms and Privacy Policy.");
-      return;
-    }
-    if (!joiningViaInvite && !companyName.trim()) {
-      setError("Enter your company name.");
-      return;
-    }
-    if (!supabaseReady) {
-      setError("Supabase is not configured yet. See docs/SUPABASE_SETUP.md");
-      return;
-    }
-
+  async function onSubmit(values: FormValues) {
     setLoading(true);
-    setError(null);
-
     try {
+      if (!isSupabaseClientConfigured()) {
+        toast("Supabase is not configured yet. Explore the demo instead.", "info");
+        return;
+      }
       const supabase = createClient();
-      const trimmedCompany = companyName.trim();
-      const afterAuth = joiningViaInvite
-        ? nextPath!
-        : "/dashboard/profile/setup";
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(afterAuth)}`,
-          data: {
-            terms_accepted_at: new Date().toISOString(),
-            ...(trimmedCompany ? { hoa_name: trimmedCompany } : {}),
-            ...(fromFreeOffer ? { offer: "free-run" } : {}),
-          },
-        },
+      const { error } = await supabase.auth.signUp({
+        email: values.email,
+        password: values.password,
+        options: { data: { full_name: values.fullName } },
       });
-
-      if (authError) throw authError;
-
-      // Ensure metadata is set even if signUp options were ignored
-      if (authData.session && trimmedCompany) {
-        await supabase.auth.updateUser({
-          data: { hoa_name: trimmedCompany },
-        });
+      if (error) {
+        toast(formatSupabaseAuthError(error.message), "error");
+        return;
       }
-
-      if (authData.user) {
-        await supabase.from("profiles").upsert({
-          id: authData.user.id,
-          email: authData.user.email,
-          ...(trimmedCompany ? { hoa_name: trimmedCompany } : {}),
-          terms_accepted_at: new Date().toISOString(),
-        });
-      }
-
-      if (authData.session && trimmedCompany && !joiningViaInvite) {
-        await fetch("/api/company", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyName: trimmedCompany }),
-        });
-      }
-
-      try {
-        localStorage.removeItem("pp-offer");
-      } catch {
-        /* ignore */
-      }
-
-      setSuccess(true);
-      setMode("live");
-
-      if (authData.user && authData.session) {
-        router.push(postAuthPath(authData.user, afterAuth));
-      } else {
-        router.push(
-          `/login?message=confirm-email&next=${encodeURIComponent(afterAuth)}`
-        );
-      }
-      router.refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Signup failed";
-      setError(formatSupabaseAuthError(message));
+      document.cookie = `${DEMO_MODE_COOKIE}=live; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+      toast("Account created. Let’s set up your business.");
+      router.push("/dashboard/onboarding");
+    } catch {
+      toast("Unable to sign up right now. Try again shortly.", "error");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Card className="w-full max-w-md" padding="lg">
-      <h1 className="font-display text-xl font-semibold text-ink-900">
-        {fromFreeOffer ? "Claim your free run" : "Create account"}
-      </h1>
-      <p className="mt-1 text-sm text-ink-500">
-        {fromFreeOffer
-          ? "Create an account, then upload one drive-through on us."
-          : "1 free inspection · then from $299/mo"}
-      </p>
-
-      {!supabaseReady && (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Configure Supabase first. See{" "}
-          <code className="text-xs">docs/SUPABASE_SETUP.md</code>
+    <div className="flex min-h-dvh items-center justify-center px-4 py-10">
+      <div className="w-full max-w-md animate-slide-up">
+        <div className="mb-6 flex items-center gap-2.5">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white shadow-cta">
+            <Wind className="h-5 w-5" />
+          </span>
+          <span className="font-display text-xl font-semibold">TradeFlow</span>
         </div>
-      )}
-
-      {success ? (
-        <p className="mt-4 text-sm text-emerald-700">
-          Account created! Check your email if confirmation is required.
-        </p>
-      ) : (
-        <form onSubmit={handleSignup} className="mt-6 space-y-4">
-          <div>
-            <label className="text-sm font-medium text-ink-700">Email</label>
+        <div className="surface p-6">
+          <h1 className="font-display text-2xl font-semibold">Create your account</h1>
+          <p className="mt-1 text-sm text-ink-500">
+            Start managing jobs, invoices, and profit in one place.
+          </p>
+          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
             <Input
+              label="Full name"
+              error={errors.fullName?.message}
+              {...register("fullName")}
+            />
+            <Input
+              label="Email"
               type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              error={errors.email?.message}
+              {...register("email")}
             />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-ink-700">Password</label>
             <Input
+              label="Password"
               type="password"
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              error={errors.password?.message}
+              hint="At least 8 characters"
+              {...register("password")}
             />
-          </div>
-          {joiningViaInvite ? (
-            <p className="rounded-xl border border-ink-100 bg-ink-50/80 px-3 py-2 text-xs text-ink-600">
-              You&apos;re joining a shared company via invite. Add communities
-              later from the Communities page.
-            </p>
-          ) : (
-            <div>
-              <label className="text-sm font-medium text-ink-700">
-                Company name
-              </label>
-              <Input
-                type="text"
-                required
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Summit Community Management"
-              />
-              <p className="mt-1 text-xs text-ink-400">
-                Your management company or organization. Add communities later.
-              </p>
-            </div>
-          )}
-
-          <label className="flex items-start gap-2 text-sm text-ink-600">
-            <input
-              type="checkbox"
-              checked={agreed}
-              onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-ink-300"
-            />
-            <span>
-              I agree to the{" "}
-              <Link
-                href="/terms"
-                className="font-medium text-copper-700 hover:underline"
-                target="_blank"
-              >
-                Terms
-              </Link>{" "}
-              and{" "}
-              <Link
-                href="/privacy"
-                className="font-medium text-copper-700 hover:underline"
-                target="_blank"
-              >
-                Privacy Policy
-              </Link>
-            </span>
-          </label>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Creating…" : "Create account"}
+            </Button>
+          </form>
           <Button
-            type="submit"
-            className="w-full"
-            disabled={loading || !supabaseReady || !agreed}
+            variant="secondary"
+            className="mt-3 w-full"
+            onClick={() => {
+              document.cookie = `${DEMO_MODE_COOKIE}=demo; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+              router.push("/dashboard");
+            }}
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {fromFreeOffer ? "Unlock free inspection" : "Create account"}
+            Try demo instead
           </Button>
-        </form>
-      )}
-
-      <p className="mt-4 text-center text-sm text-ink-500">
-        Already have an account?{" "}
-        <Link
-          href="/login"
-          className="font-medium text-copper-700 hover:underline"
-        >
-          Sign in
-        </Link>
-      </p>
-    </Card>
-  );
-}
-
-export default function SignupPage() {
-  return (
-    <AuthLayout>
-      <Suspense
-        fallback={<Loader2 className="h-8 w-8 animate-spin text-copper-600" />}
-      >
-        <SignupForm />
-      </Suspense>
-    </AuthLayout>
+          <p className="mt-5 text-center text-sm text-ink-500">
+            Already have an account?{" "}
+            <Link href="/login" className="font-semibold text-brand-700">
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }

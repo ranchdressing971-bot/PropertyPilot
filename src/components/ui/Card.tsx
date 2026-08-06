@@ -18,11 +18,10 @@ export function Card({
       className={clsx(
         "surface",
         {
-          "transition-[border-color,box-shadow] hover:border-brand-200 hover:shadow-card-hover":
-            hover,
+          "transition hover:border-brand-200 hover:shadow-card-hover": hover,
           "p-4": padding === "sm",
           "p-5": padding === "md",
-          "p-6 sm:p-7": padding === "lg",
+          "p-6": padding === "lg",
           "p-0": padding === "none",
         },
         className
