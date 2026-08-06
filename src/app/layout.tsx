@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Manrope, Outfit } from "next/font/google";
+import { AppModeProvider } from "@/components/providers/AppModeProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
-import { TradeFlowProvider } from "@/components/providers/TradeFlowProvider";
+import { IosHomeScreenIcon } from "@/components/brand/IosHomeScreenIcon";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -16,11 +17,41 @@ const outfit = Outfit({
   weight: ["500", "600", "700"],
 });
 
+const iosAppleIcons: Metadata["icons"] = {
+  icon: [
+    { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+    { url: "/logo.png", sizes: "512x512", type: "image/png" },
+  ],
+  apple: [
+    {
+      url: "/icons/ios/apple-touch-icon-180-transparent.png",
+      sizes: "180x180",
+      type: "image/png",
+    },
+  ],
+};
+
 export const metadata: Metadata = {
-  title: "TradeFlow — HVAC jobs, invoices, and profit",
+  title: "RideBy: HOA Drive-Through Inspections",
   description:
-    "Know what got done, who owes you, and what each job made. TradeFlow helps small HVAC companies manage customers, jobs, invoices, and profitability.",
-  applicationName: "TradeFlow",
+    "Upload a neighborhood drive-through. RideBy flags homes that need review so managers can approve notices with confidence.",
+  manifest: "/manifest.json",
+  applicationName: "RideBy",
+  appleWebApp: {
+    capable: true,
+    title: "RideBy",
+    statusBarStyle: "default",
+    startupImage: [
+      {
+        url: "/icons/ios/apple-touch-icon-180-transparent.png",
+        media: "(device-width: 390px) and (device-height: 844px)",
+      },
+    ],
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: iosAppleIcons,
 };
 
 export const viewport: Viewport = {
@@ -28,17 +59,24 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
-  themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f4f6f9" }],
+  themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f2f5f3" }],
   colorScheme: "light",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en" className={`${manrope.variable} ${outfit.variable}`}>
+      <head>
+        <IosHomeScreenIcon />
+      </head>
       <body className="font-sans">
-        <TradeFlowProvider>
+        <AppModeProvider>
           <ToastProvider>{children}</ToastProvider>
-        </TradeFlowProvider>
+        </AppModeProvider>
       </body>
     </html>
   );
