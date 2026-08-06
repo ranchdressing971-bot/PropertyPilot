@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Manrope, Outfit } from "next/font/google";
+import { Manrope, Fraunces } from "next/font/google";
 import { AppModeProvider } from "@/components/providers/AppModeProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import { IosHomeScreenIcon } from "@/components/brand/IosHomeScreenIcon";
@@ -11,7 +11,7 @@ const manrope = Manrope({
   weight: ["400", "500", "600", "700"],
 });
 
-const outfit = Outfit({
+const fraunces = Fraunces({
   subsets: ["latin"],
   variable: "--font-display",
   weight: ["500", "600", "700"],
@@ -69,7 +69,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${outfit.variable}`}>
+    <html lang="en" className={`${manrope.variable} ${fraunces.variable}`}>
       <head>
         <IosHomeScreenIcon />
       </head>

@@ -54,7 +54,7 @@
   }
 
   .font-display {
-    font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+    font-family: var(--font-display), Georgia, serif;
   }
 
   .page-eyebrow {
